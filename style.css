@@ -97,14 +97,14 @@ svg.lines{position:absolute;inset:0;width:100%;height:100%;overflow:visible;poin
 .world.zoomMini .coupleMember,.couplePerson.mini .coupleMember{padding:0;border:0}
 .world.zoomMini .person h3,.world.zoomMini .person .meta,.world.zoomMini .person .tags,.world.zoomMini .person .collapseBtn,.person.mini h3,.person.mini .meta,.person.mini .tags,.person.mini .collapseBtn{display:none}
 .zoom button{width:44px;height:44px;border-radius:50%;background:#fff;box-shadow:var(--shadow);font-size:22px}
-.sheet{position:absolute;left:0;right:0;bottom:0;z-index:30;background:var(--panel);border-radius:24px 24px 0 0;box-shadow:0 -16px 50px rgba(0,0,0,.25);padding:16px max(16px,env(safe-area-inset-left)) max(18px,env(safe-area-inset-bottom));transform:translateY(110%);transition:.22s ease;max-height:min(86%,calc(100dvh - 82px));overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:30;background:var(--panel);border-radius:24px 24px 0 0;box-shadow:0 -16px 50px rgba(0,0,0,.25);padding:16px max(16px,env(safe-area-inset-left)) max(18px,env(safe-area-inset-bottom));transform:translateY(110%);transition:.22s ease;max-height:min(86%,calc(100dvh - 82px));overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y}
 .sheet.open{transform:translateY(0)}
 .sheet h2{font-size:18px;margin:0 0 12px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.field{display:grid;gap:5px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;min-width:0}
+.field{display:grid;gap:5px;min-width:0}
 .field.full{grid-column:1/-1}
 label{font-size:12px;color:var(--muted)}
-input,textarea,select{width:100%;border:1px solid rgba(0,0,0,.14);border-radius:14px;padding:11px;background:#fff;color:var(--ink)}
+input,textarea,select{width:100%;min-width:0;border:1px solid rgba(0,0,0,.14);border-radius:14px;padding:11px;background:#fff;color:var(--ink)}
 textarea{min-height:70px;resize:vertical}
 body.viewMode .sheet .grid,body.viewMode .sheet .small{display:none}
 .personDetails{display:grid;gap:10px;margin-bottom:12px}
@@ -119,26 +119,26 @@ body.viewMode .sheet .grid,body.viewMode .sheet .small{display:none}
 .detailValue{font-size:13px;line-height:1.35;overflow-wrap:anywhere}
 .detailLinks{display:flex;flex-wrap:wrap;gap:6px}
 .detailLink{border-radius:999px;background:#efe1cd;color:#5e4937;padding:7px 9px;font-size:12px;box-shadow:none}
-.actions{display:flex;gap:8px;margin-top:12px}
-.actions button{flex:1}
+.actions{display:flex;gap:8px;margin-top:12px;min-width:0}
+.actions button{flex:1;min-width:0}
 .small{font-size:12px;color:var(--muted);line-height:1.35}
 .backdrop{position:absolute;inset:0;background:rgba(0,0,0,.2);z-index:25;display:none}
 .backdrop.show{display:block}
 .hint{position:absolute;left:12px;top:12px;right:70px;background:rgba(255,250,240,.9);border:1px solid rgba(0,0,0,.08);border-radius:18px;padding:10px 12px;font-size:12px;color:var(--muted);box-shadow:var(--shadow);z-index:8}
 .hidden{display:none!important}
-.sideNav,.searchSheet,.checkSheet,.birthdaySheet,.scrollSheet{position:absolute;left:0;top:0;bottom:0;width:min(420px,94vw);z-index:31;background:var(--panel);box-shadow:16px 0 44px rgba(0,0,0,.2);padding:14px max(14px,env(safe-area-inset-left)) max(14px,env(safe-area-inset-bottom));display:grid;grid-template-rows:auto auto 1fr;gap:10px;transform:translateX(-110%);transition:.22s ease}
+.sideNav,.searchSheet,.checkSheet,.birthdaySheet,.scrollSheet{position:absolute;left:0;top:0;bottom:0;width:min(420px,94vw);z-index:31;background:var(--panel);box-shadow:16px 0 44px rgba(0,0,0,.2);padding:14px max(14px,env(safe-area-inset-left)) max(14px,env(safe-area-inset-bottom));display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:10px;transform:translateX(-110%);transition:.22s ease;min-height:0;overflow:hidden;touch-action:pan-y}
 .sideNav.open,.searchSheet.open,.checkSheet.open,.birthdaySheet.open,.scrollSheet.open{transform:translateX(0)}
-.birthdaySheet,.scrollSheet{grid-template-rows:auto 1fr}
+.birthdaySheet,.scrollSheet{grid-template-rows:auto minmax(0,1fr)}
 .sideTop{display:flex;gap:8px;align-items:center}
 .sideTop h2{font-size:18px;margin:0;flex:1}
 .navSearch{width:100%;border:1px solid rgba(0,0,0,.14);border-radius:14px;padding:11px;background:#fff;color:var(--ink)}
-.familyRows{overflow:auto;display:grid;align-content:start;gap:7px;padding-right:2px}
+.familyRows{overflow:auto;display:grid;align-content:start;gap:7px;padding-right:2px;min-height:0;-webkit-overflow-scrolling:touch}
 .familyRow{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:9px;text-align:left;background:#fff7ea;border:1px solid rgba(78,54,30,.13);border-radius:14px;padding:9px 10px;color:var(--ink);box-shadow:0 3px 12px rgba(0,0,0,.06)}
 .familyRow.active{border-color:rgba(107,143,113,.68);background:#f3f7ef;box-shadow:0 0 0 3px rgba(107,143,113,.16)}
 .swatch{width:14px;height:14px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
 .familyName{font-weight:800;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .familyCount{font-size:12px;color:var(--muted);background:rgba(255,255,255,.8);border-radius:999px;padding:3px 7px}
-.searchRows,.checkRows,.birthdayRows,.scrollRows{overflow:auto;display:grid;align-content:start;gap:8px}
+.searchRows,.checkRows,.birthdayRows,.scrollRows{overflow:auto;display:grid;align-content:start;gap:8px;min-height:0;-webkit-overflow-scrolling:touch}
 .searchRow,.checkRow,.birthdayRow{display:grid;grid-template-columns:auto 1fr;gap:9px;align-items:center;text-align:left;background:#fff7ea;border:1px solid rgba(78,54,30,.13);border-radius:14px;padding:10px;color:var(--ink);box-shadow:0 3px 12px rgba(0,0,0,.06)}
 .searchRow small{display:block;margin-top:2px;color:var(--muted);font-size:11px}
 .checkRow{display:block;line-height:1.3}
@@ -168,12 +168,15 @@ body.viewMode .sheet .grid,body.viewMode .sheet .small{display:none}
 }
 @media (max-width:759px){
   header{min-height:58px}
-  .sheet{left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));bottom:max(8px,env(safe-area-inset-bottom));border-radius:22px;max-height:calc(100dvh - 82px);padding:14px 14px 16px}
+  .sheet{left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));bottom:max(8px,env(safe-area-inset-bottom));width:auto;max-width:calc(100vw - 16px);border-radius:22px;max-height:calc(100dvh - 82px);padding:14px 14px 16px}
   .sheet h2{position:sticky;top:-14px;z-index:2;margin:-14px -14px 12px;padding:14px;background:var(--panel);border-radius:22px 22px 0 0;box-shadow:0 1px 0 rgba(78,54,30,.08)}
   .grid,.detailGrid{grid-template-columns:1fr}
   .field.full,.detailBox.full{grid-column:auto}
+  .sheet .actions{flex-wrap:wrap}
+  .sheet .actions button{flex:1 1 128px}
   .sheet > .actions:last-child{position:sticky;bottom:-16px;margin:12px -14px -16px;padding:10px 14px 14px;background:linear-gradient(180deg,rgba(255,250,240,0),var(--panel) 22%)}
   .actions button{min-height:42px}
+  .scrollSheet,.sideNav,.searchSheet,.checkSheet,.birthdaySheet{width:auto;right:max(8px,env(safe-area-inset-right));bottom:max(8px,env(safe-area-inset-bottom));border-radius:0 18px 18px 0;max-height:calc(100dvh - 8px)}
   .minimap{display:none}
 }
 .listSheet{position:absolute;left:0;right:0;bottom:0;z-index:32;background:var(--panel);border-radius:24px 24px 0 0;box-shadow:0 -16px 50px rgba(0,0,0,.28);padding:14px max(14px,env(safe-area-inset-left)) max(14px,env(safe-area-inset-bottom));transform:translateY(110%);transition:.22s ease;max-height:88%;overflow:hidden;display:grid;grid-template-rows:auto auto 1fr auto;gap:10px}

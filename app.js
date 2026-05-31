@@ -1083,9 +1083,11 @@ window.addEventListener('pointerup', e => {
   openSheet(id);
 });
 
+const interactiveSelector = '.person,.sheet,.sideNav,.searchSheet,.checkSheet,.birthdaySheet,.scrollSheet,.listSheet,button,input,select,textarea,label';
+
 main.addEventListener('pointerdown', e => {
   if (e.pointerType === 'touch') return;
-  if (e.target.closest('.person,.sheet,button,input,select,textarea,label')) return;
+  if (e.target.closest(interactiveSelector)) return;
   selection = null;
   selectionRect.classList.add('hidden');
   main.setPointerCapture?.(e.pointerId);
@@ -1171,7 +1173,7 @@ window.addEventListener('pointercancel', e => { clearTimeout(longPressTimer); ma
 
 // -- Touch / pointer helpers -------------------------------------------
 function isInteractiveTarget(t) {
-  return !!(t && t.closest && t.closest('.person,.sheet,button,input,select,textarea,label'));
+  return !!(t && t.closest && t.closest(interactiveSelector));
 }
 
 let touchLong = null;
@@ -1206,7 +1208,7 @@ main.addEventListener('touchend', () => {
 }, { passive:true });
 
 main.addEventListener('wheel', e => {
-  if (e.target.closest('.person,.sheet,button,input,select,textarea,label')) return;
+  if (e.target.closest(interactiveSelector)) return;
   e.preventDefault();
   const ratio = e.deltaY > 0 ? 1 / 1.14 : 1.14;
   zoomTo(view.s * ratio, e.clientX, e.clientY);
