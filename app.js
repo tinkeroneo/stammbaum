@@ -635,36 +635,172 @@ function restoreClassicPositions() {
     if (pos) { p.x = pos.x; p.y = pos.y; }
   }
 }
+function relationComponents() {
+  const ids = data.people.map(p => p.id);
+  const byId = new Map(data.people.map(p => [p.id, p]));
+  const links = new Map(ids.map(id => [id, new Set()]));
+
+  const link = (a, b) => {
+    if (!byId.has(a) || !byId.has(b)) return;
+    links.get(a).add(b);
+    links.get(b).add(a);
+  };
+
+  for (const p of data.people) {
+    if (p.partner) link(p.id, p.partner);
+    for (const pid of p.parents || []) link(p.id, pid);
+  }
+
+  const seen = new Set();
+  const components = [];
+  for (const id of ids) {
+    if (seen.has(id)) continue;
+    const stack = [id];
+    const component = [];
+    seen.add(id);
+    while (stack.length) {
+      const current = stack.pop();
+      component.push(current);
+      for (const next of links.get(current) || []) {
+        if (seen.has(next)) continue;
+        seen.add(next);
+        stack.push(next);
+      }
+    }
+    components.push(component);
+  }
+
+  return components.sort((a,b) => {
+    const ax = Math.min(...a.map(id => byId.get(id)?.x ?? 0));
+    const bx = Math.min(...b.map(id => byId.get(id)?.x ?? 0));
+    return ax - bx;
+  });
+}
+function componentDepths(ids) {
+  const idSet = new Set(ids);
+  const byId = new Map(data.people.map(p => [p.id, p]));
+  const depths = new Map();
+  let roots = ids
+    .map(id => byId.get(id))
+    .filter(Boolean)
+    .filter(p => !(p.parents || []).some(pid => idSet.has(pid)));
+
+  if (!roots.length) {
+    roots = ids
+      .map(id => byId.get(id))
+      .filter(Boolean)
+      .sort((a,b) => (a.x - b.x) || fullName(a).localeCompare(fullName(b)))
+      .slice(0, 1);
+  }
+
+  const queue = [];
+  for (const root of roots) {
+    depths.set(root.id, 0);
+    queue.push(root.id);
+    if (root.partner && idSet.has(root.partner) && !depths.has(root.partner)) {
+      depths.set(root.partner, 0);
+      queue.push(root.partner);
+    }
+  }
+
+  while (queue.length) {
+    const id = queue.shift();
+    const p = byId.get(id);
+    const depth = depths.get(id) || 0;
+    if (!p) continue;
+
+    if (p.partner && idSet.has(p.partner) && (!depths.has(p.partner) || depths.get(p.partner) > depth)) {
+      depths.set(p.partner, depth);
+      queue.push(p.partner);
+    }
+
+    for (const child of data.people) {
+      if (!idSet.has(child.id) || !(child.parents || []).includes(id)) continue;
+      const nextDepth = depth + 1;
+      if (!depths.has(child.id) || depths.get(child.id) > nextDepth) {
+        depths.set(child.id, nextDepth);
+        queue.push(child.id);
+      }
+    }
+  }
+
+  for (const id of ids) {
+    if (!depths.has(id)) depths.set(id, 0);
+  }
+  return depths;
+}
+function applyTreeLayout() {
+  autoLayout(false);
+  if (!data.people.length) return;
+
+  const top = 130;
+  const ys = data.people.map(p => p.y);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  for (const p of data.people) {
+    p.y = Math.round(top + (maxY - p.y) + (minY - top));
+  }
+}
 function applyRadialLayout() {
   autoLayout(false);
-  const depths = depthMap();
-  const groups = new Map();
-  for (const p of data.people) {
-    const d = depths.get(p.id) || 0;
-    if (!groups.has(d)) groups.set(d, []);
-    groups.get(d).push(p);
-  }
-  const cx = 900, cy = 760;
-  for (const [depth, people] of groups.entries()) {
-    people.sort((a,b) => a.x - b.x || fullName(a).localeCompare(fullName(b)));
-    if (depth === 0 && people.length === 1) {
-      people[0].x = cx; people[0].y = cy;
-      continue;
+  const byId = new Map(data.people.map(p => [p.id, p]));
+  const components = relationComponents();
+  const packed = [];
+  const maxRowWidth = 4200;
+  let cursorX = 520;
+  let cursorY = 520;
+  let rowHeight = 0;
+
+  for (const ids of components) {
+    const depths = componentDepths(ids);
+    const rings = new Map();
+    for (const id of ids) {
+      const depth = depths.get(id) || 0;
+      if (!rings.has(depth)) rings.set(depth, []);
+      rings.get(depth).push(byId.get(id));
     }
-    const radius = 150 + depth * 270;
-    const start = -Math.PI / 2;
-    people.forEach((p, i) => {
-      const angle = start + (Math.PI * 2 * i / Math.max(1, people.length));
-      p.x = Math.round(cx + Math.cos(angle) * radius);
-      p.y = Math.round(cy + Math.sin(angle) * radius);
-    });
+
+    let maxRadius = 180;
+    for (const [depth, people] of rings.entries()) {
+      const ringRadius = depth === 0
+        ? (people.length > 1 ? Math.max(70, people.length * 28) : 0)
+        : Math.max(170 + depth * 230, people.length * 46);
+      maxRadius = Math.max(maxRadius, ringRadius);
+    }
+
+    const size = maxRadius * 2 + 260;
+    if (packed.length && cursorX + size > maxRowWidth) {
+      cursorX = 520;
+      cursorY += rowHeight + 320;
+      rowHeight = 0;
+    }
+    packed.push({ ids, depths, rings, cx: cursorX + size / 2, cy: cursorY + maxRadius + 130, size, maxRadius });
+    cursorX += size + 300;
+    rowHeight = Math.max(rowHeight, size);
+  }
+
+  for (const island of packed) {
+    const ringEntries = [...island.rings.entries()].sort((a,b) => a[0] - b[0]);
+    for (const [depth, people] of ringEntries) {
+      people.sort((a,b) => (a.x - b.x) || fullName(a).localeCompare(fullName(b)));
+      const radius = depth === 0
+        ? (people.length > 1 ? Math.max(70, people.length * 28) : 0)
+        : Math.max(170 + depth * 230, people.length * 46);
+      const start = -Math.PI / 2;
+      people.forEach((p, i) => {
+        if (!p) return;
+        const angle = start + (Math.PI * 2 * i / Math.max(1, people.length));
+        p.x = Math.round(island.cx + Math.cos(angle) * radius);
+        p.y = Math.round(island.cy + Math.sin(angle) * radius);
+      });
+    }
   }
 }
 function setLayoutMode(next) {
   if (next !== 'classic') captureClassicPositions();
   layoutMode = next;
   if (layoutMode === 'classic') restoreClassicPositions();
-  if (layoutMode === 'tree') autoLayout(false);
+  if (layoutMode === 'tree') applyTreeLayout();
   if (layoutMode === 'radial') applyRadialLayout();
   updateLayoutButton();
   render();
@@ -1373,7 +1509,7 @@ function autoLayout(saveResult = true) {
   });
 
   if (saveResult) {
-    resetGeneratedLayout();
+    clearGeneratedLayoutState();
     save();
   }
   render();
@@ -1593,10 +1729,14 @@ function closeSheet(force = false) {
   return true;
 }
 
-function resetGeneratedLayout() {
+function clearGeneratedLayoutState() {
   layoutMode = 'classic';
   savedClassicPositions = null;
   updateLayoutButton();
+}
+function resetGeneratedLayout() {
+  if (layoutMode !== 'classic') restoreClassicPositions();
+  clearGeneratedLayoutState();
 }
 
 function saveSheet() {
@@ -1636,8 +1776,8 @@ function saveSheet() {
     unlinkPartner(p.id);
   }
 
-  save();
   resetGeneratedLayout();
+  save();
   render();
   if($('sideNav')?.classList.contains('open')) renderNavigator();
   if($('listSheet')?.classList.contains('open')) renderListEditor();
@@ -1656,7 +1796,7 @@ function addChildFor(id) {
   child.parents = [p.id];
   if (p.partner) child.parents.push(p.partner);
   data.people.push(child);
-  save(); resetGeneratedLayout(); render(); if($('sideNav')?.classList.contains('open')) renderNavigator(); openSheet(child.id);
+  resetGeneratedLayout(); save(); render(); if($('sideNav')?.classList.contains('open')) renderNavigator(); openSheet(child.id);
 }
 function addPartnerFor(id) {
   const p = person(id); if (!p) return;
@@ -1664,7 +1804,7 @@ function addPartnerFor(id) {
   q.name = 'Partner/in von ' + p.name;
   linkPartners(p, q);
   data.people.push(q);
-  save(); resetGeneratedLayout(); render(); if($('sideNav')?.classList.contains('open')) renderNavigator(); openSheet(q.id);
+  resetGeneratedLayout(); save(); render(); if($('sideNav')?.classList.contains('open')) renderNavigator(); openSheet(q.id);
 }
 function addParentsFor(id) {
   const p = person(id); if (!p) return;
@@ -1675,7 +1815,7 @@ function addParentsFor(id) {
   a.partner = b.id; b.partner = a.id;
   p.parents = [a.id, b.id];
   data.people.push(a, b);
-  save(); resetGeneratedLayout(); render(); if($('sideNav')?.classList.contains('open')) renderNavigator(); openSheet(a.id);
+  resetGeneratedLayout(); save(); render(); if($('sideNav')?.classList.contains('open')) renderNavigator(); openSheet(a.id);
 }
 
 let listSortMode = 'family';
