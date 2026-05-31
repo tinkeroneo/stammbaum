@@ -316,20 +316,35 @@ function screenToWorld(clientX, clientY) {
   };
 }
 
-function addLine(x1, y1, x2, y2, cls) {
+function addLine(x1, y1, x2, y2, cls, color = '') {
   const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   const mid = (y1 + y2) / 2;
   path.setAttribute('d', `M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2}`);
   path.setAttribute('class', cls);
+  if (color) path.style.setProperty('--line-color', color);
   lines.appendChild(path);
 }
-function addDot(x, y, cls) {
+function addDot(x, y, cls, color = '') {
   const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
   circle.setAttribute('cx', x);
   circle.setAttribute('cy', y);
   circle.setAttribute('r', 8);
   circle.setAttribute('class', cls);
+  if (color) circle.style.setProperty('--line-color', color);
   lines.appendChild(circle);
+}
+function lineageFamilyKey(p) {
+  return String(p?.birthName || p?.lastName || surnameOf(p?.name) || '').trim().toLowerCase();
+}
+function lineageColorFor(people) {
+  const source = people.find(p => lineageFamilyKey(p)) || people[0];
+  return familyColor(lineageFamilyKey(source) || familyKey(source));
+}
+function isStemBridge(child, parents = []) {
+  const childLineage = lineageFamilyKey(child);
+  const currentFamily = familyKey(child);
+  if (childLineage && currentFamily && childLineage !== currentFamily) return true;
+  return parents.some(parent => familyKey(parent) !== currentFamily && lineageFamilyKey(parent) !== currentFamily);
 }
 function parentGroupKey(ids) {
   return [...ids].sort().join('|');
@@ -351,7 +366,9 @@ function renderFamilyLines(visible) {
 
     if (parents.length === 1) {
       const parent = parents[0];
-      addLine(parent.x, parent.y + 38, child.x, child.y - 46, 'line childLine singleParentLine');
+      const color = lineageColorFor([parent, child]);
+      const bridge = isStemBridge(child, parents) ? ' stemBridge' : '';
+      addLine(parent.x, parent.y + 38, child.x, child.y - 46, `line childLine lineageLine singleParentLine${bridge}`, color);
       continue;
     }
 
@@ -365,10 +382,12 @@ function renderFamilyLines(visible) {
     const hub = parentGroupPoint(group.parents, group.children);
     const parentMidX = group.parents.reduce((sum, p) => sum + p.x, 0) / group.parents.length;
     const parentMidY = group.parents.reduce((sum, p) => sum + p.y, 0) / group.parents.length;
-    addLine(parentMidX, parentMidY + 28, hub.x, hub.y, 'line familyStem');
-    addDot(hub.x, hub.y, 'familyHub');
+    const color = lineageColorFor(group.parents);
+    addLine(parentMidX, parentMidY + 28, hub.x, hub.y, 'line familyStem lineageLine', color);
+    addDot(hub.x, hub.y, 'familyHub', color);
     for (const child of group.children) {
-      addLine(hub.x, hub.y, child.x, child.y - 46, 'line childLine');
+      const bridge = isStemBridge(child, group.parents) ? ' stemBridge' : '';
+      addLine(hub.x, hub.y, child.x, child.y - 46, `line childLine lineageLine${bridge}`, color);
     }
   }
 }

@@ -892,11 +892,13 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 31847,
-      "y": 130,
+      "x": 24680,
+      "y": 870,
       "parents": [],
-      "partner": "",
-      "partners": []
+      "partner": "k0171",
+      "partners": [
+        "k0171"
+      ]
     },
     {
       "id": "k0206",
@@ -909,7 +911,7 @@
       "birthName": "",
       "note": "",
       "x": 31204,
-      "y": 500,
+      "y": 870,
       "parents": [],
       "partner": "k0205",
       "partners": [
@@ -1043,7 +1045,7 @@
       "birthName": "?",
       "note": "",
       "x": 23772,
-      "y": 500,
+      "y": 870,
       "parents": [],
       "partner": "k0197",
       "partners": [
@@ -1061,7 +1063,7 @@
       "birthName": "",
       "note": "",
       "x": 26586,
-      "y": 500,
+      "y": 870,
       "parents": [
         "k0182",
         "k0183"
@@ -1082,7 +1084,7 @@
       "birthName": "?",
       "note": "",
       "x": 24124,
-      "y": 500,
+      "y": 870,
       "parents": [],
       "partner": "k0194",
       "partners": [
@@ -1100,8 +1102,10 @@
       "birthName": "",
       "note": "",
       "x": 27399,
-      "y": 130,
-      "parents": [],
+      "y": 500,
+      "parents": [
+        "p327"
+      ],
       "partner": "k0168",
       "partners": [
         "k0168"
@@ -1118,7 +1122,7 @@
       "birthName": "",
       "note": "",
       "x": 23778,
-      "y": 315,
+      "y": 685,
       "parents": [
         "k0167",
         "k0168"
@@ -1139,7 +1143,7 @@
       "birthName": "",
       "note": "",
       "x": 24880,
-      "y": 685,
+      "y": 1055,
       "parents": [
         "k0179",
         "k0180"
@@ -1158,7 +1162,7 @@
       "birthName": "",
       "note": "",
       "x": 24890,
-      "y": 500,
+      "y": 870,
       "parents": [
         "k0169",
         "k0170"
@@ -1179,7 +1183,7 @@
       "birthName": "",
       "note": "",
       "x": 26210,
-      "y": 500,
+      "y": 870,
       "parents": [
         "k0249",
         "k0250"
@@ -1198,7 +1202,7 @@
       "birthName": "",
       "note": "",
       "x": 23416,
-      "y": 500,
+      "y": 870,
       "parents": [
         "k0193",
         "k0192"
@@ -1217,7 +1221,7 @@
       "birthName": "Völkl",
       "note": "",
       "x": 26200,
-      "y": 315,
+      "y": 685,
       "parents": [],
       "partner": "k0249",
       "partners": [
@@ -1235,7 +1239,7 @@
       "birthName": "Meißner",
       "note": "",
       "x": 26661,
-      "y": 315,
+      "y": 685,
       "parents": [],
       "partner": "k0182",
       "partners": [
@@ -1253,7 +1257,7 @@
       "birthName": "",
       "note": "Partner/in unbekannt",
       "x": 24310,
-      "y": 500,
+      "y": 870,
       "parents": [
         "k0193",
         "k0192"
@@ -1272,7 +1276,7 @@
       "birthName": "",
       "note": "",
       "x": 24500,
-      "y": 685,
+      "y": 1055,
       "parents": [
         "k0171",
         "k0172"
@@ -1291,7 +1295,7 @@
       "birthName": "",
       "note": "",
       "x": 26020,
-      "y": 500,
+      "y": 870,
       "parents": [
         "k0249",
         "k0250"
@@ -1310,7 +1314,7 @@
       "birthName": "",
       "note": "",
       "x": 24795,
-      "y": 315,
+      "y": 685,
       "parents": [
         "k0167",
         "k0168"
@@ -1331,7 +1335,7 @@
       "birthName": "Bodensteiner",
       "note": "",
       "x": 25555,
-      "y": 315,
+      "y": 685,
       "parents": [
         "k0167",
         "k0168"
@@ -1352,7 +1356,7 @@
       "birthName": "Bodensteiner",
       "note": "",
       "x": 25460,
-      "y": 500,
+      "y": 870,
       "parents": [
         "k0201",
         "k0202"
@@ -1373,7 +1377,7 @@
       "birthName": "",
       "note": "",
       "x": 25260,
-      "y": 500,
+      "y": 870,
       "parents": [
         "k0169",
         "k0170"
@@ -1392,7 +1396,7 @@
       "birthName": "Zosel",
       "note": "",
       "x": 25060,
-      "y": 500,
+      "y": 870,
       "parents": [],
       "partner": "k0179",
       "partners": [
@@ -1410,7 +1414,7 @@
       "birthName": "",
       "note": "",
       "x": 25070,
-      "y": 685,
+      "y": 1055,
       "parents": [
         "k0179",
         "k0180"
@@ -1429,7 +1433,7 @@
       "birthName": "Hausner",
       "note": "",
       "x": 23948,
-      "y": 315,
+      "y": 685,
       "parents": [],
       "partner": "k0192",
       "partners": [
@@ -1446,14 +1450,16 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 24595,
-      "y": 500,
+      "x": 24510,
+      "y": 870,
       "parents": [
         "k0169",
         "k0170"
       ],
-      "partner": "",
-      "partners": []
+      "partner": "k0172",
+      "partners": [
+        "k0172"
+      ]
     },
     {
       "id": "k0249",
@@ -1466,7 +1472,7 @@
       "birthName": "",
       "note": "",
       "x": 26030,
-      "y": 315,
+      "y": 685,
       "parents": [
         "k0167",
         "k0168"
@@ -1487,7 +1493,7 @@
       "birthName": "",
       "note": "",
       "x": 31034,
-      "y": 500,
+      "y": 870,
       "parents": [
         "p318",
         "p319"
@@ -1508,7 +1514,7 @@
       "birthName": "Bodensteiner",
       "note": "",
       "x": 26491,
-      "y": 315,
+      "y": 685,
       "parents": [
         "k0167",
         "k0168"
@@ -1529,7 +1535,7 @@
       "birthName": "",
       "note": "",
       "x": 24690,
-      "y": 685,
+      "y": 1055,
       "parents": [
         "k0171",
         "k0172"
@@ -1548,7 +1554,7 @@
       "birthName": "",
       "note": "",
       "x": 23602,
-      "y": 500,
+      "y": 870,
       "parents": [
         "k0192",
         "k0193"
@@ -1569,7 +1575,7 @@
       "birthName": "",
       "note": "",
       "x": 31386,
-      "y": 500,
+      "y": 870,
       "parents": [
         "p318",
         "p319"
@@ -1590,7 +1596,7 @@
       "birthName": "",
       "note": "",
       "x": 26400,
-      "y": 500,
+      "y": 870,
       "parents": [
         "k0182",
         "k0183"
@@ -1609,7 +1615,7 @@
       "birthName": "",
       "note": "",
       "x": 23687,
-      "y": 685,
+      "y": 1055,
       "parents": [
         "k0197",
         "k0198"
@@ -1628,7 +1634,7 @@
       "birthName": "",
       "note": "",
       "x": 23954,
-      "y": 500,
+      "y": 870,
       "parents": [
         "k0192",
         "k0193"
@@ -1726,7 +1732,7 @@
       "died": "Brenner",
       "birthName": "",
       "note": "",
-      "x": 32142,
+      "x": 31752,
       "y": 130,
       "parents": [],
       "partner": "",
@@ -1742,7 +1748,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 32342,
+      "x": 31952,
       "y": 130,
       "parents": [],
       "partner": "",
@@ -1989,7 +1995,7 @@
       "birthName": "",
       "note": "",
       "x": 27569,
-      "y": 130,
+      "y": 500,
       "parents": [],
       "partner": "k0167",
       "partners": [
@@ -2007,7 +2013,7 @@
       "birthName": "",
       "note": "",
       "x": 27407,
-      "y": 500,
+      "y": 870,
       "parents": [],
       "partner": "k0216",
       "partners": [
@@ -2025,7 +2031,7 @@
       "birthName": "Kopp",
       "note": "",
       "x": 27237,
-      "y": 500,
+      "y": 870,
       "parents": [
         "k0209",
         "k0210"
@@ -2124,7 +2130,7 @@
       "birthName": "",
       "note": "",
       "x": 24965,
-      "y": 315,
+      "y": 685,
       "parents": [],
       "partner": "k0169",
       "partners": [
@@ -2142,7 +2148,7 @@
       "birthName": "",
       "note": "",
       "x": 27132,
-      "y": 685,
+      "y": 1055,
       "parents": [
         "k0216",
         "k0247"
@@ -2467,7 +2473,7 @@
       "died": "23.03.1990",
       "birthName": "Gruber",
       "note": "",
-      "x": 32542,
+      "x": 32152,
       "y": 130,
       "parents": [],
       "partner": "",
@@ -3783,7 +3789,7 @@
       "birthName": "",
       "note": "",
       "x": 27702,
-      "y": 685,
+      "y": 1055,
       "parents": [
         "k0211",
         "k0212"
@@ -3802,7 +3808,7 @@
       "birthName": "",
       "note": "",
       "x": 26942,
-      "y": 500,
+      "y": 870,
       "parents": [
         "k0209",
         "k0210"
@@ -3821,7 +3827,7 @@
       "birthName": "",
       "note": "",
       "x": 27692,
-      "y": 315,
+      "y": 685,
       "parents": [],
       "partner": "k0209",
       "partners": [
@@ -3839,7 +3845,7 @@
       "birthName": "Bodensteiner",
       "note": "",
       "x": 27522,
-      "y": 315,
+      "y": 685,
       "parents": [
         "k0168",
         "k0167"
@@ -3860,7 +3866,7 @@
       "birthName": "",
       "note": "",
       "x": 27807,
-      "y": 500,
+      "y": 870,
       "parents": [
         "k0209",
         "k0210"
@@ -3881,7 +3887,7 @@
       "birthName": "",
       "note": "",
       "x": 27892,
-      "y": 685,
+      "y": 1055,
       "parents": [
         "k0212",
         "k0211"
@@ -3900,7 +3906,7 @@
       "birthName": "",
       "note": "",
       "x": 28272,
-      "y": 500,
+      "y": 870,
       "parents": [
         "k0209",
         "k0210"
@@ -3919,7 +3925,7 @@
       "birthName": "Hall",
       "note": "",
       "x": 27977,
-      "y": 500,
+      "y": 870,
       "parents": [],
       "partner": "k0211",
       "partners": [
@@ -4093,7 +4099,7 @@
       "birthName": "",
       "note": "",
       "x": 25725,
-      "y": 315,
+      "y": 685,
       "parents": [],
       "partner": "k0201",
       "partners": [
@@ -4111,7 +4117,7 @@
       "birthName": "Alex",
       "note": "",
       "x": 28462,
-      "y": 500,
+      "y": 870,
       "parents": [
         "k0253",
         "k0254"
@@ -4130,7 +4136,7 @@
       "birthName": "Bodensteiner",
       "note": "",
       "x": 28567,
-      "y": 315,
+      "y": 685,
       "parents": [
         "k0167",
         "k0168"
@@ -4151,7 +4157,7 @@
       "birthName": "",
       "note": "",
       "x": 28652,
-      "y": 500,
+      "y": 870,
       "parents": [
         "k0253",
         "k0254"
@@ -4170,7 +4176,7 @@
       "birthName": "",
       "note": "",
       "x": 28737,
-      "y": 315,
+      "y": 685,
       "parents": [],
       "partner": "k0253",
       "partners": [
@@ -4188,7 +4194,7 @@
       "birthName": "",
       "note": "",
       "x": 28842,
-      "y": 500,
+      "y": 870,
       "parents": [
         "k0253",
         "k0254"
@@ -4575,7 +4581,7 @@
       "birthName": "",
       "note": "",
       "x": 25630,
-      "y": 500,
+      "y": 870,
       "parents": [],
       "partner": "k0265",
       "partners": [
@@ -4593,7 +4599,7 @@
       "birthName": "",
       "note": "",
       "x": 25450,
-      "y": 685,
+      "y": 1055,
       "parents": [
         "k0265",
         "k0266"
@@ -4612,7 +4618,7 @@
       "birthName": "",
       "note": "",
       "x": 25640,
-      "y": 685,
+      "y": 1055,
       "parents": [
         "k0265",
         "k0266"
@@ -4670,7 +4676,7 @@
       "died": "03.03.1980",
       "birthName": "",
       "note": "",
-      "x": 32742,
+      "x": 32352,
       "y": 130,
       "parents": [],
       "partner": "",
@@ -4918,7 +4924,7 @@
       "birthName": "",
       "note": "",
       "x": 29032,
-      "y": 500,
+      "y": 870,
       "parents": [
         "k0186",
         "k0185"
@@ -4937,7 +4943,7 @@
       "birthName": "",
       "note": "",
       "x": 29388,
-      "y": 500,
+      "y": 870,
       "parents": [],
       "partner": "k0187",
       "partners": [
@@ -4955,7 +4961,7 @@
       "birthName": "",
       "note": "",
       "x": 29388,
-      "y": 315,
+      "y": 685,
       "parents": [],
       "partner": "k0185",
       "partners": [
@@ -4973,7 +4979,7 @@
       "birthName": "Strigl",
       "note": "",
       "x": 29218,
-      "y": 500,
+      "y": 870,
       "parents": [
         "k0185",
         "k0186"
@@ -4994,7 +5000,7 @@
       "birthName": "",
       "note": "",
       "x": 29574,
-      "y": 500,
+      "y": 870,
       "parents": [
         "k0186",
         "k0185"
@@ -5013,7 +5019,7 @@
       "birthName": "",
       "note": "",
       "x": 29303,
-      "y": 685,
+      "y": 1055,
       "parents": [
         "k0187",
         "k0188"
@@ -5032,7 +5038,7 @@
       "birthName": "Bodensteiner",
       "note": "",
       "x": 29218,
-      "y": 315,
+      "y": 685,
       "parents": [
         "k0167",
         "k0168"
@@ -5053,7 +5059,7 @@
       "birthName": "",
       "note": "",
       "x": 31556,
-      "y": 500,
+      "y": 870,
       "parents": [],
       "partner": "k0203",
       "partners": [
@@ -5071,7 +5077,7 @@
       "birthName": "",
       "note": "",
       "x": 26756,
-      "y": 500,
+      "y": 870,
       "parents": [],
       "partner": "k0175",
       "partners": [
@@ -5553,7 +5559,7 @@
       "died": "20.02.1964",
       "birthName": "Eger",
       "note": "1. Frau Josef Kellner 1930",
-      "x": 32942,
+      "x": 32552,
       "y": 130,
       "parents": [],
       "partner": "",
@@ -5820,7 +5826,7 @@
       "birthName": "",
       "note": "",
       "x": 31210,
-      "y": 315,
+      "y": 685,
       "parents": [
         "k0167",
         "k0168"
@@ -5841,7 +5847,7 @@
       "birthName": "?",
       "note": "",
       "x": 31380,
-      "y": 315,
+      "y": 685,
       "parents": [],
       "partner": "p318",
       "partners": [
@@ -5859,7 +5865,7 @@
       "birthName": "",
       "note": "",
       "x": 25830,
-      "y": 500,
+      "y": 870,
       "parents": [
         "k0201",
         "k0202"
@@ -5932,7 +5938,7 @@
       "birthName": "",
       "note": "",
       "x": 27322,
-      "y": 685,
+      "y": 1055,
       "parents": [
         "k0216",
         "k0247"
@@ -5951,7 +5957,7 @@
       "birthName": "",
       "note": "",
       "x": 27512,
-      "y": 685,
+      "y": 1055,
       "parents": [
         "k0216",
         "k0247"
@@ -5970,11 +5976,45 @@
       "birthName": "",
       "note": "",
       "x": 28082,
-      "y": 685,
+      "y": 1055,
       "parents": [
         "k0211",
         "k0212"
       ],
+      "partner": "",
+      "partners": []
+    },
+    {
+      "id": "p327",
+      "name": "Generation -1 Bodensteiner",
+      "firstName": "Generation -1",
+      "lastName": "Bodensteiner",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 27484,
+      "y": 315,
+      "parents": [
+        "p328"
+      ],
+      "partner": "",
+      "partners": []
+    },
+    {
+      "id": "p328",
+      "name": "Generation -2 Bodensteiner",
+      "firstName": "Generation -2",
+      "lastName": "Bodensteiner",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 27484,
+      "y": 130,
+      "parents": [],
       "partner": "",
       "partners": []
     }

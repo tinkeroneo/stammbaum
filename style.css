@@ -28,11 +28,13 @@ main{position:relative;overflow:hidden;touch-action:none}
 .generationBand span{position:sticky;left:18px;top:0;display:inline-block;margin:8px 0 0 18px;padding:4px 9px;border-radius:999px;background:rgba(255,250,240,.88);border:1px solid rgba(107,143,113,.24);font-size:12px;font-weight:800;color:rgba(47,42,36,.66);box-shadow:0 3px 12px rgba(0,0,0,.06)}
 svg.lines{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;z-index:1}
 #nodes{position:absolute;inset:0;z-index:2}
-.line{stroke:var(--line);stroke-width:4;fill:none;stroke-linecap:round;opacity:.58}
+.line{stroke:var(--line-color,var(--line));stroke-width:4;fill:none;stroke-linecap:round;opacity:.58}
 .childLine{opacity:.64}
-.familyStem{opacity:.42}
+.lineageLine{opacity:.7}
+.familyStem{opacity:.46}
+.stemBridge{stroke-dasharray:10 12;stroke-width:3;opacity:.36}
 .singleParentLine{stroke-dasharray:4 9;opacity:.46}
-.familyHub{fill:var(--panel);stroke:var(--line);stroke-width:4;opacity:.8}
+.familyHub{fill:var(--panel);stroke:var(--line-color,var(--line));stroke-width:4;opacity:.8}
 .partner{stroke-dasharray:9 10;opacity:.42}
 .world.zoomCompactLevel .line{stroke-width:4;opacity:.46}
 .world.zoomMini .line{stroke-width:3;opacity:.28}
