@@ -158,7 +158,20 @@ function birthNameDiffers(p) {
   if (!p?.birthName) return false;
   return String(p.birthName).trim().toLowerCase() !== String(p.lastName || '').trim().toLowerCase();
 }
-function displayName(p) { return p ? (birthNameDiffers(p) ? `${fullName(p)} (geb. ${p.birthName})` : fullName(p) || p.name) : ''; }
+function displayName(p) { return p ? (fullName(p) || p.name) : ''; }
+function selectPersonLabel(p, mode = 'person') {
+  if (!p) return '';
+  const dates = [p.born && formatBirthDate(p.born), p.died && '- ' + p.died].filter(Boolean).join(' ');
+  const birth = birthNameDiffers(p) ? `geb. ${p.birthName}` : '';
+  const partners = partnerIds(p)
+    .map(id => person(id))
+    .filter(Boolean)
+    .map(q => fullName(q) || q.name)
+    .join(', ');
+  const relation = partners ? `Partner/in: ${partners}` : '';
+  const parts = [dates, birth, mode === 'partner' ? relation : ''].filter(Boolean);
+  return `${displayName(p)}${parts.length ? ' - ' + parts.join(' · ') : ''}`;
+}
 function visibleName(p) {
   if (!p) return '';
   if (nameMode === 'initials') return initials(fullName(p) || p.name);
@@ -1580,8 +1593,8 @@ function fillSelects(
   selectedParent2 = $('parent2')?.value || '',
   selectedPartner = $('partner')?.value || ''
 ) {
-  const opt = arr => '<option value="">—</option>' + arr.map(p => `<option value="${esc(p.id)}">${esc(displayName(p))}</option>`).join('');
-  const partnerOpt = arr => '<option value="">— Partner/in hinzufügen —</option>' + arr.map(p => `<option value="${esc(p.id)}">${esc(displayName(p))}</option>`).join('');
+  const opt = arr => '<option value="">—</option>' + arr.map(p => `<option value="${esc(p.id)}">${esc(selectPersonLabel(p))}</option>`).join('');
+  const partnerOpt = arr => '<option value="">— Partner/in hinzufügen —</option>' + arr.map(p => `<option value="${esc(p.id)}">${esc(selectPersonLabel(p, 'partner'))}</option>`).join('');
   $('parent1').innerHTML = opt(suggestParentOrder(current, ''));
   $('parent1').value = selectedParent1;
   $('parent2').innerHTML = opt(suggestParentOrder(current, selectedParent1));
@@ -2208,7 +2221,7 @@ function renderListEditor(){
 $('parent1').addEventListener('change', () => {
   const old = $('parent2').value;
   const arr = suggestParentOrder(selected, $('parent1').value);
-  $('parent2').innerHTML = '<option value="">—</option>' + arr.map(p => `<option value="${esc(p.id)}">${esc(displayName(p))}</option>`).join('');
+  $('parent2').innerHTML = '<option value="">—</option>' + arr.map(p => `<option value="${esc(p.id)}">${esc(selectPersonLabel(p))}</option>`).join('');
   $('parent2').value = old;
 });
 
