@@ -1368,6 +1368,22 @@ function formatBirthDate(value) {
   if (parsed.precision === 'year') return String(parsed.year);
   return `${dd}.${mm}.${parsed.year}`;
 }
+function ageInfo(p) {
+  const born = parseBirthValue(p?.born);
+  if (!born?.year) return '';
+  const died = parseBirthValue(p?.died);
+  const end = died?.year ? died : (() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() + 1, day: now.getDate(), precision: 'day' };
+  })();
+  let age = end.year - born.year;
+  if ((end.month || 12) < (born.month || 1) || ((end.month || 12) === (born.month || 1) && (end.day || 31) < (born.day || 1))) {
+    age--;
+  }
+  if (age < 0 || age > 130) return '';
+  const approximate = born.precision !== 'day' || (died && died.precision !== 'day');
+  return `${approximate ? 'ca. ' : ''}${age} Jahre`;
+}
 function estimatedGenerationYear(p, depth, siblingIndex){
   const b = birthSortValue(p);
   if(b !== null) return Math.floor(b / 10000);
@@ -1709,6 +1725,13 @@ function relationButtons(people) {
   if (!people.length) return '<span class="detailValue">Offen</span>';
   return `<div class="detailLinks">${people.map(p => `<button type="button" class="detailLink" data-id="${esc(p.id)}">${esc(fullName(p) || p.name)}</button>`).join('')}</div>`;
 }
+function siblingList(p) {
+  const parents = new Set(p?.parents || []);
+  if (!parents.size) return [];
+  return data.people
+    .filter(other => other.id !== p.id && (other.parents || []).some(pid => parents.has(pid)))
+    .sort((a,b) => (birthSortValue(a) ?? Infinity) - (birthSortValue(b) ?? Infinity) || fullName(a).localeCompare(fullName(b)));
+}
 
 function renderPersonDetails(p) {
   const details = $('personDetails');
@@ -1721,12 +1744,14 @@ function renderPersonDetails(p) {
 
   const parents = (p.parents || []).map(person).filter(Boolean);
   const partners = partnerIds(p).map(person).filter(Boolean);
+  const siblings = siblingList(p);
   const children = data.people
     .filter(child => (child.parents || []).includes(p.id))
     .sort((a,b) => (birthSortValue(a) ?? Infinity) - (birthSortValue(b) ?? Infinity) || fullName(a).localeCompare(fullName(b)));
   const dates = [
     p.born ? `geb. ${formatBirthDate(p.born)}` : '',
-    p.died ? `gest. ${p.died}` : ''
+    p.died ? `gest. ${p.died}` : '',
+    ageInfo(p)
   ].filter(Boolean).join(' · ') || 'Lebensdaten offen';
 
   details.innerHTML = `
@@ -1740,6 +1765,7 @@ function renderPersonDetails(p) {
     <div class="detailGrid">
       <div class="detailBox"><span class="detailLabel">Partner/in</span>${relationButtons(partners)}</div>
       <div class="detailBox"><span class="detailLabel">Eltern</span>${relationButtons(parents)}</div>
+      <div class="detailBox full"><span class="detailLabel">Geschwister</span>${siblings.length ? relationButtons(siblings) : '<span class="detailValue">Keine eingetragen</span>'}</div>
       <div class="detailBox full"><span class="detailLabel">Kinder</span>${relationButtons(children)}</div>
       ${p.note ? `<div class="detailBox full"><span class="detailLabel">Notiz</span><div class="detailValue">${esc(p.note)}</div></div>` : ''}
     </div>
