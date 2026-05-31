@@ -2,7 +2,7 @@
 'use strict';
 
 // -- Data / persistence ----------------------------------------------------
-const storeKey = 'mobile-family-tree-v4-clean';
+const storeKey = 'mobile-family-tree-v5-clean';
 const minZoom = 0.045;
 const maxZoom = 2.4;
 const minFitZoom = 0.42;
@@ -842,7 +842,10 @@ function applyRadialLayout() {
   }
 }
 function setLayoutMode(next) {
-  if (next !== 'classic') captureClassicPositions();
+  if (next !== 'classic') {
+    captureClassicPositions();
+    restoreClassicPositions();
+  }
   layoutMode = next;
   if (layoutMode === 'classic') restoreClassicPositions();
   if (layoutMode === 'tree') applyTreeLayout();
@@ -875,7 +878,7 @@ function render() {
   const zClass = zoomClass();
   nodes.innerHTML = '';
   lines.innerHTML = '';
-  if (generationBands) renderGenerationBands(visible);
+  if (generationBands) generationBands.innerHTML = '';
 
   for (const p of data.people) {
     if(!visible.has(p.id)) continue;
