@@ -21,7 +21,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 12544,
+      "x": 9016,
       "y": 870,
       "parents": [
         "k0092",
@@ -39,7 +39,7 @@
       "died": "",
       "birthName": "Michel",
       "note": "",
-      "x": 7658,
+      "x": 9216,
       "y": 870,
       "parents": [
         "k0144",
@@ -57,7 +57,7 @@
       "died": "",
       "birthName": "Kellner",
       "note": "",
-      "x": 13938,
+      "x": 9416,
       "y": 870,
       "parents": [
         "k0130",
@@ -75,7 +75,7 @@
       "died": "",
       "birthName": "Kick",
       "note": "",
-      "x": 5398,
+      "x": 9616,
       "y": 1055,
       "parents": [
         "k0132",
@@ -93,7 +93,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 15332,
+      "x": 9816,
       "y": 870,
       "parents": [
         "k0145",
@@ -111,7 +111,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 10094,
+      "x": 10016,
       "y": 870,
       "parents": [
         "k0159"
@@ -120,15 +120,15 @@
     },
     {
       "id": "k0010",
-      "name": "Christian Christian",
+      "name": "Christian Kunz",
       "firstName": "Christian",
-      "lastName": "Christian",
+      "lastName": "Kunz",
       "nickname": "",
       "born": "18.04.1993",
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 16103,
+      "x": 10216,
       "y": 870,
       "parents": [
         "k0135",
@@ -146,7 +146,7 @@
       "died": "",
       "birthName": "Schneider",
       "note": "",
-      "x": 8524,
+      "x": 10416,
       "y": 870,
       "parents": [
         "k0166",
@@ -164,7 +164,7 @@
       "died": "",
       "birthName": "Hagler",
       "note": "",
-      "x": 5926,
+      "x": 10616,
       "y": 870,
       "parents": [
         "k0079",
@@ -182,7 +182,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 9918,
+      "x": 10816,
       "y": 870,
       "parents": [
         "k0159"
@@ -199,7 +199,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 9214,
+      "x": 11016,
       "y": 870,
       "parents": [
         "k0083",
@@ -209,33 +209,33 @@
     },
     {
       "id": "k0017",
-      "name": "Dominic",
+      "name": "Dominic Kellner",
       "firstName": "Dominic",
-      "lastName": "Dominic",
+      "lastName": "Kellner",
       "nickname": "",
       "born": "07.10.1992",
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 26286,
-      "y": 315,
+      "x": 11216,
+      "y": 870,
       "parents": [
-        "k0105",
-        "k0121"
+        "p311",
+        "p310"
       ],
       "partner": ""
     },
     {
       "id": "k0018",
-      "name": "Dominik",
+      "name": "Dominik Kellner",
       "firstName": "Dominik",
-      "lastName": "Dominik",
+      "lastName": "Kellner",
       "nickname": "",
       "born": "10.05.1989",
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 13072,
+      "x": 11416,
       "y": 870,
       "parents": [
         "k0093",
@@ -253,7 +253,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 15156,
+      "x": 11616,
       "y": 870,
       "parents": [
         "k0145",
@@ -263,15 +263,15 @@
     },
     {
       "id": "k0021",
-      "name": "Fabian",
+      "name": "Fabian Brenner",
       "firstName": "Fabian",
-      "lastName": "Fabian",
+      "lastName": "Brenner",
       "nickname": "",
       "born": "20.11.1997",
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 18187,
+      "x": 11816,
       "y": 870,
       "parents": [
         "k0071",
@@ -281,16 +281,16 @@
     },
     {
       "id": "k0022",
-      "name": "Fabian",
+      "name": "Fabian Kellner",
       "firstName": "Fabian",
-      "lastName": "Fabian",
+      "lastName": "Kellner",
       "nickname": "",
       "born": "27.11.1996",
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 26814,
-      "y": 315,
+      "x": 12016,
+      "y": 870,
       "parents": [
         "k0105",
         "k0121"
@@ -307,7 +307,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 17321,
+      "x": 12216,
       "y": 870,
       "parents": [
         "k0152",
@@ -317,15 +317,15 @@
     },
     {
       "id": "k0024",
-      "name": "Florian",
+      "name": "Florian Kellner",
       "firstName": "Florian",
-      "lastName": "Florian",
+      "lastName": "Kellner",
       "nickname": "",
       "born": "11.10.1986",
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 12896,
+      "x": 12416,
       "y": 870,
       "parents": [
         "k0093",
@@ -335,33 +335,33 @@
     },
     {
       "id": "k0025",
-      "name": "Franziska",
+      "name": "Franziska Hösl",
       "firstName": "Franziska",
-      "lastName": "Franziska",
+      "lastName": "Hösl",
       "nickname": "",
       "born": "17.08.1992",
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 26110,
-      "y": 315,
+      "x": 12616,
+      "y": 870,
       "parents": [
-        "k0105",
-        "k0121"
+        "p309",
+        "p308"
       ],
       "partner": ""
     },
     {
       "id": "k0026",
-      "name": "Jasmin",
+      "name": "Jasmin Kellner",
       "firstName": "Jasmin",
-      "lastName": "Jasmin",
+      "lastName": "Kellner",
       "nickname": "",
       "born": "05.10.1989",
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 15765,
+      "x": 12816,
       "y": 870,
       "parents": [
         "k0100",
@@ -371,16 +371,16 @@
     },
     {
       "id": "k0027",
-      "name": "Jasmin",
+      "name": "Jasmin Kellner",
       "firstName": "Jasmin",
-      "lastName": "Jasmin",
+      "lastName": "Kellner",
       "nickname": "",
       "born": "12.07.1991",
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 27095,
-      "y": 315,
+      "x": 13016,
+      "y": 870,
       "parents": [
         "k0101",
         "k0099"
@@ -397,7 +397,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 6102,
+      "x": 13216,
       "y": 870,
       "parents": [
         "k0057",
@@ -415,7 +415,7 @@
       "died": "",
       "birthName": "Kick",
       "note": "",
-      "x": 5574,
+      "x": 13416,
       "y": 1055,
       "parents": [
         "k0132",
@@ -425,15 +425,15 @@
     },
     {
       "id": "k0030",
-      "name": "Kathrin",
+      "name": "Kathrin Kellner",
       "firstName": "Kathrin",
-      "lastName": "Kathrin",
+      "lastName": "Kellner",
       "nickname": "",
       "born": "28.08.1990",
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 13248,
+      "x": 13616,
       "y": 870,
       "parents": [
         "k0093",
@@ -451,7 +451,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 12720,
+      "x": 13816,
       "y": 870,
       "parents": [
         "k0092",
@@ -461,15 +461,15 @@
     },
     {
       "id": "k0034",
-      "name": "Martin Martin",
+      "name": "Martin Dietz",
       "firstName": "Martin",
-      "lastName": "Martin",
+      "lastName": "Dietz",
       "nickname": "",
       "born": "05.03.1977",
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 11136,
+      "x": 14016,
       "y": 870,
       "parents": [
         "k0074",
@@ -487,7 +487,7 @@
       "died": "",
       "birthName": "Hagler",
       "note": "",
-      "x": 5750,
+      "x": 14216,
       "y": 870,
       "parents": [
         "k0079",
@@ -505,7 +505,7 @@
       "died": "",
       "birthName": "Kellner",
       "note": "",
-      "x": 13762,
+      "x": 14416,
       "y": 870,
       "parents": [
         "k0130",
@@ -523,7 +523,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 10270,
+      "x": 14616,
       "y": 870,
       "parents": [
         "k0159"
@@ -540,7 +540,7 @@
       "died": "",
       "birthName": "Kühner",
       "note": "",
-      "x": 7306,
+      "x": 14816,
       "y": 870,
       "parents": [
         "k0137",
@@ -558,7 +558,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 17064,
+      "x": 15016,
       "y": 870,
       "parents": [
         "k0155",
@@ -576,7 +576,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 13505,
+      "x": 15216,
       "y": 870,
       "parents": [
         "k0142",
@@ -586,19 +586,19 @@
     },
     {
       "id": "k0041",
-      "name": "Raphael",
+      "name": "Raphael Hösl",
       "firstName": "Raphael",
-      "lastName": "Raphael",
+      "lastName": "Hösl",
       "nickname": "",
       "born": "01.06.1996",
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 26638,
-      "y": 315,
+      "x": 15416,
+      "y": 870,
       "parents": [
-        "k0105",
-        "k0121"
+        "p309",
+        "p308"
       ],
       "partner": ""
     },
@@ -612,7 +612,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 9390,
+      "x": 15616,
       "y": 870,
       "parents": [
         "k0083",
@@ -630,7 +630,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 10960,
+      "x": 15816,
       "y": 870,
       "parents": [
         "k0074",
@@ -640,19 +640,19 @@
     },
     {
       "id": "k0044",
-      "name": "Sebastian",
+      "name": "Sebastian Kellner",
       "firstName": "Sebastian",
-      "lastName": "Sebastian",
+      "lastName": "Kellner",
       "nickname": "",
       "born": "09.09.1995",
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 26462,
-      "y": 315,
+      "x": 16016,
+      "y": 870,
       "parents": [
-        "k0105",
-        "k0121"
+        "p311",
+        "p310"
       ],
       "partner": ""
     },
@@ -666,7 +666,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 11488,
+      "x": 16216,
       "y": 870,
       "parents": [
         "k0074",
@@ -684,7 +684,7 @@
       "died": "",
       "birthName": "Kühner",
       "note": "",
-      "x": 7130,
+      "x": 16416,
       "y": 870,
       "parents": [
         "k0137",
@@ -702,7 +702,7 @@
       "died": "",
       "birthName": "Kellner",
       "note": "",
-      "x": 14114,
+      "x": 16616,
       "y": 870,
       "parents": [
         "k0130",
@@ -720,7 +720,7 @@
       "died": "",
       "birthName": "Schneider",
       "note": "",
-      "x": 8700,
+      "x": 16816,
       "y": 870,
       "parents": [
         "k0166",
@@ -738,7 +738,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 6616,
+      "x": 17016,
       "y": 870,
       "parents": [
         "k0057",
@@ -756,7 +756,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 6359,
+      "x": 17216,
       "y": 1055,
       "parents": [
         "k0139",
@@ -774,7 +774,7 @@
       "died": "",
       "birthName": "Dietz",
       "note": "",
-      "x": 11312,
+      "x": 17416,
       "y": 870,
       "parents": [
         "k0074",
@@ -792,7 +792,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 15508,
+      "x": 17616,
       "y": 870,
       "parents": [
         "k0145",
@@ -810,7 +810,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 10703,
+      "x": 17816,
       "y": 870,
       "parents": [
         "k0061",
@@ -828,7 +828,7 @@
       "died": "",
       "birthName": "Michel",
       "note": "",
-      "x": 7482,
+      "x": 18016,
       "y": 870,
       "parents": [
         "k0144",
@@ -846,7 +846,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 20021,
+      "x": 1751,
       "y": 500,
       "parents": [],
       "partner": "k0171"
@@ -861,7 +861,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 20894,
+      "x": 7482,
       "y": 500,
       "parents": [],
       "partner": "k0205"
@@ -876,8 +876,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 6444,
-      "y": 685,
+      "x": 18388,
+      "y": 130,
       "parents": [],
       "partner": "k0057"
     },
@@ -891,8 +891,8 @@
       "died": "",
       "birthName": "Kellner",
       "note": "",
-      "x": 6274,
-      "y": 685,
+      "x": 18558,
+      "y": 130,
       "parents": [
         "p280",
         "k0278"
@@ -909,8 +909,8 @@
       "died": "",
       "birthName": "Bock",
       "note": "",
-      "x": 10788,
-      "y": 685,
+      "x": 18926,
+      "y": 130,
       "parents": [],
       "partner": "k0061"
     },
@@ -924,7 +924,7 @@
       "died": "20.12.1986",
       "birthName": "",
       "note": "",
-      "x": 11664,
+      "x": 19292,
       "y": 685,
       "parents": [
         "p295",
@@ -942,7 +942,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 11840,
+      "x": 19492,
       "y": 685,
       "parents": [
         "p294",
@@ -960,8 +960,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 10618,
-      "y": 685,
+      "x": 19096,
+      "y": 130,
       "parents": [
         "p294",
         "p295"
@@ -978,7 +978,7 @@
       "died": "",
       "birthName": "?",
       "note": "",
-      "x": 19162,
+      "x": 892,
       "y": 500,
       "parents": [],
       "partner": "k0197"
@@ -993,7 +993,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 21928,
+      "x": 3510,
       "y": 500,
       "parents": [
         "k0182",
@@ -1011,7 +1011,7 @@
       "died": "",
       "birthName": "?",
       "note": "",
-      "x": 19500,
+      "x": 1230,
       "y": 500,
       "parents": [],
       "partner": "k0194"
@@ -1026,7 +1026,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 22280,
+      "x": 4098,
       "y": 130,
       "parents": [],
       "partner": "k0168"
@@ -1041,7 +1041,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 19161,
+      "x": 891,
       "y": 315,
       "parents": [
         "k0167",
@@ -1059,7 +1059,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 20200,
+      "x": 1930,
       "y": 685,
       "parents": [
         "k0179",
@@ -1077,7 +1077,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 20203,
+      "x": 1933,
       "y": 500,
       "parents": [
         "k0169",
@@ -1095,7 +1095,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 21580,
+      "x": 3162,
       "y": 500,
       "parents": [
         "k0249",
@@ -1113,7 +1113,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 18820,
+      "x": 550,
       "y": 500,
       "parents": [
         "k0193",
@@ -1131,7 +1131,7 @@
       "died": "",
       "birthName": "Völkl",
       "note": "",
-      "x": 21577,
+      "x": 3159,
       "y": 315,
       "parents": [],
       "partner": "k0249"
@@ -1146,7 +1146,7 @@
       "died": "",
       "birthName": "Meißner",
       "note": "",
-      "x": 22186,
+      "x": 3592,
       "y": 315,
       "parents": [],
       "partner": "k0182"
@@ -1161,7 +1161,7 @@
       "died": "",
       "birthName": "",
       "note": "Partner/in unbekannt",
-      "x": 19672,
+      "x": 1402,
       "y": 500,
       "parents": [
         "k0193",
@@ -1179,7 +1179,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 19848,
+      "x": 1578,
       "y": 685,
       "parents": [
         "k0171",
@@ -1197,7 +1197,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 21404,
+      "x": 2986,
       "y": 500,
       "parents": [
         "k0249",
@@ -1215,7 +1215,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 20115,
+      "x": 1845,
       "y": 315,
       "parents": [
         "k0167",
@@ -1233,7 +1233,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 20893,
+      "x": 2549,
       "y": 315,
       "parents": [
         "k0167",
@@ -1251,11 +1251,11 @@
       "died": "",
       "birthName": "Bodensteiner",
       "note": "",
-      "x": 22273,
+      "x": 2461,
       "y": 500,
       "parents": [
-        "k0182",
-        "k0183"
+        "k0201",
+        "k0202"
       ],
       "partner": "k0266"
     },
@@ -1269,7 +1269,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 20552,
+      "x": 2282,
       "y": 500,
       "parents": [
         "k0169",
@@ -1287,7 +1287,7 @@
       "died": "",
       "birthName": "Zosel",
       "note": "",
-      "x": 20373,
+      "x": 2103,
       "y": 500,
       "parents": [],
       "partner": "k0179"
@@ -1302,7 +1302,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 20376,
+      "x": 2106,
       "y": 685,
       "parents": [
         "k0179",
@@ -1320,7 +1320,7 @@
       "died": "",
       "birthName": "Hausner",
       "note": "",
-      "x": 19331,
+      "x": 1061,
       "y": 315,
       "parents": [],
       "partner": "k0192"
@@ -1335,7 +1335,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 19851,
+      "x": 1581,
       "y": 500,
       "parents": [
         "k0169",
@@ -1353,7 +1353,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 21407,
+      "x": 2989,
       "y": 315,
       "parents": [
         "k0167",
@@ -1371,11 +1371,11 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 20724,
+      "x": 7312,
       "y": 500,
       "parents": [
-        "k0201",
-        "k0202"
+        "p318",
+        "p319"
       ],
       "partner": "k0206"
     },
@@ -1389,7 +1389,7 @@
       "died": "",
       "birthName": "Bodensteiner",
       "note": "",
-      "x": 22016,
+      "x": 3422,
       "y": 315,
       "parents": [
         "k0167",
@@ -1407,7 +1407,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 20024,
+      "x": 1754,
       "y": 685,
       "parents": [
         "k0171",
@@ -1425,7 +1425,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 18992,
+      "x": 722,
       "y": 500,
       "parents": [
         "k0192",
@@ -1443,11 +1443,11 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 21062,
+      "x": 7650,
       "y": 500,
       "parents": [
-        "k0201",
-        "k0202"
+        "p318",
+        "p319"
       ],
       "partner": "k0204"
     },
@@ -1461,7 +1461,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 21756,
+      "x": 3338,
       "y": 500,
       "parents": [
         "k0182",
@@ -1479,7 +1479,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 19077,
+      "x": 807,
       "y": 685,
       "parents": [
         "k0197",
@@ -1497,7 +1497,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 19330,
+      "x": 1060,
       "y": 500,
       "parents": [
         "k0192",
@@ -1515,8 +1515,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 9042,
-      "y": 685,
+      "x": 19688,
+      "y": 130,
       "parents": [],
       "partner": "k0063"
     },
@@ -1530,8 +1530,8 @@
       "died": "",
       "birthName": "Schindler",
       "note": "",
-      "x": 8872,
-      "y": 685,
+      "x": 19858,
+      "y": 130,
       "parents": [
         "k0160",
         "k0163"
@@ -1548,7 +1548,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 14631,
+      "x": 20057,
       "y": 500,
       "parents": [
         "p301",
@@ -1566,7 +1566,7 @@
       "died": "Voit",
       "birthName": "",
       "note": "",
-      "x": 14801,
+      "x": 20227,
       "y": 500,
       "parents": [],
       "partner": "k0064"
@@ -1581,7 +1581,7 @@
       "died": "Brenner",
       "birthName": "",
       "note": "",
-      "x": 27738,
+      "x": 8016,
       "y": 130,
       "parents": [],
       "partner": ""
@@ -1596,7 +1596,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 27938,
+      "x": 8216,
       "y": 130,
       "parents": [],
       "partner": ""
@@ -1611,7 +1611,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 14628,
+      "x": 20054,
       "y": 685,
       "parents": [
         "k0064",
@@ -1629,7 +1629,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 14804,
+      "x": 20230,
       "y": 685,
       "parents": [
         "k0064",
@@ -1647,8 +1647,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 18272,
-      "y": 685,
+      "x": 20426,
+      "y": 130,
       "parents": [],
       "partner": "k0071"
     },
@@ -1662,8 +1662,8 @@
       "died": "",
       "birthName": "Neuber",
       "note": "",
-      "x": 18102,
-      "y": 685,
+      "x": 20596,
+      "y": 130,
       "parents": [
         "k0158",
         "k0151"
@@ -1680,8 +1680,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 14456,
-      "y": 500,
+      "x": 20788,
+      "y": 130,
       "parents": [],
       "partner": "k0073"
     },
@@ -1695,8 +1695,8 @@
       "died": "",
       "birthName": "Braun",
       "note": "",
-      "x": 14286,
-      "y": 500,
+      "x": 20958,
+      "y": 130,
       "parents": [
         "p301",
         "p302"
@@ -1713,8 +1713,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 2283,
-      "y": 870,
+      "x": 6285,
+      "y": 500,
       "parents": [],
       "partner": "k0223"
     },
@@ -1728,7 +1728,7 @@
       "died": "",
       "birthName": "Bierler",
       "note": "",
-      "x": 11139,
+      "x": 21333,
       "y": 685,
       "parents": [
         "p295",
@@ -1746,7 +1746,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 11309,
+      "x": 21503,
       "y": 685,
       "parents": [],
       "partner": "k0074"
@@ -1761,8 +1761,8 @@
       "died": "",
       "birthName": "Ebbinghaus",
       "note": "",
-      "x": 3142,
-      "y": 870,
+      "x": 7144,
+      "y": 500,
       "parents": [],
       "partner": "k0229"
     },
@@ -1776,8 +1776,8 @@
       "died": "24.09.1988",
       "birthName": "",
       "note": "",
-      "x": 713,
-      "y": 500,
+      "x": 21885,
+      "y": 130,
       "parents": [],
       "partner": "k0077"
     },
@@ -1791,8 +1791,8 @@
       "died": "",
       "birthName": "Hummer",
       "note": "",
-      "x": 543,
-      "y": 500,
+      "x": 22055,
+      "y": 130,
       "parents": [
         "k0082",
         "k0081"
@@ -1809,25 +1809,10 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 22450,
+      "x": 4268,
       "y": 130,
       "parents": [],
       "partner": "k0167"
-    },
-    {
-      "id": "k0078",
-      "name": "Monika Grundler",
-      "firstName": "Monika",
-      "lastName": "Grundler",
-      "nickname": "",
-      "born": "20.04.1964",
-      "died": "",
-      "birthName": "Kellner",
-      "note": "",
-      "x": 27372,
-      "y": 130,
-      "parents": [],
-      "partner": "k0088"
     },
     {
       "id": "k0247",
@@ -1839,7 +1824,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 22964,
+      "x": 4194,
       "y": 500,
       "parents": [],
       "partner": "k0216"
@@ -1854,7 +1839,7 @@
       "died": "",
       "birthName": "Bodensteiner",
       "note": "",
-      "x": 22794,
+      "x": 4024,
       "y": 500,
       "parents": [
         "k0209",
@@ -1872,7 +1857,7 @@
       "died": "",
       "birthName": "Kellner",
       "note": "",
-      "x": 5577,
+      "x": 22437,
       "y": 685,
       "parents": [
         "k0278",
@@ -1890,7 +1875,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 5747,
+      "x": 22607,
       "y": 685,
       "parents": [],
       "partner": "k0079"
@@ -1905,8 +1890,8 @@
       "died": "09.09.1963",
       "birthName": "",
       "note": "",
-      "x": 713,
-      "y": 315,
+      "x": 22989,
+      "y": 130,
       "parents": [],
       "partner": "k0082"
     },
@@ -1920,8 +1905,8 @@
       "died": "20.09.1976",
       "birthName": "Kellner",
       "note": "",
-      "x": 543,
-      "y": 315,
+      "x": 23159,
+      "y": 130,
       "parents": [
         "k0096",
         "k0086"
@@ -1938,7 +1923,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 20285,
+      "x": 2015,
       "y": 315,
       "parents": [],
       "partner": "k0169"
@@ -1953,7 +1938,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 22879,
+      "x": 4109,
       "y": 685,
       "parents": [
         "k0216",
@@ -1971,7 +1956,7 @@
       "died": "",
       "birthName": "Schindler",
       "note": "",
-      "x": 9217,
+      "x": 23365,
       "y": 685,
       "parents": [
         "k0160",
@@ -1989,7 +1974,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 9387,
+      "x": 23535,
       "y": 685,
       "parents": [],
       "partner": "k0083"
@@ -2004,8 +1989,8 @@
       "died": "",
       "birthName": "Eckl",
       "note": "",
-      "x": 13157,
-      "y": 685,
+      "x": 23829,
+      "y": 130,
       "parents": [],
       "partner": "k0093"
     },
@@ -2019,7 +2004,7 @@
       "died": "04.04.1938",
       "birthName": "Bauer",
       "note": "",
-      "x": 9319,
+      "x": 184,
       "y": 130,
       "parents": [],
       "partner": "k0096"
@@ -2034,8 +2019,8 @@
       "died": "",
       "birthName": "Reichl",
       "note": "",
-      "x": 16709,
-      "y": 500,
+      "x": 24293,
+      "y": 130,
       "parents": [],
       "partner": "k0123"
     },
@@ -2049,8 +2034,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 2634,
-      "y": 870,
+      "x": 6636,
+      "y": 500,
       "parents": [
         "k0217",
         "k0218"
@@ -2067,8 +2052,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 2719,
-      "y": 1055,
+      "x": 6721,
+      "y": 685,
       "parents": [
         "k0228",
         "k0230"
@@ -2085,8 +2070,8 @@
       "died": "26.06.2002",
       "birthName": "",
       "note": "",
-      "x": 2462,
-      "y": 870,
+      "x": 6464,
+      "y": 500,
       "parents": [
         "k0217",
         "k0218"
@@ -2103,28 +2088,13 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 3845,
+      "x": 24669,
       "y": 685,
       "parents": [
         "k0207",
         "k0208"
       ],
       "partner": "k0241"
-    },
-    {
-      "id": "k0088",
-      "name": "Berthold Kellner",
-      "firstName": "Berthold",
-      "lastName": "Kellner",
-      "nickname": "",
-      "born": "20.11.1963",
-      "died": "",
-      "birthName": "",
-      "note": "",
-      "x": 27542,
-      "y": 130,
-      "parents": [],
-      "partner": "k0078"
     },
     {
       "id": "k0262",
@@ -2136,7 +2106,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 1406,
+      "x": 25130,
       "y": 870,
       "parents": [
         "k0222",
@@ -2154,7 +2124,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 9566,
+      "x": 25418,
       "y": 685,
       "parents": [
         "k0106",
@@ -2172,8 +2142,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 2110,
-      "y": 1055,
+      "x": 6112,
+      "y": 685,
       "parents": [
         "k0223",
         "k0224"
@@ -2190,7 +2160,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 1582,
+      "x": 25618,
       "y": 870,
       "parents": [
         "k0222",
@@ -2208,8 +2178,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 2113,
-      "y": 870,
+      "x": 6115,
+      "y": 500,
       "parents": [
         "k0217",
         "k0218"
@@ -2226,8 +2196,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 16536,
-      "y": 685,
+      "x": 24290,
+      "y": 315,
       "parents": [
         "k0087",
         "k0123"
@@ -2244,8 +2214,8 @@
       "died": "",
       "birthName": "Schießl?",
       "note": "",
-      "x": 4698,
-      "y": 870,
+      "x": 25814,
+      "y": 130,
       "parents": [],
       "partner": "k0238"
     },
@@ -2259,7 +2229,7 @@
       "died": "23.03.1990",
       "birthName": "Gruber",
       "note": "",
-      "x": 28138,
+      "x": 8416,
       "y": 130,
       "parents": [],
       "partner": ""
@@ -2274,8 +2244,8 @@
       "died": "14.05.2018",
       "birthName": "Spitzner",
       "note": "",
-      "x": 3311,
-      "y": 500,
+      "x": 28003,
+      "y": 130,
       "parents": [],
       "partner": "k0207"
     },
@@ -2289,7 +2259,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 3842,
+      "x": 24666,
       "y": 870,
       "parents": [
         "k0221",
@@ -2307,7 +2277,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 12547,
+      "x": 30199,
       "y": 685,
       "parents": [
         "p300",
@@ -2325,8 +2295,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 12987,
-      "y": 685,
+      "x": 23999,
+      "y": 130,
       "parents": [
         "p300",
         "p299"
@@ -2343,7 +2313,7 @@
       "died": "13.07.1997",
       "birthName": "",
       "note": "",
-      "x": 16106,
+      "x": 30656,
       "y": 500,
       "parents": [
         "p282",
@@ -2361,8 +2331,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 4275,
-      "y": 1055,
+      "x": 29225,
+      "y": 685,
       "parents": [
         "k0237",
         "k0245"
@@ -2379,7 +2349,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 12016,
+      "x": 31110,
       "y": 685,
       "parents": [
         "p298",
@@ -2397,7 +2367,7 @@
       "died": "19.10.1967",
       "birthName": "",
       "note": "",
-      "x": 4190,
+      "x": 34696,
       "y": 315,
       "parents": [
         "k0086",
@@ -2415,7 +2385,7 @@
       "died": "11.10.1935",
       "birthName": "",
       "note": "",
-      "x": 9489,
+      "x": 354,
       "y": 130,
       "parents": [],
       "partner": "k0086"
@@ -2430,7 +2400,7 @@
       "died": "07.06.1891",
       "birthName": "",
       "note": "",
-      "x": 364,
+      "x": 38452,
       "y": 315,
       "parents": [
         "k0096",
@@ -2448,8 +2418,8 @@
       "died": "",
       "birthName": "Beierl",
       "note": "",
-      "x": 1755,
-      "y": 685,
+      "x": 26617,
+      "y": 315,
       "parents": [],
       "partner": "k0222"
     },
@@ -2463,7 +2433,7 @@
       "died": "",
       "birthName": "Hentschel",
       "note": "",
-      "x": 27010,
+      "x": 38648,
       "y": 130,
       "parents": [],
       "partner": "k0101"
@@ -2478,8 +2448,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 4535,
-      "y": 685,
+      "x": 29485,
+      "y": 315,
       "parents": [
         "k0207",
         "k0208"
@@ -2496,7 +2466,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 15680,
+      "x": 39010,
       "y": 685,
       "parents": [
         "k0117",
@@ -2514,9 +2484,12 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 27180,
+      "x": 38818,
       "y": 130,
-      "parents": [],
+      "parents": [
+        "p307",
+        "p306"
+      ],
       "partner": "k0099"
     },
     {
@@ -2529,7 +2502,7 @@
       "died": "18.12.1996",
       "birthName": "",
       "note": "",
-      "x": 15159,
+      "x": 39555,
       "y": 500,
       "parents": [
         "p282",
@@ -2547,8 +2520,8 @@
       "died": "06.03.1992",
       "birthName": "",
       "note": "",
-      "x": 3141,
-      "y": 500,
+      "x": 28173,
+      "y": 130,
       "parents": [
         "k0272",
         "k0273"
@@ -2565,7 +2538,7 @@
       "died": "05.08.1943",
       "birthName": "",
       "note": "gefallen am 05.08.1943",
-      "x": 8010,
+      "x": 40104,
       "y": 500,
       "parents": [
         "k0104",
@@ -2583,7 +2556,7 @@
       "died": "22.04.1972",
       "birthName": "",
       "note": "",
-      "x": 9055,
+      "x": 41349,
       "y": 315,
       "parents": [
         "k0086",
@@ -2601,9 +2574,12 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 26377,
-      "y": 130,
-      "parents": [],
+      "x": 42760,
+      "y": 685,
+      "parents": [
+        "p307",
+        "p306"
+      ],
       "partner": "k0121"
     },
     {
@@ -2616,7 +2592,7 @@
       "died": "17.08.1924",
       "birthName": "",
       "note": "",
-      "x": 1230,
+      "x": 31648,
       "y": 500,
       "parents": [
         "k0272",
@@ -2634,7 +2610,7 @@
       "died": "13.08.1997",
       "birthName": "",
       "note": "",
-      "x": 5922,
+      "x": 36516,
       "y": 500,
       "parents": [
         "k0273",
@@ -2652,8 +2628,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 5046,
-      "y": 870,
+      "x": 29996,
+      "y": 500,
       "parents": [
         "k0220",
         "k0240"
@@ -2670,7 +2646,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 4015,
+      "x": 24839,
       "y": 685,
       "parents": [],
       "partner": "k0221"
@@ -2685,7 +2661,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 9833,
+      "x": 42127,
       "y": 500,
       "parents": [
         "k0115",
@@ -2703,7 +2679,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 9742,
+      "x": 42036,
       "y": 685,
       "parents": [
         "k0106",
@@ -2721,8 +2697,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 2972,
-      "y": 870,
+      "x": 6974,
+      "y": 500,
       "parents": [
         "k0217",
         "k0218"
@@ -2739,8 +2715,8 @@
       "died": "",
       "birthName": "Lukas",
       "note": "",
-      "x": 4360,
-      "y": 870,
+      "x": 29310,
+      "y": 500,
       "parents": [],
       "partner": "k0237"
     },
@@ -2754,7 +2730,7 @@
       "died": "",
       "birthName": "Brunner",
       "note": "",
-      "x": 10003,
+      "x": 42297,
       "y": 500,
       "parents": [],
       "partner": "k0106"
@@ -2769,7 +2745,7 @@
       "died": "20.09.1907",
       "birthName": "",
       "note": "",
-      "x": 18620,
+      "x": 43126,
       "y": 315,
       "parents": [
         "k0086",
@@ -2787,7 +2763,7 @@
       "died": "",
       "birthName": "Godlewski",
       "note": "",
-      "x": 12717,
+      "x": 30369,
       "y": 685,
       "parents": [],
       "partner": "k0092"
@@ -2802,8 +2778,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 1934,
-      "y": 870,
+      "x": 26884,
+      "y": 500,
       "parents": [
         "k0222",
         "k0260"
@@ -2820,8 +2796,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 1585,
-      "y": 685,
+      "x": 26447,
+      "y": 315,
       "parents": [
         "k0207",
         "k0208"
@@ -2838,7 +2814,7 @@
       "died": "",
       "birthName": "Dobmeier",
       "note": "",
-      "x": 15850,
+      "x": 39180,
       "y": 685,
       "parents": [],
       "partner": "k0100"
@@ -2853,7 +2829,7 @@
       "died": "",
       "birthName": "Reichl",
       "note": "",
-      "x": 16276,
+      "x": 30826,
       "y": 500,
       "parents": [],
       "partner": "k0094"
@@ -2868,7 +2844,7 @@
       "died": "16.04.1901",
       "birthName": "",
       "note": "",
-      "x": 10446,
+      "x": 43326,
       "y": 315,
       "parents": [
         "k0086",
@@ -2886,7 +2862,7 @@
       "died": "16.12.1989",
       "birthName": "Höllerer",
       "note": "",
-      "x": 9225,
+      "x": 41519,
       "y": 315,
       "parents": [],
       "partner": "k0104"
@@ -2901,7 +2877,7 @@
       "died": "03.05.1951",
       "birthName": "Scherer",
       "note": "",
-      "x": 4360,
+      "x": 34866,
       "y": 315,
       "parents": [],
       "partner": "k0272"
@@ -2916,8 +2892,8 @@
       "died": "",
       "birthName": "Bodensteiner",
       "note": "",
-      "x": 2709,
-      "y": 685,
+      "x": 6541,
+      "y": 315,
       "parents": [
         "k0167",
         "k0168"
@@ -2934,7 +2910,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 16360,
+      "x": 30910,
       "y": 685,
       "parents": [
         "k0094",
@@ -2952,7 +2928,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 15680,
+      "x": 43522,
       "y": 500,
       "parents": [
         "p282",
@@ -2970,8 +2946,8 @@
       "died": "",
       "birthName": "Zahner",
       "note": "",
-      "x": 14023,
-      "y": 685,
+      "x": 43979,
+      "y": 130,
       "parents": [],
       "partner": "k0130"
     },
@@ -2985,7 +2961,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 12192,
+      "x": 44440,
       "y": 685,
       "parents": [
         "p298",
@@ -3003,7 +2979,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 4018,
+      "x": 24842,
       "y": 870,
       "parents": [
         "k0221",
@@ -3021,8 +2997,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 2286,
-      "y": 1055,
+      "x": 6288,
+      "y": 685,
       "parents": [
         "k0223",
         "k0224"
@@ -3039,8 +3015,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 4870,
-      "y": 870,
+      "x": 29820,
+      "y": 500,
       "parents": [
         "k0220",
         "k0240"
@@ -3057,7 +3033,7 @@
       "died": "02.02.1917",
       "birthName": "",
       "note": "gefallen in Russland",
-      "x": 188,
+      "x": 44640,
       "y": 315,
       "parents": [
         "k0096",
@@ -3075,8 +3051,8 @@
       "died": "",
       "birthName": "Feiler",
       "note": "",
-      "x": 26547,
-      "y": 130,
+      "x": 42930,
+      "y": 685,
       "parents": [],
       "partner": "k0105"
     },
@@ -3090,8 +3066,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 1758,
-      "y": 1055,
+      "x": 26708,
+      "y": 685,
       "parents": [
         "k0259"
       ],
@@ -3107,9 +3083,12 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 28338,
-      "y": 130,
-      "parents": [],
+      "x": 44840,
+      "y": 685,
+      "parents": [
+        "p314",
+        "p313"
+      ],
       "partner": ""
     },
     {
@@ -3122,8 +3101,8 @@
       "died": "",
       "birthName": "Hierold",
       "note": "",
-      "x": 4705,
-      "y": 685,
+      "x": 29655,
+      "y": 315,
       "parents": [],
       "partner": "k0220"
     },
@@ -3137,8 +3116,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 16539,
-      "y": 500,
+      "x": 24463,
+      "y": 130,
       "parents": [
         "p281",
         "p282"
@@ -3155,7 +3134,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 12368,
+      "x": 45040,
       "y": 685,
       "parents": [
         "p298",
@@ -3173,8 +3152,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 1758,
-      "y": 870,
+      "x": 26708,
+      "y": 500,
       "parents": [
         "k0222",
         "k0260"
@@ -3191,8 +3170,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 2539,
-      "y": 685,
+      "x": 6711,
+      "y": 315,
       "parents": [
         "k0207",
         "k0208"
@@ -3209,9 +3188,12 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 28538,
-      "y": 130,
-      "parents": [],
+      "x": 45240,
+      "y": 685,
+      "parents": [
+        "p314",
+        "p313"
+      ],
       "partner": ""
     },
     {
@@ -3224,7 +3206,7 @@
       "died": "",
       "birthName": "Baumer",
       "note": "",
-      "x": 15850,
+      "x": 43692,
       "y": 500,
       "parents": [],
       "partner": "k0117"
@@ -3239,7 +3221,7 @@
       "died": "30.07.1994",
       "birthName": "Ziegler",
       "note": "",
-      "x": 15329,
+      "x": 39725,
       "y": 500,
       "parents": [],
       "partner": "k0102"
@@ -3254,9 +3236,12 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 28738,
-      "y": 130,
-      "parents": [],
+      "x": 45440,
+      "y": 685,
+      "parents": [
+        "p314",
+        "p313"
+      ],
       "partner": ""
     },
     {
@@ -3269,8 +3254,8 @@
       "died": "",
       "birthName": "Lovrencic",
       "note": "",
-      "x": 2804,
-      "y": 870,
+      "x": 6806,
+      "y": 500,
       "parents": [],
       "partner": "k0228"
     },
@@ -3284,8 +3269,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 4190,
-      "y": 870,
+      "x": 29140,
+      "y": 500,
       "parents": [
         "k0220",
         "k0240"
@@ -3302,8 +3287,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 4528,
-      "y": 870,
+      "x": 25984,
+      "y": 130,
       "parents": [
         "k0220",
         "k0240"
@@ -3320,8 +3305,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 16712,
-      "y": 685,
+      "x": 24466,
+      "y": 315,
       "parents": [
         "k0087",
         "k0123"
@@ -3338,8 +3323,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 13853,
-      "y": 685,
+      "x": 44149,
+      "y": 130,
       "parents": [
         "p300",
         "p299"
@@ -3356,7 +3341,7 @@
       "died": "12.10.1924",
       "birthName": "",
       "note": "",
-      "x": 5222,
+      "x": 35816,
       "y": 500,
       "parents": [
         "k0272",
@@ -3374,7 +3359,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 5571,
+      "x": 22431,
       "y": 870,
       "parents": [],
       "partner": "k0132"
@@ -3389,7 +3374,7 @@
       "died": "",
       "birthName": "Hagler",
       "note": "",
-      "x": 5401,
+      "x": 22261,
       "y": 870,
       "parents": [
         "k0079",
@@ -3407,7 +3392,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 23136,
+      "x": 4366,
       "y": 685,
       "parents": [
         "k0211",
@@ -3425,7 +3410,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 22622,
+      "x": 3852,
       "y": 500,
       "parents": [
         "k0209",
@@ -3443,7 +3428,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 23140,
+      "x": 4370,
       "y": 315,
       "parents": [],
       "partner": "k0209"
@@ -3458,7 +3443,7 @@
       "died": "",
       "birthName": "Bodensteiner",
       "note": "",
-      "x": 22970,
+      "x": 4200,
       "y": 315,
       "parents": [
         "k0168",
@@ -3476,7 +3461,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 23139,
+      "x": 4369,
       "y": 500,
       "parents": [
         "k0209",
@@ -3494,7 +3479,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 23312,
+      "x": 4542,
       "y": 685,
       "parents": [
         "k0212",
@@ -3512,7 +3497,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 23488,
+      "x": 4718,
       "y": 500,
       "parents": [
         "k0209",
@@ -3530,7 +3515,7 @@
       "died": "",
       "birthName": "Hall",
       "note": "",
-      "x": 23309,
+      "x": 4539,
       "y": 500,
       "parents": [],
       "partner": "k0211"
@@ -3545,8 +3530,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 713,
-      "y": 685,
+      "x": 22055,
+      "y": 315,
       "parents": [],
       "partner": "k0134"
     },
@@ -3560,8 +3545,8 @@
       "died": "",
       "birthName": "Eichmair",
       "note": "",
-      "x": 543,
-      "y": 685,
+      "x": 21885,
+      "y": 315,
       "parents": [
         "k0077",
         "k0076"
@@ -3578,7 +3563,7 @@
       "died": "",
       "birthName": "Kellner",
       "note": "",
-      "x": 16018,
+      "x": 30568,
       "y": 685,
       "parents": [
         "k0094",
@@ -3596,7 +3581,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 16188,
+      "x": 30738,
       "y": 685,
       "parents": [],
       "partner": "k0135"
@@ -3611,7 +3596,7 @@
       "died": "",
       "birthName": "Michel",
       "note": "",
-      "x": 7133,
+      "x": 37727,
       "y": 685,
       "parents": [
         "p284",
@@ -3629,7 +3614,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 7303,
+      "x": 37897,
       "y": 685,
       "parents": [],
       "partner": "k0137"
@@ -3644,8 +3629,8 @@
       "died": "",
       "birthName": "Aschenbrenner",
       "note": "",
-      "x": 6274,
-      "y": 870,
+      "x": 18388,
+      "y": 315,
       "parents": [
         "k0056",
         "k0057"
@@ -3662,22 +3647,22 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 6444,
-      "y": 870,
+      "x": 18558,
+      "y": 315,
       "parents": [],
       "partner": "k0139"
     },
     {
       "id": "k0202",
-      "name": "Lüdia Bodensteiner",
-      "firstName": "Lüdia",
+      "name": "Lydia Bodensteiner",
+      "firstName": "Lydia",
       "lastName": "Bodensteiner",
       "nickname": "",
       "born": "",
       "died": "",
       "birthName": "?",
       "note": "",
-      "x": 21063,
+      "x": 2719,
       "y": 315,
       "parents": [],
       "partner": "k0201"
@@ -3692,7 +3677,7 @@
       "died": "",
       "birthName": "Alex",
       "note": "",
-      "x": 23664,
+      "x": 4894,
       "y": 500,
       "parents": [
         "k0253",
@@ -3710,7 +3695,7 @@
       "died": "",
       "birthName": "Bodensteiner",
       "note": "",
-      "x": 23755,
+      "x": 4985,
       "y": 315,
       "parents": [
         "k0167",
@@ -3728,7 +3713,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 23840,
+      "x": 5070,
       "y": 500,
       "parents": [
         "k0253",
@@ -3746,7 +3731,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 23925,
+      "x": 5155,
       "y": 315,
       "parents": [],
       "partner": "k0253"
@@ -3761,7 +3746,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 24016,
+      "x": 5246,
       "y": 500,
       "parents": [
         "k0253",
@@ -3779,7 +3764,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 13420,
+      "x": 45636,
       "y": 685,
       "parents": [
         "p300",
@@ -3797,7 +3782,7 @@
       "died": "",
       "birthName": "Kellner",
       "note": "",
-      "x": 13590,
+      "x": 45806,
       "y": 685,
       "parents": [],
       "partner": "k0141"
@@ -3812,7 +3797,7 @@
       "died": "",
       "birthName": "Schenk",
       "note": "",
-      "x": 7655,
+      "x": 38249,
       "y": 685,
       "parents": [],
       "partner": "k0144"
@@ -3827,7 +3812,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 7485,
+      "x": 38079,
       "y": 685,
       "parents": [
         "p284",
@@ -3845,7 +3830,7 @@
       "died": "",
       "birthName": "Kellner",
       "note": "",
-      "x": 15247,
+      "x": 39643,
       "y": 685,
       "parents": [
         "k0127",
@@ -3863,7 +3848,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 15417,
+      "x": 39813,
       "y": 685,
       "parents": [],
       "partner": "k0145"
@@ -3878,7 +3863,7 @@
       "died": "11.02.1982",
       "birthName": "",
       "note": "",
-      "x": 1058,
+      "x": 31476,
       "y": 500,
       "parents": [],
       "partner": "k0275"
@@ -3893,7 +3878,7 @@
       "died": "17.11.1986",
       "birthName": "Kellner",
       "note": "",
-      "x": 888,
+      "x": 31306,
       "y": 500,
       "parents": [
         "k0272",
@@ -3911,7 +3896,7 @@
       "died": "17.11.1986",
       "birthName": "Kellner",
       "note": "",
-      "x": 14980,
+      "x": 39376,
       "y": 685,
       "parents": [
         "k0102",
@@ -3929,7 +3914,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 18444,
+      "x": 46002,
       "y": 685,
       "parents": [
         "k0158",
@@ -3947,8 +3932,8 @@
       "died": "",
       "birthName": "Frischholz",
       "note": "",
-      "x": 17061,
-      "y": 685,
+      "x": 46205,
+      "y": 130,
       "parents": [],
       "partner": "k0155"
     },
@@ -3962,8 +3947,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 17751,
-      "y": 500,
+      "x": 47271,
+      "y": 130,
       "parents": [],
       "partner": "k0158"
     },
@@ -3977,8 +3962,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 17236,
-      "y": 685,
+      "x": 46926,
+      "y": 315,
       "parents": [
         "k0151",
         "k0158"
@@ -3995,8 +3980,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 17754,
-      "y": 685,
+      "x": 47444,
+      "y": 315,
       "parents": [
         "k0151",
         "k0158"
@@ -4013,8 +3998,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 17578,
-      "y": 685,
+      "x": 47268,
+      "y": 315,
       "parents": [
         "k0151",
         "k0158"
@@ -4031,8 +4016,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 16891,
-      "y": 685,
+      "x": 46375,
+      "y": 130,
       "parents": [
         "k0151",
         "k0158"
@@ -4049,8 +4034,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 17930,
-      "y": 685,
+      "x": 47620,
+      "y": 315,
       "parents": [
         "k0151",
         "k0158"
@@ -4067,8 +4052,8 @@
       "died": "",
       "birthName": "Kahl",
       "note": "",
-      "x": 17406,
-      "y": 685,
+      "x": 47096,
+      "y": 315,
       "parents": [],
       "partner": "k0152"
     },
@@ -4082,8 +4067,8 @@
       "died": "",
       "birthName": "Kellner",
       "note": "",
-      "x": 17581,
-      "y": 500,
+      "x": 47441,
+      "y": 130,
       "parents": [
         "p282",
         "p281"
@@ -4100,7 +4085,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 22443,
+      "x": 2631,
       "y": 500,
       "parents": [],
       "partner": "k0265"
@@ -4115,7 +4100,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 22270,
+      "x": 2458,
       "y": 685,
       "parents": [
         "k0265",
@@ -4133,7 +4118,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 22446,
+      "x": 2634,
       "y": 685,
       "parents": [
         "k0265",
@@ -4151,7 +4136,7 @@
       "died": "",
       "birthName": "Kellner",
       "note": "",
-      "x": 10094,
+      "x": 42388,
       "y": 685,
       "parents": [
         "k0106",
@@ -4169,7 +4154,7 @@
       "died": "",
       "birthName": "Kellner",
       "note": "",
-      "x": 8703,
+      "x": 40997,
       "y": 500,
       "parents": [
         "k0104",
@@ -4187,7 +4172,7 @@
       "died": "03.03.1980",
       "birthName": "",
       "note": "",
-      "x": 28938,
+      "x": 8616,
       "y": 130,
       "parents": [],
       "partner": ""
@@ -4202,8 +4187,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 3663,
-      "y": 870,
+      "x": 28613,
+      "y": 500,
       "parents": [],
       "partner": "k0233"
     },
@@ -4217,8 +4202,8 @@
       "died": "",
       "birthName": "Schwab",
       "note": "",
-      "x": 3493,
-      "y": 870,
+      "x": 28443,
+      "y": 500,
       "parents": [
         "k0219",
         "k0244"
@@ -4235,8 +4220,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 3490,
-      "y": 1055,
+      "x": 28440,
+      "y": 685,
       "parents": [
         "k0233",
         "k0234"
@@ -4245,16 +4230,16 @@
     },
     {
       "id": "k0236",
-      "name": "Johann? Schmid",
-      "firstName": "Johann?",
+      "name": "Johann Schmid",
+      "firstName": "Johann",
       "lastName": "Schmid",
       "nickname": "",
       "born": "",
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 3666,
-      "y": 1055,
+      "x": 28616,
+      "y": 685,
       "parents": [
         "k0233",
         "k0234"
@@ -4271,7 +4256,7 @@
       "died": "",
       "birthName": "Fürnrohr",
       "note": "",
-      "x": 8697,
+      "x": 40991,
       "y": 685,
       "parents": [],
       "partner": "k0166"
@@ -4286,7 +4271,7 @@
       "died": "03.03.1980",
       "birthName": "",
       "note": "Schneider Franz 08.07.1928 - 12.12.1958",
-      "x": 8873,
+      "x": 41167,
       "y": 500,
       "parents": [],
       "partner": "k0160"
@@ -4301,7 +4286,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 8182,
+      "x": 40476,
       "y": 685,
       "parents": [
         "k0160",
@@ -4319,7 +4304,7 @@
       "died": "",
       "birthName": "Ponnath",
       "note": "",
-      "x": 8352,
+      "x": 40646,
       "y": 685,
       "parents": [],
       "partner": "k0164"
@@ -4334,7 +4319,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 8527,
+      "x": 40821,
       "y": 685,
       "parents": [
         "k0160",
@@ -4352,8 +4337,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 3575,
-      "y": 685,
+      "x": 28525,
+      "y": 315,
       "parents": [],
       "partner": "k0219"
     },
@@ -4367,8 +4352,8 @@
       "died": "10.06.1983",
       "birthName": "",
       "note": "",
-      "x": 3314,
-      "y": 870,
+      "x": 28264,
+      "y": 500,
       "parents": [
         "k0219",
         "k0244"
@@ -4385,8 +4370,8 @@
       "died": "",
       "birthName": "Kellner",
       "note": "",
-      "x": 3405,
-      "y": 685,
+      "x": 28355,
+      "y": 315,
       "parents": [
         "k0207",
         "k0208"
@@ -4403,7 +4388,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 24192,
+      "x": 5422,
       "y": 500,
       "parents": [
         "k0186",
@@ -4421,7 +4406,7 @@
       "died": "",
       "birthName": "?",
       "note": "",
-      "x": 24534,
+      "x": 5764,
       "y": 500,
       "parents": [],
       "partner": "k0187"
@@ -4436,7 +4421,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 24534,
+      "x": 5764,
       "y": 315,
       "parents": [],
       "partner": "k0185"
@@ -4451,7 +4436,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 24364,
+      "x": 5594,
       "y": 500,
       "parents": [
         "k0185",
@@ -4469,7 +4454,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 24706,
+      "x": 5936,
       "y": 500,
       "parents": [
         "k0186",
@@ -4487,7 +4472,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 24449,
+      "x": 5679,
       "y": 685,
       "parents": [
         "k0187",
@@ -4505,7 +4490,7 @@
       "died": "",
       "birthName": "Bodensteiner",
       "note": "",
-      "x": 24364,
+      "x": 5594,
       "y": 315,
       "parents": [
         "k0167",
@@ -4515,15 +4500,15 @@
     },
     {
       "id": "k0204",
-      "name": "Susanne Susanne",
+      "name": "Susanne Bodensteiner",
       "firstName": "Susanne",
-      "lastName": "Susanne",
+      "lastName": "Bodensteiner",
       "nickname": "",
       "born": "",
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 21232,
+      "x": 7820,
       "y": 500,
       "parents": [],
       "partner": "k0203"
@@ -4538,7 +4523,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 22098,
+      "x": 3680,
       "y": 500,
       "parents": [],
       "partner": "k0175"
@@ -4550,7 +4535,7 @@
       "died": "13.08.1997",
       "birthName": "Berg",
       "note": "",
-      "x": 6092,
+      "x": 36686,
       "y": 500,
       "parents": [],
       "partner": "k0278",
@@ -4565,7 +4550,7 @@
       "died": "24.10.1994",
       "birthName": "",
       "note": "",
-      "x": 16627,
+      "x": 51456,
       "y": 315,
       "parents": [
         "k0086",
@@ -4583,7 +4568,7 @@
       "died": "29.08.1991",
       "birthName": "Süß",
       "note": "",
-      "x": 16797,
+      "x": 51626,
       "y": 315,
       "parents": [],
       "partner": "p281",
@@ -4598,8 +4583,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 16888,
-      "y": 870,
+      "x": 46202,
+      "y": 315,
       "parents": [
         "k0155",
         "k0150"
@@ -4616,7 +4601,7 @@
       "died": "",
       "birthName": "Kellner",
       "note": "",
-      "x": 7309,
+      "x": 37903,
       "y": 500,
       "parents": [
         "k0272",
@@ -4634,7 +4619,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 7479,
+      "x": 38073,
       "y": 500,
       "parents": [],
       "partner": "p284",
@@ -4649,7 +4634,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 8267,
+      "x": 40561,
       "y": 870,
       "parents": [
         "k0164",
@@ -4667,7 +4652,7 @@
       "died": "26.02.1917",
       "birthName": "",
       "note": "Gefallen in England",
-      "x": 7834,
+      "x": 54948,
       "y": 315,
       "parents": [
         "k0086",
@@ -4685,7 +4670,7 @@
       "died": "",
       "birthName": "Kellner",
       "note": "",
-      "x": 6788,
+      "x": 37382,
       "y": 500,
       "parents": [
         "k0272",
@@ -4703,7 +4688,7 @@
       "died": "15.02.1985",
       "birthName": "",
       "note": "",
-      "x": 6958,
+      "x": 37552,
       "y": 500,
       "parents": [],
       "partner": "p288",
@@ -4718,8 +4703,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 716,
-      "y": 870,
+      "x": 22058,
+      "y": 500,
       "parents": [
         "k0134",
         "k0133"
@@ -4736,8 +4721,8 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 540,
-      "y": 870,
+      "x": 21882,
+      "y": 500,
       "parents": [
         "k0134",
         "k0133"
@@ -4754,7 +4739,7 @@
       "died": "25.01.1989",
       "birthName": "",
       "note": "",
-      "x": 12283,
+      "x": 56809,
       "y": 315,
       "parents": [
         "k0086",
@@ -4772,7 +4757,7 @@
       "died": "08.09.1981",
       "birthName": "Wittmann",
       "note": "",
-      "x": 12453,
+      "x": 56979,
       "y": 315,
       "parents": [],
       "partner": "p292",
@@ -4787,7 +4772,7 @@
       "died": "",
       "birthName": "Kellner",
       "note": "",
-      "x": 11146,
+      "x": 55672,
       "y": 500,
       "parents": [
         "p292",
@@ -4805,7 +4790,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 11316,
+      "x": 55842,
       "y": 500,
       "parents": [],
       "partner": "p294",
@@ -4820,8 +4805,8 @@
       "died": "",
       "birthName": "Schindler",
       "note": "",
-      "x": 8957,
-      "y": 870,
+      "x": 19773,
+      "y": 315,
       "parents": [
         "k0063",
         "k0062"
@@ -4838,7 +4823,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 12107,
+      "x": 56633,
       "y": 500,
       "parents": [
         "p292",
@@ -4856,7 +4841,7 @@
       "died": "",
       "birthName": "Osl",
       "note": "",
-      "x": 12277,
+      "x": 56803,
       "y": 500,
       "parents": [],
       "partner": "p297",
@@ -4871,7 +4856,7 @@
       "died": "",
       "birthName": "",
       "note": "",
-      "x": 13244,
+      "x": 57770,
       "y": 500,
       "parents": [
         "p292",
@@ -4889,7 +4874,7 @@
       "died": "",
       "birthName": "Rupprecht",
       "note": "",
-      "x": 13414,
+      "x": 57940,
       "y": 500,
       "parents": [],
       "partner": "p299",
@@ -4904,7 +4889,7 @@
       "died": "22.12.1987",
       "birthName": "Kellner",
       "note": "",
-      "x": 14462,
+      "x": 59012,
       "y": 315,
       "parents": [
         "k0096",
@@ -4922,12 +4907,366 @@
       "died": "21.03.1976",
       "birthName": "",
       "note": "",
-      "x": 14632,
+      "x": 59182,
       "y": 315,
       "parents": [],
       "partner": "p301",
       "firstName": "Franz",
       "lastName": "Braun",
+      "nickname": ""
+    },
+    {
+      "id": "p303",
+      "name": "Josef Kellner",
+      "born": "16.11.1930",
+      "died": "24.06.1997",
+      "birthName": "",
+      "note": "",
+      "x": 48330,
+      "y": 500,
+      "parents": [
+        "p281",
+        "p282"
+      ],
+      "partner": "p305",
+      "firstName": "Josef",
+      "lastName": "Kellner",
+      "nickname": ""
+    },
+    {
+      "id": "p304",
+      "name": "Hildegard Kellner",
+      "born": "08.01.1930",
+      "died": "20.02.1964",
+      "birthName": "Eger",
+      "note": "1. Frau Josef Kellner 1930",
+      "x": 8816,
+      "y": 130,
+      "parents": [],
+      "partner": "",
+      "firstName": "Hildegard",
+      "lastName": "Kellner",
+      "nickname": ""
+    },
+    {
+      "id": "p305",
+      "name": "Karolina Kellner",
+      "born": "16.11.1929",
+      "died": "",
+      "birthName": "Baier",
+      "note": "",
+      "x": 48500,
+      "y": 500,
+      "parents": [],
+      "partner": "p303",
+      "firstName": "Karolina",
+      "lastName": "Kellner",
+      "nickname": ""
+    },
+    {
+      "id": "p306",
+      "name": "Georg Kellner",
+      "born": "10.07.1937",
+      "died": "07.01.1987",
+      "birthName": "",
+      "note": "",
+      "x": 50833,
+      "y": 500,
+      "parents": [
+        "p281",
+        "p282"
+      ],
+      "partner": "p307",
+      "firstName": "Georg",
+      "lastName": "Kellner",
+      "nickname": ""
+    },
+    {
+      "id": "p307",
+      "name": "Anna Kellner",
+      "born": "07.05.1935",
+      "died": "",
+      "birthName": "Hösl",
+      "note": "",
+      "x": 51003,
+      "y": 500,
+      "parents": [],
+      "partner": "p306",
+      "firstName": "Anna",
+      "lastName": "Kellner",
+      "nickname": ""
+    },
+    {
+      "id": "p308",
+      "name": "Georg Hösl",
+      "born": "14.09.1968",
+      "died": "",
+      "birthName": "Kellner",
+      "note": "",
+      "x": 50907,
+      "y": 685,
+      "parents": [
+        "p306",
+        "p307"
+      ],
+      "partner": "p309",
+      "firstName": "Georg",
+      "lastName": "Hösl",
+      "nickname": ""
+    },
+    {
+      "id": "p309",
+      "name": "Sabine Hösl",
+      "born": "22.04.1970",
+      "died": "",
+      "birthName": "Solfrank",
+      "note": "",
+      "x": 51077,
+      "y": 685,
+      "parents": [],
+      "partner": "p308",
+      "firstName": "Sabine",
+      "lastName": "Hösl",
+      "nickname": ""
+    },
+    {
+      "id": "p310",
+      "name": "Helmut Kellner",
+      "born": "19.08.1970",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 51259,
+      "y": 685,
+      "parents": [
+        "p307",
+        "p306"
+      ],
+      "partner": "p311",
+      "firstName": "Helmut",
+      "lastName": "Kellner",
+      "nickname": ""
+    },
+    {
+      "id": "p311",
+      "name": "Marion Kellner",
+      "born": "03.11.1970",
+      "died": "",
+      "birthName": "Baierl",
+      "note": "",
+      "x": 51429,
+      "y": 685,
+      "parents": [],
+      "partner": "p310",
+      "firstName": "Marion",
+      "lastName": "Kellner",
+      "nickname": ""
+    },
+    {
+      "id": "p312",
+      "name": "Matthias Kellner",
+      "born": "10.05.1978",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 51608,
+      "y": 685,
+      "parents": [
+        "p306",
+        "p307"
+      ],
+      "partner": "",
+      "firstName": "Matthias",
+      "lastName": "Kellner",
+      "nickname": ""
+    },
+    {
+      "id": "p313",
+      "name": "Helmut Kellner",
+      "born": "24.09.1946",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 52491,
+      "y": 500,
+      "parents": [
+        "p281",
+        "p282"
+      ],
+      "partner": "p314",
+      "firstName": "Helmut",
+      "lastName": "Kellner",
+      "nickname": ""
+    },
+    {
+      "id": "p314",
+      "name": "Christa Kellner",
+      "born": "13.12.1948",
+      "died": "",
+      "birthName": "Pentner",
+      "note": "",
+      "x": 52661,
+      "y": 500,
+      "parents": [],
+      "partner": "p313",
+      "firstName": "Christa",
+      "lastName": "Kellner",
+      "nickname": ""
+    },
+    {
+      "id": "p315",
+      "name": "Michael Kellner",
+      "born": "02.09.1978",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 52664,
+      "y": 685,
+      "parents": [
+        "p314",
+        "p313"
+      ],
+      "partner": "",
+      "firstName": "Michael",
+      "lastName": "Kellner",
+      "nickname": ""
+    },
+    {
+      "id": "p316",
+      "name": "Christine Kellner",
+      "born": "08.02.1980",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 52840,
+      "y": 685,
+      "parents": [
+        "p314",
+        "p313"
+      ],
+      "partner": "",
+      "firstName": "Christine",
+      "lastName": "Kellner",
+      "nickname": ""
+    },
+    {
+      "id": "p317",
+      "name": "Marco Kellner",
+      "born": "11.07.1986",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 53016,
+      "y": 685,
+      "parents": [
+        "p314",
+        "p313"
+      ],
+      "partner": "",
+      "firstName": "Marco",
+      "lastName": "Kellner",
+      "nickname": ""
+    },
+    {
+      "id": "p318",
+      "name": "Bernd Bodensteiner",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 7481,
+      "y": 315,
+      "parents": [
+        "k0167",
+        "k0168"
+      ],
+      "partner": "p319",
+      "firstName": "Bernd",
+      "lastName": "Bodensteiner",
+      "nickname": ""
+    },
+    {
+      "id": "p319",
+      "name": "Manuela Bodensteiner",
+      "born": "",
+      "died": "",
+      "birthName": "?",
+      "note": "",
+      "x": 7651,
+      "y": 315,
+      "parents": [],
+      "partner": "p318",
+      "firstName": "Manuela",
+      "lastName": "Bodensteiner",
+      "nickname": "Manu"
+    },
+    {
+      "id": "p320",
+      "name": "Florian Bodensteiner",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 2810,
+      "y": 500,
+      "parents": [
+        "k0201",
+        "k0202"
+      ],
+      "partner": "",
+      "firstName": "Florian",
+      "lastName": "Bodensteiner",
+      "nickname": ""
+    },
+    {
+      "id": "p321",
+      "name": "Vanessa Kellner",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 25618,
+      "y": 1055,
+      "parents": [
+        "k0261"
+      ],
+      "partner": "",
+      "firstName": "Vanessa",
+      "lastName": "Kellner",
+      "nickname": ""
+    },
+    {
+      "id": "p322",
+      "name": "Kind von Birgit Kellner",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 25218,
+      "y": 1055,
+      "parents": [
+        "k0262"
+      ],
+      "partner": "",
+      "firstName": "",
+      "lastName": "",
+      "nickname": ""
+    },
+    {
+      "id": "p323",
+      "name": "Kind von Birgit Kellner",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 25042,
+      "y": 1055,
+      "parents": [
+        "k0262"
+      ],
+      "partner": "",
+      "firstName": "",
+      "lastName": "",
       "nickname": ""
     }
   ]

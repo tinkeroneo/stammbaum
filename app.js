@@ -49,6 +49,8 @@ let focusId = null;
 let activeFamily = '';
 let editMode = false;
 let nameMode = 'short';
+let layoutMode = 'classic';
+let savedClassicPositions = null;
 let rootId = '';
 localStorage.removeItem(storeKey + '-root');
 let spotlightId = null;
@@ -588,6 +590,11 @@ function updateNameModeButton() {
   const btn = $('nameModeBtn');
   if (btn) btn.textContent = `Ansicht: ${labels[currentViewPreset()]}`;
 }
+function updateLayoutButton() {
+  const labels = { classic: 'Klassisch', tree: 'Baum', radial: 'Radial' };
+  const btn = $('layoutBtn');
+  if (btn) btn.textContent = `Layout: ${labels[layoutMode]}`;
+}
 function updateRootButton() {
   const btn = $('rootBtn');
   if (!btn) return;
@@ -615,6 +622,57 @@ function setFocusMode(enabled, id = selected || focusId) {
   updateFocusButton();
   render();
   fit();
+}
+function captureClassicPositions() {
+  if (!savedClassicPositions) {
+    savedClassicPositions = new Map(data.people.map(p => [p.id, { x: p.x, y: p.y }]));
+  }
+}
+function restoreClassicPositions() {
+  if (!savedClassicPositions) return;
+  for (const p of data.people) {
+    const pos = savedClassicPositions.get(p.id);
+    if (pos) { p.x = pos.x; p.y = pos.y; }
+  }
+}
+function applyRadialLayout() {
+  autoLayout(false);
+  const depths = depthMap();
+  const groups = new Map();
+  for (const p of data.people) {
+    const d = depths.get(p.id) || 0;
+    if (!groups.has(d)) groups.set(d, []);
+    groups.get(d).push(p);
+  }
+  const cx = 900, cy = 760;
+  for (const [depth, people] of groups.entries()) {
+    people.sort((a,b) => a.x - b.x || fullName(a).localeCompare(fullName(b)));
+    if (depth === 0 && people.length === 1) {
+      people[0].x = cx; people[0].y = cy;
+      continue;
+    }
+    const radius = 150 + depth * 270;
+    const start = -Math.PI / 2;
+    people.forEach((p, i) => {
+      const angle = start + (Math.PI * 2 * i / Math.max(1, people.length));
+      p.x = Math.round(cx + Math.cos(angle) * radius);
+      p.y = Math.round(cy + Math.sin(angle) * radius);
+    });
+  }
+}
+function setLayoutMode(next) {
+  if (next !== 'classic') captureClassicPositions();
+  layoutMode = next;
+  if (layoutMode === 'classic') restoreClassicPositions();
+  if (layoutMode === 'tree') autoLayout(false);
+  if (layoutMode === 'radial') applyRadialLayout();
+  updateLayoutButton();
+  render();
+  fit();
+}
+function cycleLayoutMode() {
+  const order = ['classic', 'tree', 'radial'];
+  setLayoutMode(order[(order.indexOf(layoutMode) + 1) % order.length]);
 }
 function personTileContent(p, className = '') {
   const dates = [p.born, p.died && '– ' + p.died].filter(Boolean).join(' ');
@@ -773,7 +831,7 @@ function renderGenerationBands(visible) {
   generationBands.innerHTML = rows
     .map((row, index) => {
       const y = row.values.sort((a,b) => a - b)[Math.floor(row.values.length / 2)];
-      return `<div class="generationBand" style="top:${Math.round(y - 76)}px"><span>Generation ${index + 1}</span></div>`;
+      return `<div class="generationBand" style="top:${Math.round(y - 76)}px"><span>Ebene ${index + 1}</span></div>`;
     }).join('');
 }
 
@@ -927,7 +985,7 @@ main.addEventListener('touchstart', e => {
   if (isInteractiveTarget(e.target)) return;
   if (e.touches.length !== 1) return;
   const t = e.touches[0];
-  touchLong = { x:t.clientX, y:t.clientY, moved:false };
+  touchLong = { x:t.clientX, y:t.clientY, vx:view.x, vy:view.y, moved:false };
   clearTimeout(longPressTimer);
   if (editMode) {
     longPressTimer = setTimeout(() => {
@@ -942,12 +1000,20 @@ main.addEventListener('touchstart', e => {
 
 main.addEventListener('touchmove', e => {
   if (!touchLong || e.touches.length !== 1) return;
+  e.preventDefault();
   const t = e.touches[0];
-  if (Math.abs(t.clientX - touchLong.x) + Math.abs(t.clientY - touchLong.y) > 12) {
+  const dx = t.clientX - touchLong.x;
+  const dy = t.clientY - touchLong.y;
+  if (Math.abs(dx) + Math.abs(dy) > 12) {
     touchLong.moved = true;
     clearTimeout(longPressTimer);
   }
-}, { passive:true });
+  if (touchLong.moved) {
+    view.x = touchLong.vx + dx;
+    view.y = touchLong.vy + dy;
+    applyView();
+  }
+}, { passive:false });
 
 main.addEventListener('touchend', () => {
   clearTimeout(longPressTimer);
@@ -1103,7 +1169,7 @@ function estimatedGenerationYear(p, depth, siblingIndex){
 }
 
 // -- Automatic layout algorithm ----------------------------------------
-function autoLayout() {
+function autoLayout(saveResult = true) {
   if (!data.people.length) return;
 
   const byId = new Map(data.people.map(p => [p.id, p]));
@@ -1115,7 +1181,8 @@ function autoLayout() {
   }
 
   const pairGap = 170;
-  const nodeGap = 20;
+  const nodeGap = 34;
+  const parentGroupGap = 78;
   const rootY = 130;
   const startX = 110;
   const minSingle = 156;
@@ -1205,7 +1272,10 @@ function autoLayout() {
 
     const kids = childList(ids);
     const kidsW = kids.length
-      ? kids.reduce((s,k) => s + subtreeWidth(k.id, new Set(seen)), 0) + (kids.length - 1) * nodeGap
+      ? kids.reduce((s,k,idx) => {
+          const extra = idx > 0 && parentGroupKey(k.parents || []) !== parentGroupKey(kids[idx - 1].parents || []) ? parentGroupGap : 0;
+          return s + subtreeWidth(k.id, new Set(seen)) + (idx ? nodeGap + extra : 0);
+        }, 0)
       : 0;
 
     const w = Math.max(own, kidsW);
@@ -1273,11 +1343,15 @@ function autoLayout() {
 
     const kids = childList(ids);
     const total = kids.length
-      ? kids.reduce((s,k) => s + subtreeWidth(k.id), 0) + (kids.length - 1) * nodeGap
+      ? kids.reduce((s,k,idx) => {
+          const extra = idx > 0 && parentGroupKey(k.parents || []) !== parentGroupKey(kids[idx - 1].parents || []) ? parentGroupGap : 0;
+          return s + subtreeWidth(k.id) + (idx ? nodeGap + extra : 0);
+        }, 0)
       : 0;
 
     let x = left + (width - total) / 2;
     kids.forEach((k, idx) => {
+      if (idx > 0 && parentGroupKey(k.parents || []) !== parentGroupKey(kids[idx - 1].parents || [])) x += parentGroupGap;
       const cw = subtreeWidth(k.id);
       place(k.id, x, fallbackDepth + 1, idx);
       x += cw + nodeGap;
@@ -1298,7 +1372,10 @@ function autoLayout() {
     left += w + 44;
   });
 
-  save();
+  if (saveResult) {
+    resetGeneratedLayout();
+    save();
+  }
   render();
   fit();
 }
@@ -1516,6 +1593,12 @@ function closeSheet(force = false) {
   return true;
 }
 
+function resetGeneratedLayout() {
+  layoutMode = 'classic';
+  savedClassicPositions = null;
+  updateLayoutButton();
+}
+
 function saveSheet() {
   let p = person(selected);
   const oldPartner = p?.partner || '';
@@ -1554,6 +1637,7 @@ function saveSheet() {
   }
 
   save();
+  resetGeneratedLayout();
   render();
   if($('sideNav')?.classList.contains('open')) renderNavigator();
   if($('listSheet')?.classList.contains('open')) renderListEditor();
@@ -1572,7 +1656,7 @@ function addChildFor(id) {
   child.parents = [p.id];
   if (p.partner) child.parents.push(p.partner);
   data.people.push(child);
-  save(); render(); if($('sideNav')?.classList.contains('open')) renderNavigator(); openSheet(child.id);
+  save(); resetGeneratedLayout(); render(); if($('sideNav')?.classList.contains('open')) renderNavigator(); openSheet(child.id);
 }
 function addPartnerFor(id) {
   const p = person(id); if (!p) return;
@@ -1580,7 +1664,7 @@ function addPartnerFor(id) {
   q.name = 'Partner/in von ' + p.name;
   linkPartners(p, q);
   data.people.push(q);
-  save(); render(); if($('sideNav')?.classList.contains('open')) renderNavigator(); openSheet(q.id);
+  save(); resetGeneratedLayout(); render(); if($('sideNav')?.classList.contains('open')) renderNavigator(); openSheet(q.id);
 }
 function addParentsFor(id) {
   const p = person(id); if (!p) return;
@@ -1591,7 +1675,7 @@ function addParentsFor(id) {
   a.partner = b.id; b.partner = a.id;
   p.parents = [a.id, b.id];
   data.people.push(a, b);
-  save(); render(); if($('sideNav')?.classList.contains('open')) renderNavigator(); openSheet(a.id);
+  save(); resetGeneratedLayout(); render(); if($('sideNav')?.classList.contains('open')) renderNavigator(); openSheet(a.id);
 }
 
 let listSortMode = 'family';
@@ -2066,17 +2150,7 @@ $('navBtn').addEventListener('click', openNavigator);
 $('navCloseBtn').addEventListener('click', closeNavigator);
 $('navClearBtn').addEventListener('click', () => jumpToFamily(''));
 $('navSearch').addEventListener('input', renderNavigator);
-$('focusBtn').addEventListener('click', () => {
-  if (focusMode) {
-    setFocusMode(false);
-    return;
-  }
-  if (!selected) {
-    alert('Bitte zuerst eine Person antippen oder in der Liste auswählen.');
-    return;
-  }
-  setFocusMode(true, selected);
-});
+$('layoutBtn').addEventListener('click', cycleLayoutMode);
 $('nameModeBtn').addEventListener('click', () => {
   cycleViewPreset();
 });
@@ -2135,6 +2209,7 @@ window.addEventListener('resize', fit);
 render();
 updateModeUI();
 updateNameModeButton();
+updateLayoutButton();
 updateRootButton();
 updateFocusButton();
 loadDefaultDataIfAvailable();
