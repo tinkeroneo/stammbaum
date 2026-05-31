@@ -10,4 +10,4 @@ Open `index.html` in a browser to use the app. Data can be imported and exported
 - `style.css` - layout and visual styling
 - `app.js` - app logic, rendering, import/export
 
-JSON data files are ignored by Git so private family data stays local.
+JSON data files are ignored by Git by default. `Bodensteiner.json` is currently included as the default dataset for the published app.

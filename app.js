@@ -6,6 +6,7 @@ const storeKey = 'mobile-family-tree-v4-clean';
 const minZoom = 0.045;
 const maxZoom = 2.4;
 const minFitZoom = 0.42;
+const defaultDataUrl = 'Bodensteiner.json';
 
 const sample = { people: [
   {id:'p1',name:'Großvater',born:'1932',died:'2011',birthName:'',note:'Familienzweig A',x:520,y:180,parents:[],partner:'p2'},
@@ -93,6 +94,20 @@ function load() {
     if (raw) return normalize(JSON.parse(raw));
   } catch {}
   return normalize(structuredClone(sample));
+}
+async function loadDefaultDataIfAvailable() {
+  if (localStorage.getItem(storeKey)) return;
+  try {
+    const response = await fetch(defaultDataUrl, { cache: 'no-store' });
+    if (!response.ok) return;
+    const imported = normalize(await response.json());
+    data = imported;
+    save();
+    render();
+    fit();
+    if ($('sideNav')?.classList.contains('open')) renderNavigator();
+    if ($('scrollSheet')?.classList.contains('open')) renderScrollView();
+  } catch {}
 }
 function save() { localStorage.setItem(storeKey, JSON.stringify(data, null, 2)); }
 function person(id) { return data.people.find(p => p.id === id); }
@@ -2122,6 +2137,7 @@ updateModeUI();
 updateNameModeButton();
 updateRootButton();
 updateFocusButton();
+loadDefaultDataIfAvailable();
 setTimeout(fit, 50);
 setTimeout(() => $('hint').classList.add('hidden'), 8000);
 

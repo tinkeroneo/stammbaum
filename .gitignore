@@ -1,4 +1,5 @@
 test.pdf
 *.json
+!Bodensteiner.json
 *.tmp
 *.log
