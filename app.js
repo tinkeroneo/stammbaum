@@ -68,9 +68,14 @@ function normalize(d) {
   d.people = d.people.map((p, i) => {
     const name = String(p.name || 'Ohne Name');
     const firstName = String(p.firstName || p.vorname || '').trim();
-    const lastName = String(p.lastName || p.nachname || '').trim();
+    const rawBirthName = String(p.birthName || p.birth_name || '').trim();
+    const lastName = String(p.lastName || p.nachname || '').trim() || rawBirthName;
     const nickname = String(p.nickname || p.ruename || '').trim();
     const explicitName = firstName || lastName ? `${firstName} ${lastName}`.trim() : name;
+    const partners = [...new Set([
+      ...(Array.isArray(p.partners) ? p.partners.map(String) : []),
+      String(p.partner || '')
+    ].filter(Boolean))];
     return {
       id: String(p.id || 'p' + (i + 1)),
       name: explicitName || name,
@@ -79,12 +84,13 @@ function normalize(d) {
       nickname,
       born: String(p.born || ''),
       died: String(p.died || ''),
-      birthName: String(p.birthName || p.birth_name || ''),
+      birthName: rawBirthName,
       note: String(p.note || ''),
       x: Number.isFinite(+p.x) ? +p.x : 200 + i * 40,
       y: Number.isFinite(+p.y) ? +p.y : 200 + i * 40,
       parents: Array.isArray(p.parents) ? p.parents.map(String).filter(Boolean) : [],
-      partner: String(p.partner || '')
+      partner: partners[0] || '',
+      partners
     };
   });
   return d;
@@ -113,6 +119,34 @@ async function loadDefaultDataIfAvailable() {
 }
 function save() { localStorage.setItem(storeKey, JSON.stringify(data, null, 2)); }
 function person(id) { return data.people.find(p => p.id === id); }
+function uniqueIds(ids) { return [...new Set((ids || []).map(String).filter(Boolean))]; }
+function setPartnerIds(p, ids) {
+  if (!p) return;
+  p.partners = uniqueIds(ids).filter(id => id !== p.id);
+  p.partner = p.partners[0] || '';
+}
+function partnerIds(p) {
+  if (!p) return [];
+  return uniqueIds([...(Array.isArray(p.partners) ? p.partners : []), p.partner])
+    .filter(id => id !== p.id && person(id));
+}
+function primaryPartner(p) { return person(partnerIds(p)[0]); }
+function mutualPartnerIds(p) {
+  return partnerIds(p).filter(id => partnerIds(person(id)).includes(p.id));
+}
+function addPartnerLink(p, q, reciprocal = true) {
+  if (!p || !q || p.id === q.id) return;
+  setPartnerIds(p, [...partnerIds(p), q.id]);
+  if (reciprocal) setPartnerIds(q, [...partnerIds(q), p.id]);
+}
+function removePartnerLink(p, otherId, reciprocal = true) {
+  if (!p || !otherId) return;
+  setPartnerIds(p, partnerIds(p).filter(id => id !== otherId));
+  if (reciprocal) {
+    const q = person(otherId);
+    if (q) setPartnerIds(q, partnerIds(q).filter(id => id !== p.id));
+  }
+}
 function esc(s) { return String(s || '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
 function initials(n) { return (n || '?').split(/\s+/).slice(0,2).map(x => x[0]).join('').toUpperCase(); }
 function fullName(p) {
@@ -120,7 +154,11 @@ function fullName(p) {
   const name = `${p.firstName || ''} ${p.lastName || ''}`.trim();
   return name || p.name || '';
 }
-function displayName(p) { return p ? (p.birthName ? `${fullName(p)} (geb. ${p.birthName})` : fullName(p) || p.name) : ''; }
+function birthNameDiffers(p) {
+  if (!p?.birthName) return false;
+  return String(p.birthName).trim().toLowerCase() !== String(p.lastName || '').trim().toLowerCase();
+}
+function displayName(p) { return p ? (birthNameDiffers(p) ? `${fullName(p)} (geb. ${p.birthName})` : fullName(p) || p.name) : ''; }
 function visibleName(p) {
   if (!p) return '';
   if (nameMode === 'initials') return initials(fullName(p) || p.name);
@@ -190,8 +228,9 @@ function updateMinimap(maxX, maxY) {
   
   for (const p of data.people) {
     if (!visible.has(p.id)) continue;
-    if (p.partner && p.id < p.partner && visible.has(p.partner)) {
-      const q = person(p.partner);
+    for (const partnerId of partnerIds(p)) {
+      if (!(p.id < partnerId) || !visible.has(partnerId)) continue;
+      const q = person(partnerId);
       if (q && visible.has(q.id)) {
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
         line.setAttribute('x1', offsetX + p.x * scale);
@@ -378,7 +417,9 @@ function buildExportSvg() {
   const line = (a,b,cls='') => `<line x1="${a.x-minX}" y1="${a.y-minY}" x2="${b.x-minX}" y2="${b.y-minY}" stroke="#9d7c52" stroke-width="${cls==='partner'?2:3}" opacity="${cls==='partner'?0.45:0.62}" stroke-dasharray="${cls==='partner'?'8 8':''}"/>`;
   let svgLines = '';
   for (const p of people) {
-    if (p.partner && p.id < p.partner && ids.has(p.partner)) svgLines += line(p, person(p.partner), 'partner');
+    for (const partnerId of partnerIds(p)) {
+      if (p.id < partnerId && ids.has(partnerId)) svgLines += line(p, person(partnerId), 'partner');
+    }
     for (const pid of p.parents || []) {
       const q = person(pid);
       if (q && ids.has(q.id)) svgLines += line(q, p);
@@ -457,9 +498,9 @@ function descendantsOf(id){
       if(isDescendant){
         out.add(p.id);
 
-        if(p.partner){
-          const partner = person(p.partner);
-          if(partner && (!partner.parents || partner.parents.length === 0)){
+        for (const partnerId of partnerIds(p)) {
+          const partner = person(partnerId);
+          if (partner && (!partner.parents || partner.parents.length === 0)) {
             out.add(partner.id);
           }
         }
@@ -508,15 +549,15 @@ function focusNeighborhood(id) {
   const parents = new Set(base.parents || []);
   const childIds = new Set();
   parents.forEach(pid => ids.add(pid));
-  if (base.partner) ids.add(base.partner);
+  partnerIds(base).forEach(pid => ids.add(pid));
 
   for (const p of data.people) {
     const pParents = p.parents || [];
     const isSibling = p.id !== id && pParents.some(pid => parents.has(pid));
-    const isChild = pParents.includes(id) || (base.partner && pParents.includes(base.partner));
+    const isChild = pParents.includes(id) || partnerIds(base).some(pid => pParents.includes(pid));
     if (isSibling || isChild) {
       ids.add(p.id);
-      if (p.partner) ids.add(p.partner);
+      partnerIds(p).forEach(pid => ids.add(pid));
     }
     if (isChild) childIds.add(p.id);
   }
@@ -647,7 +688,7 @@ function relationComponents() {
   };
 
   for (const p of data.people) {
-    if (p.partner) link(p.id, p.partner);
+    partnerIds(p).forEach(partnerId => link(p.id, partnerId));
     for (const pid of p.parents || []) link(p.id, pid);
   }
 
@@ -697,9 +738,11 @@ function componentDepths(ids) {
   for (const root of roots) {
     depths.set(root.id, 0);
     queue.push(root.id);
-    if (root.partner && idSet.has(root.partner) && !depths.has(root.partner)) {
-      depths.set(root.partner, 0);
-      queue.push(root.partner);
+    for (const partnerId of partnerIds(root)) {
+      if (idSet.has(partnerId) && !depths.has(partnerId)) {
+        depths.set(partnerId, 0);
+        queue.push(partnerId);
+      }
     }
   }
 
@@ -709,9 +752,11 @@ function componentDepths(ids) {
     const depth = depths.get(id) || 0;
     if (!p) continue;
 
-    if (p.partner && idSet.has(p.partner) && (!depths.has(p.partner) || depths.get(p.partner) > depth)) {
-      depths.set(p.partner, depth);
-      queue.push(p.partner);
+    for (const partnerId of partnerIds(p)) {
+      if (idSet.has(partnerId) && (!depths.has(partnerId) || depths.get(partnerId) > depth)) {
+        depths.set(partnerId, depth);
+        queue.push(partnerId);
+      }
     }
 
     for (const child of data.people) {
@@ -812,7 +857,7 @@ function cycleLayoutMode() {
 }
 function personTileContent(p, className = '') {
   const dates = [p.born, p.died && '– ' + p.died].filter(Boolean).join(' ');
-  const birth = p.birthName ? ` <span class="birthInfo">(geb. ${esc(p.birthName)})</span>` : '';
+  const birth = birthNameDiffers(p) ? ` <span class="birthInfo">(geb. ${esc(p.birthName)})</span>` : '';
   const meta = dates || birth ? `<div class="meta">${esc(dates)}${birth}</div>` : '';
   const tags = p.note ? `<div class="tags"><span class="tag">${esc(p.note).slice(0,22)}</span></div>` : '';
   const display = visibleName(p);
@@ -834,23 +879,30 @@ function render() {
 
   for (const p of data.people) {
     if(!visible.has(p.id)) continue;
-    if (editMode && p.partner && p.id < p.partner && visible.has(p.partner)) {
-      const q = person(p.partner);
-      if (q && visible.has(q.id)) addLine(p.x, p.y, q.x, q.y, 'line partner');
+    if (editMode) {
+      for (const partnerId of partnerIds(p)) {
+        if (!(p.id < partnerId) || !visible.has(partnerId)) continue;
+        const q = person(partnerId);
+        if (q && visible.has(q.id)) addLine(p.x, p.y, q.x, q.y, 'line partner');
+      }
     }
   }
 
   renderFamilyLines(visible);
 
   const renderedPairs = new Set();
+  const renderedCoupleMembers = new Set();
   for (const p of data.people) {
     if(!visible.has(p.id)) continue;
-    const partner = p.partner ? person(p.partner) : null;
-    const isCouple = !editMode && partner && partner.partner === p.id && visible.has(partner.id);
+    if (renderedCoupleMembers.has(p.id)) continue;
+    const partner = !editMode ? person(mutualPartnerIds(p).find(id => visible.has(id) && !renderedCoupleMembers.has(id))) : null;
+    const isCouple = !editMode && partner && visible.has(partner.id);
     if (isCouple) {
       const pairKey = [p.id, partner.id].sort().join('|');
       if (renderedPairs.has(pairKey)) continue;
       renderedPairs.add(pairKey);
+      renderedCoupleMembers.add(p.id);
+      renderedCoupleMembers.add(partner.id);
       const pair = [p, partner].sort((a,b) => a.x - b.x || a.id.localeCompare(b.id));
       const [a, b] = pair;
       const el = document.createElement('div');
@@ -1036,16 +1088,6 @@ main.addEventListener('pointerdown', e => {
   pan = { sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y, moved: false };
 
   clearTimeout(longPressTimer);
-  if (editMode) {
-    longPressTimer = setTimeout(() => {
-      if (pan && !pan.moved) {
-        pendingNewPos = screenToWorld(e.clientX, e.clientY);
-        pan = null;
-        selected = null;
-        openSheet(null);
-      }
-    }, 650);
-  }
 });
 
 main.addEventListener('pointermove', e => {
@@ -1123,15 +1165,6 @@ main.addEventListener('touchstart', e => {
   const t = e.touches[0];
   touchLong = { x:t.clientX, y:t.clientY, vx:view.x, vy:view.y, moved:false };
   clearTimeout(longPressTimer);
-  if (editMode) {
-    longPressTimer = setTimeout(() => {
-      if (!touchLong || touchLong.moved) return;
-      pendingNewPos = screenToWorld(touchLong.x, touchLong.y);
-      touchLong = null;
-      selected = null;
-      openSheet(null);
-    }, 650);
-  }
 }, { passive:true });
 
 main.addEventListener('touchmove', e => {
@@ -1328,7 +1361,7 @@ function autoLayout(saveResult = true) {
   const depthMemo = new Map();
 
   const hasParents = p => (p.parents || []).length > 0;
-  const partnerOf = p => p.partner && byId.has(p.partner) ? byId.get(p.partner) : null;
+  const partnerOf = p => partnerIds(p).map(id => byId.get(id)).find(Boolean) || null;
   const unitIds = p => {
     const q = partnerOf(p);
     return q ? [p.id, q.id] : [p.id];
@@ -1381,7 +1414,7 @@ function autoLayout(saveResult = true) {
       if (!id || reached.has(id)) continue;
       reached.add(id);
       const p = byId.get(id);
-      if (p?.partner && !reached.has(p.partner)) stack.push(p.partner);
+      partnerIds(p).forEach(partnerId => { if (!reached.has(partnerId)) stack.push(partnerId); });
       for (const child of childrenOf.get(id) || []) {
         if (!reached.has(child.id)) stack.push(child.id);
       }
@@ -1521,7 +1554,7 @@ function suggestParentOrder(currentId, alreadyParentId = '') {
   const cur = person(currentId);
   const curSurname = surnameOf(cur?.name);
   const already = alreadyParentId ? person(alreadyParentId) : null;
-  const partner = already?.partner ? person(already.partner) : null;
+  const partner = primaryPartner(already);
   const descendants = currentId ? descendantsOf(currentId) : new Set();
 
   return data.people
@@ -1531,7 +1564,7 @@ function suggestParentOrder(currentId, alreadyParentId = '') {
       if (partner && p.id === partner.id) score += 1000;
       if (curSurname && surnameOf(p.name) === curSurname) score += 120;
       if (cur?.parents?.includes(p.id)) score += 500;
-      if (cur?.partner === p.id) score -= 150;
+      if (partnerIds(cur).includes(p.id)) score -= 150;
       return { p, score };
     })
     .sort((a,b) => b.score - a.score || String(a.p.name).localeCompare(String(b.p.name)))
@@ -1545,11 +1578,13 @@ function fillSelects(
   selectedPartner = $('partner')?.value || ''
 ) {
   const opt = arr => '<option value="">—</option>' + arr.map(p => `<option value="${esc(p.id)}">${esc(displayName(p))}</option>`).join('');
+  const partnerOpt = arr => '<option value="">— Partner/in hinzufügen —</option>' + arr.map(p => `<option value="${esc(p.id)}">${esc(displayName(p))}</option>`).join('');
   $('parent1').innerHTML = opt(suggestParentOrder(current, ''));
   $('parent1').value = selectedParent1;
   $('parent2').innerHTML = opt(suggestParentOrder(current, selectedParent1));
   $('parent2').value = selectedParent2;
-  $('partner').innerHTML = opt(data.people.filter(p => p.id !== current).sort((a,b) => fullName(a).localeCompare(fullName(b))));
+  const existingPartners = new Set(partnerIds(person(current)));
+  $('partner').innerHTML = partnerOpt(data.people.filter(p => p.id !== current && !existingPartners.has(p.id)).sort((a,b) => fullName(a).localeCompare(fullName(b))));
   $('partner').value = selectedPartner;
 }
 
@@ -1595,18 +1630,13 @@ function validatePersonForm(currentId, parents, partnerId, born, died) {
 
 function unlinkPartner(id) {
   const p = person(id);
-  if (!p || !p.partner) return;
-  const q = person(p.partner);
-  if (q && q.partner === p.id) q.partner = '';
-  p.partner = '';
+  if (!p) return;
+  for (const partnerId of partnerIds(p)) removePartnerLink(p, partnerId, true);
 }
 
-function linkPartners(p, q) {
+function linkPartners(p, q, reciprocal = true) {
   if (!p || !q || p.id === q.id) return;
-  unlinkPartner(p.id);
-  unlinkPartner(q.id);
-  p.partner = q.id;
-  q.partner = p.id;
+  addPartnerLink(p, q, reciprocal);
 }
 
 function formSnapshot() {
@@ -1653,7 +1683,7 @@ function renderPersonDetails(p) {
   }
 
   const parents = (p.parents || []).map(person).filter(Boolean);
-  const partner = p.partner ? person(p.partner) : null;
+  const partners = partnerIds(p).map(person).filter(Boolean);
   const children = data.people
     .filter(child => (child.parents || []).includes(p.id))
     .sort((a,b) => (birthSortValue(a) ?? Infinity) - (birthSortValue(b) ?? Infinity) || fullName(a).localeCompare(fullName(b)));
@@ -1671,7 +1701,7 @@ function renderPersonDetails(p) {
       </div>
     </div>
     <div class="detailGrid">
-      <div class="detailBox"><span class="detailLabel">Partner/in</span>${partner ? relationButtons([partner]) : '<span class="detailValue">Offen</span>'}</div>
+      <div class="detailBox"><span class="detailLabel">Partner/in</span>${relationButtons(partners)}</div>
       <div class="detailBox"><span class="detailLabel">Eltern</span>${relationButtons(parents)}</div>
       <div class="detailBox full"><span class="detailLabel">Kinder</span>${relationButtons(children)}</div>
       ${p.note ? `<div class="detailBox full"><span class="detailLabel">Notiz</span><div class="detailValue">${esc(p.note)}</div></div>` : ''}
@@ -1704,7 +1734,7 @@ function openSheet(id) {
   $('died').value = p?.died || '';
   $('birthName').value = p?.birthName || '';
   $('note').value = p?.note || '';
-  fillSelects(id, p?.parents?.[0] || '', p?.parents?.[1] || '', p?.partner || '');
+  fillSelects(id, p?.parents?.[0] || '', p?.parents?.[1] || '');
   sheetSnapshot = formSnapshot();
   renderPersonDetails(p);
 
@@ -1741,9 +1771,9 @@ function resetGeneratedLayout() {
 
 function saveSheet() {
   let p = person(selected);
-  const oldPartner = p?.partner || '';
   const firstName = $('firstName').value.trim();
-  const lastName = $('lastName').value.trim();
+  const birthName = $('birthName').value.trim();
+  const lastName = $('lastName').value.trim() || birthName;
   const nickname = $('nickname').value.trim();
   const born = $('born').value.trim();
   const died = $('died').value.trim();
@@ -1754,7 +1784,7 @@ function saveSheet() {
 
   if (!p) {
     const pos = pendingNewPos || screenToWorld(main.getBoundingClientRect().left + main.clientWidth / 2, main.getBoundingClientRect().top + main.clientHeight / 2);
-    p = { id: nextId(), name: '', born: '', died: '', birthName: '', note: '', x: pos.x, y: pos.y, parents: [], partner: '' };
+    p = { id: nextId(), name: '', born: '', died: '', birthName: '', note: '', x: pos.x, y: pos.y, parents: [], partner: '', partners: [] };
     data.people.push(p);
     pendingNewPos = null;
   }
@@ -1765,15 +1795,16 @@ function saveSheet() {
   p.name = (firstName || lastName) ? `${firstName} ${lastName}`.trim() : p.name || 'Ohne Name';
   p.born = born;
   p.died = died;
-  p.birthName = $('birthName').value.trim();
+  p.birthName = birthName;
   p.note = $('note').value.trim();
   p.parents = parents;
 
   if (newPartner) {
     const q = person(newPartner);
-    if (q) linkPartners(p, q);
-  } else if (oldPartner) {
-    unlinkPartner(p.id);
+    if (q && !partnerIds(p).includes(q.id)) {
+      const reciprocal = !partnerIds(p).length || confirm('Partner/in auch bei der anderen Person eintragen?\n\nOK = gegenseitig verknüpfen\nAbbrechen = nur bei dieser Person eintragen');
+      linkPartners(p, q, reciprocal);
+    }
   }
 
   resetGeneratedLayout();
@@ -1787,14 +1818,15 @@ function saveSheet() {
 }
 
 function newPersonNear(base, dx, dy) {
-  return { id: nextId(), name: 'Neue Person', born: '', died: '', birthName: '', note: '', x: Math.round((base?.x ?? 400) + dx), y: Math.round((base?.y ?? 300) + dy), parents: [], partner: '' };
+  return { id: nextId(), name: 'Neue Person', born: '', died: '', birthName: '', note: '', x: Math.round((base?.x ?? 400) + dx), y: Math.round((base?.y ?? 300) + dy), parents: [], partner: '', partners: [] };
 }
 function addChildFor(id) {
   const p = person(id); if (!p) return;
   const child = newPersonNear(p, 0, 260);
   child.name = 'Kind von ' + p.name;
   child.parents = [p.id];
-  if (p.partner) child.parents.push(p.partner);
+  const partner = primaryPartner(p);
+  if (partner) child.parents.push(partner.id);
   data.people.push(child);
   resetGeneratedLayout(); save(); render(); if($('sideNav')?.classList.contains('open')) renderNavigator(); openSheet(child.id);
 }
@@ -1812,7 +1844,7 @@ function addParentsFor(id) {
   const b = newPersonNear(p, 120, -260);
   a.name = 'Elternteil 1 von ' + p.name;
   b.name = 'Elternteil 2 von ' + p.name;
-  a.partner = b.id; b.partner = a.id;
+  linkPartners(a, b);
   p.parents = [a.id, b.id];
   data.people.push(a, b);
   resetGeneratedLayout(); save(); render(); if($('sideNav')?.classList.contains('open')) renderNavigator(); openSheet(a.id);
@@ -1884,21 +1916,21 @@ function renderScrollView(){
   for (const p of data.people) for (const pid of p.parents || []) childrenOf.get(pid)?.push(p);
   const byBirth = (a,b) => (birthSortValue(a) ?? Infinity) - (birthSortValue(b) ?? Infinity) || fullName(a).localeCompare(fullName(b));
   const shouldAttachPartner = p => {
-    const q = p.partner ? person(p.partner) : null;
-    if (!(q && ids.has(q.id) && q.partner === p.id && !(q.parents || []).length)) return false;
+    const q = mutualPartnerIds(p).map(person).find(partner => partner && ids.has(partner.id) && !(partner.parents || []).length);
+    if (!q) return false;
     if ((p.parents || []).length) return true;
     return p.id < q.id;
   };
-  const attachedPartnerIds = new Set(data.people.filter(p => ids.has(p.id) && shouldAttachPartner(p)).map(p => p.partner));
+  const attachedPartnerFor = p => mutualPartnerIds(p).map(person).find(q => q && ids.has(q.id) && !(q.parents || []).length && shouldAttachPartner(p)) || null;
+  const attachedPartnerIds = new Set(data.people.filter(p => ids.has(p.id)).map(attachedPartnerFor).filter(Boolean).map(p => p.id));
   const roots = data.people
     .filter(p => ids.has(p.id) && !attachedPartnerIds.has(p.id) && !(p.parents || []).some(pid => ids.has(pid)))
     .sort(byBirth);
 
   const row = (p, level, path = new Set()) => {
     if (!ids.has(p.id) || path.has(p.id)) return '';
-    const attachedPartner = shouldAttachPartner(p) ? person(p.partner) : null;
-    const linkedPartner = !attachedPartner && p.partner && ids.has(p.partner) ? person(p.partner) : null;
-    const linkedPartnerHasParents = !!(linkedPartner && (linkedPartner.parents || []).length);
+    const attachedPartner = attachedPartnerFor(p);
+    const linkedPartners = partnerIds(p).map(person).filter(q => q && ids.has(q.id) && q.id !== attachedPartner?.id);
     const parentIds = attachedPartner ? [p.id, attachedPartner.id] : [p.id];
     const branchPath = new Set(path);
     branchPath.add(p.id);
@@ -1909,12 +1941,15 @@ function renderScrollView(){
       .sort(byBirth);
     const children = allChildren;
     const isOpen = scrollExpanded.has(p.id);
-    const partnerName = !attachedPartner && linkedPartner && !linkedPartnerHasParents ? fullName(linkedPartner) || linkedPartner.name || '' : '';
+    const inlinePartnerNames = linkedPartners.filter(q => !(q.parents || []).length).map(q => fullName(q) || q.name).join(', ');
     const dates = [p.born && formatBirthDate(p.born), p.died && '- ' + p.died].filter(Boolean).join(' ');
-    const meta = [dates, p.birthName && 'geb. ' + p.birthName, partnerName && 'Partner/in: ' + partnerName].filter(Boolean).join(' · ');
-    const attachedMeta = attachedPartner ? [attachedPartner.born && formatBirthDate(attachedPartner.born), attachedPartner.birthName && 'geb. ' + attachedPartner.birthName].filter(Boolean).join(' · ') : '';
+    const meta = [dates, birthNameDiffers(p) && 'geb. ' + p.birthName, inlinePartnerNames && 'Partner/in: ' + inlinePartnerNames].filter(Boolean).join(' · ');
+    const attachedMeta = attachedPartner ? [attachedPartner.born && formatBirthDate(attachedPartner.born), birthNameDiffers(attachedPartner) && 'geb. ' + attachedPartner.birthName].filter(Boolean).join(' · ') : '';
     const canExpand = children.length;
-    const partnerChip = linkedPartnerHasParents ? `<button type="button" class="scrollPartnerChip" data-partner-id="${esc(linkedPartner.id)}">Partner/in: ${esc(fullName(linkedPartner) || linkedPartner.name)} ↗</button>` : '';
+    const partnerChip = linkedPartners
+      .filter(q => (q.parents || []).length)
+      .map(q => `<button type="button" class="scrollPartnerChip" data-partner-id="${esc(q.id)}">Partner/in: ${esc(fullName(q) || q.name)} ↗</button>`)
+      .join('');
     return `
       <div class="scrollNode ${level === 0 ? 'root' : ''} ${isOpen ? 'open' : ''}" style="--level:${level};--family-color:${esc(familyColor(familyKey(p)))}">
         <div class="scrollPerson" role="button" tabindex="0" data-id="${esc(p.id)}" data-expandable="${canExpand ? '1' : '0'}">
@@ -2021,7 +2056,7 @@ function renderSearchResults(){
     return `
       <button type="button" class="searchRow" data-id="${esc(p.id)}">
         <span class="swatch" style="background:${esc(familyColor(familyKey(p)))}"></span>
-        <span><strong>${esc(fullName(p) || p.name)}</strong><small>${esc([dates, p.birthName && 'geb. '+p.birthName].filter(Boolean).join(' · ')) || 'Lebensdaten offen'}</small></span>
+        <span><strong>${esc(fullName(p) || p.name)}</strong><small>${esc([dates, birthNameDiffers(p) && 'geb. '+p.birthName].filter(Boolean).join(' · ')) || 'Lebensdaten offen'}</small></span>
       </button>
     `;
   }).join('');
@@ -2043,8 +2078,9 @@ function dataIssues(){
     if (!p.lastName || p.lastName === '?') issues.push({ id:p.id, text:`${name}: Nachname fehlt/unklar.` });
     if (!p.born) issues.push({ id:p.id, text:`${name}: Geburtsdatum fehlt.` });
     if (nameCount.get(name) > 1) issues.push({ id:p.id, text:`${name}: Name kommt mehrfach vor.` });
-    if (p.partner && !ids.has(p.partner)) issues.push({ id:p.id, text:`${name}: Partner-Referenz fehlt.` });
-    if (p.partner && person(p.partner)?.partner !== p.id) issues.push({ id:p.id, text:`${name}: Partner-Verknüpfung ist nicht gegenseitig.` });
+    for (const partnerId of uniqueIds([...(p.partners || []), p.partner])) {
+      if (!ids.has(partnerId)) issues.push({ id:p.id, text:`${name}: Partner-Referenz ${partnerId} fehlt.` });
+    }
     for (const pid of p.parents || []) {
       if (!ids.has(pid)) issues.push({ id:p.id, text:`${name}: Eltern-Referenz ${pid} fehlt.` });
     }
@@ -2094,7 +2130,7 @@ function renderNavigator(){
 }
 function personSearchText(p){
   const parentNames = (p.parents||[]).map(id=>person(id)?.name||'').join(' ');
-  const partnerName = p.partner ? (person(p.partner)?.name||'') : '';
+  const partnerName = partnerIds(p).map(id => person(id)?.name || '').join(' ');
   return [p.name,p.birthName,p.born,p.died,p.note,parentNames,partnerName].join(' ').toLowerCase();
 }
 function comparePeopleForList(a,b){
@@ -2120,8 +2156,8 @@ function renderListEditor(){
 
   $('listRows').innerHTML = rows.map(p => {
     const parents = (p.parents||[]).map(id=>person(id)?.name||id).filter(Boolean).join(' + ');
-    const partner = p.partner ? (person(p.partner)?.name || p.partner) : '';
-    const birth = p.birthName ? ` · geb. ${esc(p.birthName)}` : '';
+    const partner = partnerIds(p).map(id => person(id)?.name || id).join(', ');
+    const birth = birthNameDiffers(p) ? ` · geb. ${esc(p.birthName)}` : '';
     const dates = [p.born, p.died && '– '+p.died].filter(Boolean).join(' ');
     return `
       <div class="listRow" tabindex="0" data-id="${esc(p.id)}">
@@ -2234,7 +2270,10 @@ $('deleteBtn').addEventListener('click', () => {
   }
   data.people = data.people
     .filter(p => p.id !== selected)
-    .map(p => ({ ...p, parents: (p.parents || []).filter(x => x !== selected), partner: p.partner === selected ? '' : p.partner }));
+    .map(p => {
+      const partners = partnerIds(p).filter(id => id !== selected);
+      return { ...p, parents: (p.parents || []).filter(x => x !== selected), partner: partners[0] || '', partners };
+    });
   if (activeFamily && !data.people.some(p => matchesFamily(p, activeFamily))) activeFamily = '';
   save();
   if($('sideNav')?.classList.contains('open')) renderNavigator();
