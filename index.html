@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="de">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Mobiler Stammbaum</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+    <div class="app">
+        <header>
+            <div class="brand">
+                <h1>Stammbaum</h1>
+                <p>Finger: ziehen · Pinch: zoomen · Karte antippen: Details</p>
+            </div>
+            <button type="button" class="pill primary" id="modeBtn"
+                aria-label="Anzeige- oder Bearbeitungsmodus umschalten">Bearbeiten</button>
+            <button type="button" class="pill" id="exportBtn" aria-label="Stammbaum exportieren">Export</button>
+            <button type="button" class="pill primary" id="addBtn" aria-label="Neue Person hinzufügen">+ Person</button>
+        </header>
+        <main id="main">
+            <div class="stage">
+                <div class="world" id="world">
+                    <div class="generationBands" id="generationBands"></div><svg class="lines" id="lines"></svg>
+                    <div id="nodes"></div>
+                </div>
+                <div id="selectionRect" class="selectionRect hidden"></div>
+                <div class="minimap" id="minimap" aria-hidden="true">
+                    <div class="minimapInner"><svg class="minimapSvg" id="minimapSvg"></svg>
+                        <div class="minimapViewport" id="minimapViewport"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="hint" id="hint">Tipp: Geburtsdatum: Jahr, TT.MM. oder TT.MM.JJJJ · Auto sortiert Geschwister
+                danach · −/+ klappt Unteräste.</div>
+            <div class="zoom" role="group" aria-label="Zoom-Steuerung"><button type="button" id="zin"
+                    aria-label="Heranzoomen">+</button><button type="button" id="zout"
+                    aria-label="Rauszoomen">−</button><button type="button" id="home"
+                    aria-label="Ansicht anpassen">⌂</button></div>
+            <div class="toolbar" role="toolbar" aria-label="Bedienleiste"><button type="button"
+                    class="pill ghost editOnly" id="resetBtn" aria-label="Beispiel zurücksetzen">Beispiel
+                    neu</button><button type="button" class="pill editOnly" id="importBtn"
+                    aria-label="Daten importieren">Import</button><button type="button" class="pill editOnly"
+                    id="listBtn" aria-label="Listeneditor öffnen">Liste</button><button type="button" class="pill"
+                    id="searchBtn" aria-label="Person suchen">Suche</button><button type="button" class="pill"
+                    id="scrollBtn" aria-label="Scrollbare Stammbaumansicht öffnen">Scroll</button><button type="button"
+                    class="pill" id="birthdayBtn" aria-label="Geburtstagskalender öffnen">Geburtstage</button><button
+                    type="button" class="pill" id="navBtn" aria-label="Familiennavigator öffnen">Zweige</button><button
+                    type="button" class="pill" id="focusBtn" aria-label="Fokusansicht umschalten">Fokus</button><button
+                    type="button" class="pill" id="nameModeBtn" aria-label="Ansicht umschalten">Ansicht</button><button
+                    type="button" class="pill hidden" id="compactBtn"
+                    aria-label="Kompakte Übersicht umschalten">Übersicht</button><button type="button"
+                    class="pill editOnly" id="autoBtn"
+                    aria-label="Automatische Anordnung ausführen">Auto</button><button type="button"
+                    class="pill editOnly" id="checkBtn" aria-label="Datenprüfung öffnen">Prüfen</button><button
+                    type="button" class="pill editOnly" id="imageBtn"
+                    aria-label="Aktuelle Ansicht als SVG exportieren">Bild</button><button type="button"
+                    class="pill editOnly" id="collapseAllBtn"
+                    aria-label="Alle Zweige ein- oder ausklappen">Einklappen</button><button type="button" class="pill"
+                    id="fitBtn" aria-label="Stammbaum anpassen">Anpassen</button></div>
+            <div class="backdrop" id="backdrop" aria-hidden="true"></div>
+            <aside class="sideNav" id="sideNav" aria-hidden="true">
+                <div class="sideTop">
+                    <h2>Zweige</h2>
+                    <button type="button" class="pill" id="navClearBtn">Alle</button>
+                    <button type="button" class="pill" id="navCloseBtn">Schließen</button>
+                </div>
+                <input class="navSearch" id="navSearch" placeholder="Familie suchen …"
+                    aria-label="Familienzweige durchsuchen" />
+                <div class="familyRows" id="familyRows"></div>
+            </aside>
+            <aside class="searchSheet" id="searchSheet" aria-hidden="true">
+                <div class="sideTop">
+                    <h2>Suche</h2>
+                    <button type="button" class="pill" id="searchCloseBtn">Schließen</button>
+                </div>
+                <input class="navSearch" id="personSearch" placeholder="Person suchen …" aria-label="Person suchen" />
+                <div class="searchRows" id="searchRows"></div>
+            </aside>
+            <aside class="checkSheet" id="checkSheet" aria-hidden="true">
+                <div class="sideTop">
+                    <h2>Daten prüfen</h2>
+                    <button type="button" class="pill" id="checkCloseBtn">Schließen</button>
+                </div>
+                <div class="checkRows" id="checkRows"></div>
+            </aside>
+            <aside class="birthdaySheet" id="birthdaySheet" aria-hidden="true">
+                <div class="sideTop">
+                    <h2>Geburtstage</h2>
+                    <button type="button" class="pill" id="birthdayCloseBtn">Schließen</button>
+                </div>
+                <div class="birthdayRows" id="birthdayRows"></div>
+            </aside>
+            <aside class="scrollSheet" id="scrollSheet" aria-hidden="true">
+                <div class="sideTop">
+                    <h2>Scrollansicht</h2>
+                    <button type="button" class="pill" id="scrollCloseBtn">Schließen</button>
+                </div>
+                <div class="scrollRows" id="scrollRows"></div>
+            </aside>
+            <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-hidden="true">
+                <h2 id="sheetTitle">Person</h2>
+                <div class="actions" style="margin-top:0;margin-bottom:12px"><button type="button" class="pill"
+                        id="quickFocus" aria-label="Fokusansicht für diese Person">Fokus</button><button
+                        type="button" class="pill" id="quickChild" aria-label="Kind hinzufügen">+ Kind</button><button
+                        type="button" class="pill" id="quickPartner" aria-label="Partner oder Partnerin hinzufügen">+
+                        Partner/in</button><button type="button" class="pill" id="quickParents"
+                        aria-label="Eltern hinzufügen">+ Eltern</button></div>
+                <div class="personDetails hidden" id="personDetails"></div>
+                <div class="grid">
+                    <div class="field"><label for="firstName">Vorname</label><input id="firstName"
+                            placeholder="Vorname" /></div>
+                    <div class="field"><label for="lastName">Nachname</label><input id="lastName"
+                            placeholder="Nachname" /></div>
+                    <div class="field full"><label for="nickname">Rufname / Kurzname</label><input id="nickname"
+                            placeholder="z. B. Lotte" /></div>
+                    <div class="field"><label for="born">Geboren</label><input id="born"
+                            placeholder="1954, 05.1954, 23.05. oder 23.05.1954" /></div>
+                    <div class="field"><label for="died">Gestorben</label><input id="died" placeholder="optional" />
+                    </div>
+                    <div class="field full"><label for="birthName">Geburtsname</label><input id="birthName"
+                            placeholder="z. B. Meißner" /></div>
+                    <div class="field full"><label for="note">Notiz</label><textarea id="note"
+                            placeholder="Beruf, Ort, Besonderheiten …"></textarea></div>
+                    <div class="field"><label for="parent1">Elternteil 1</label><select id="parent1"></select></div>
+                    <div class="field"><label for="parent2">Elternteil 2</label><select id="parent2"></select></div>
+                    <div class="field full"><label for="partner">Partner/in</label><select id="partner"></select></div>
+                </div>
+                <p class="small">Position: Karte im Stammbaum ziehen. Neue Personen landen in der Nähe der aktuellen
+                    Ansicht.</p>
+                <div class="actions"><button type="button" class="pill danger" id="deleteBtn">Löschen</button><button
+                        type="button" class="pill" id="closeBtn">Schließen</button><button type="button"
+                        class="pill primary" id="saveBtn">Speichern</button></div>
+            </section>
+
+            <section class="listSheet" id="listSheet" role="dialog" aria-modal="true" aria-hidden="true">
+                <div class="listTop">
+                    <h2>Listeneditor</h2>
+                    <button type="button" class="pill" id="listAddBtn" aria-label="Neue Person hinzufügen">+
+                        Person</button>
+                    <button type="button" class="pill" id="listCloseBtn"
+                        aria-label="Listeneditor schließen">Schließen</button>
+                </div>
+                <input class="listSearch" id="listSearch" placeholder="Suchen nach Name, Geburtsname, Jahr, Notiz …"
+                    aria-label="Liste durchsuchen" />
+                <div class="listRows" id="listRows"></div>
+                <div class="listFooter">
+                    <button type="button" class="pill" id="listSortNameBtn">Name</button>
+                    <button type="button" class="pill" id="listSortBirthBtn">Geburt</button>
+                    <button type="button" class="pill" id="listSortFamilyBtn">Familie</button>
+                </div>
+            </section>
+
+        </main>
+    </div>
+    <input type="file" id="fileInput" accept="application/json" class="hidden" />
+
+    <script src="app.js"></script>
+</body>
+
+</html>
