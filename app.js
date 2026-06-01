@@ -1595,7 +1595,7 @@ function autoLayout(saveResult = true) {
 
     for (const siblings of groups.values()) {
       if (siblings.length < 2) continue;
-      const leafs = siblings.filter(child => !(childrenOf.get(child.id) || []).length && !collapsed.has(child.id));
+      const leafs = siblings.filter(child => !(childrenOf.get(child.id) || []).length && !partnerIds(child).length && !collapsed.has(child.id));
       const anchors = siblings.filter(child => !leafs.includes(child));
       if (!leafs.length || !anchors.length) continue;
 
