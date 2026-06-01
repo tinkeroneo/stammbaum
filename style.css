@@ -132,7 +132,8 @@ body.viewMode .sheet .grid,body.viewMode .sheet .small{display:none}
 .sideNav.open,.searchSheet.open,.checkSheet.open,.birthdaySheet.open,.scrollSheet.open{transform:translateX(0)}
 .birthdaySheet,.scrollSheet{grid-template-rows:auto minmax(0,1fr)}
 .sideTop{display:flex;gap:8px;align-items:center}
-.sideTop h2{font-size:18px;margin:0;flex:1}
+.sideTop h2{font-size:18px;margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sideTop .pill{flex:0 0 auto}
 .navSearch{width:100%;border:1px solid rgba(0,0,0,.14);border-radius:14px;padding:11px;background:#fff;color:var(--ink)}
 .familyRows{overflow:auto;display:grid;align-content:start;gap:7px;padding-right:2px;min-height:0;-webkit-overflow-scrolling:touch}
 .familyRow{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:9px;text-align:left;background:#fff7ea;border:1px solid rgba(78,54,30,.13);border-radius:14px;padding:9px 10px;color:var(--ink);box-shadow:0 3px 12px rgba(0,0,0,.06)}
@@ -169,7 +170,12 @@ body.viewMode .sheet .grid,body.viewMode .sheet .small{display:none}
   .sheet.open{transform:translateX(0)}
 }
 @media (max-width:759px){
-  header{min-height:58px}
+  header{min-height:52px;gap:6px;padding:8px max(8px,env(safe-area-inset-right)) 8px max(8px,env(safe-area-inset-left))}
+  .brand{flex:1 1 68px}
+  .brand h1{font-size:16px}
+  header .pill{flex:0 1 auto;min-width:0;max-width:96px;padding:8px 9px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  header #exportBtn{max-width:68px}
+  header #addBtn{max-width:82px}
   .sheet{left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));bottom:max(8px,env(safe-area-inset-bottom));width:auto;max-width:calc(100vw - 16px);border-radius:22px;max-height:calc(100dvh - 82px);padding:14px 14px 16px}
   .sheet h2{position:sticky;top:-14px;z-index:2;margin:-14px -14px 12px;padding:14px;background:var(--panel);border-radius:22px 22px 0 0;box-shadow:0 1px 0 rgba(78,54,30,.08)}
   .grid,.detailGrid{grid-template-columns:1fr}
@@ -178,7 +184,8 @@ body.viewMode .sheet .grid,body.viewMode .sheet .small{display:none}
   .sheet .actions button{flex:1 1 128px}
   .sheet > .actions:last-child{position:sticky;bottom:-16px;margin:12px -14px -16px;padding:10px 14px 14px;background:linear-gradient(180deg,rgba(255,250,240,0),var(--panel) 22%)}
   .actions button{min-height:42px}
-  .scrollSheet,.sideNav,.searchSheet,.checkSheet,.birthdaySheet{width:auto;right:max(8px,env(safe-area-inset-right));bottom:max(8px,env(safe-area-inset-bottom));border-radius:0 18px 18px 0;max-height:calc(100dvh - 8px)}
+  .scrollSheet,.sideNav,.searchSheet,.checkSheet,.birthdaySheet{left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));top:max(8px,env(safe-area-inset-top));bottom:max(8px,env(safe-area-inset-bottom));width:auto;border-radius:18px;max-height:none;padding:12px}
+  .sideTop{position:sticky;top:-12px;z-index:2;margin:-12px -12px 0;padding:12px;background:var(--panel);border-radius:18px 18px 0 0;box-shadow:0 1px 0 rgba(78,54,30,.08)}
   .minimap{display:none}
 }
 .listSheet{position:absolute;left:0;right:0;bottom:0;z-index:32;background:var(--panel);border-radius:24px 24px 0 0;box-shadow:0 -16px 50px rgba(0,0,0,.28);padding:14px max(14px,env(safe-area-inset-left)) max(14px,env(safe-area-inset-bottom));transform:translateY(110%);transition:.22s ease;max-height:88%;overflow:hidden;display:grid;grid-template-rows:auto auto 1fr auto;gap:10px}
