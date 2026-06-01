@@ -352,9 +352,13 @@ function parentGroupKey(ids) {
 function parentGroupPoint(parents, children) {
   const parentX = parents.reduce((sum, p) => sum + p.x, 0) / parents.length;
   const parentY = parents.reduce((sum, p) => sum + p.y, 0) / parents.length;
+  const childXs = children.map(c => c.x).sort((a,b) => a - b);
+  const childCenterX = childXs.reduce((sum, x) => sum + x, 0) / childXs.length;
+  const childSpread = childXs[childXs.length - 1] - childXs[0];
   const firstChildY = Math.min(...children.map(c => c.y));
   const hubY = Math.min(parentY + 78, firstChildY - 72);
-  return { x: parentX, y: Math.max(parentY + 34, hubY) };
+  const hubX = childSpread > 1200 && Math.abs(childCenterX - parentX) > 420 ? childCenterX : parentX;
+  return { x: hubX, y: Math.max(parentY + 34, hubY) };
 }
 function renderFamilyLines(visible) {
   const groups = new Map();
@@ -1580,6 +1584,45 @@ function autoLayout(saveResult = true) {
     });
   }
 
+  function compactLeafSiblings() {
+    const groups = new Map();
+    for (const child of data.people) {
+      const key = parentGroupKey(child.parents || []);
+      if (!key) continue;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(child);
+    }
+
+    for (const siblings of groups.values()) {
+      if (siblings.length < 2) continue;
+      const leafs = siblings.filter(child => !(childrenOf.get(child.id) || []).length && !collapsed.has(child.id));
+      const anchors = siblings.filter(child => !leafs.includes(child));
+      if (!leafs.length || !anchors.length) continue;
+
+      const occupied = anchors.map(child => child.x).sort((a,b) => a - b);
+      const anchorCenter = occupied.reduce((sum, x) => sum + x, 0) / occupied.length;
+      const y = Math.round(siblings.reduce((sum, child) => sum + child.y, 0) / siblings.length);
+      const offsets = [0, -190, 190, -380, 380, -570, 570];
+
+      leafs
+        .sort((a,b) => (birthSortValue(a) ?? Infinity) - (birthSortValue(b) ?? Infinity) || fullName(a).localeCompare(fullName(b)))
+        .forEach((leaf, idx) => {
+          let target = leaf.x;
+          for (const offset of offsets) {
+            const candidate = Math.round(anchorCenter + offset + idx * 8);
+            if (occupied.every(x => Math.abs(x - candidate) >= 150)) {
+              target = candidate;
+              break;
+            }
+          }
+          leaf.x = target;
+          leaf.y = y;
+          occupied.push(target);
+          occupied.sort((a,b) => a - b);
+        });
+    }
+  }
+
   let left = startX;
   rootCandidates.forEach((r, idx) => {
     const w = subtreeWidth(r.id);
@@ -1593,6 +1636,8 @@ function autoLayout(saveResult = true) {
     place(p.id, left, depthOf(p), idx);
     left += w + 44;
   });
+
+  compactLeafSiblings();
 
   if (saveResult) {
     clearGeneratedLayoutState();
