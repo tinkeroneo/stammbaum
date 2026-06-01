@@ -76,6 +76,9 @@ function normalize(d) {
       ...(Array.isArray(p.partners) ? p.partners.map(String) : []),
       String(p.partner || '')
     ].filter(Boolean))];
+    const confidence = ['high', 'medium', 'low'].includes(String(p.confidence || '').toLowerCase())
+      ? String(p.confidence).toLowerCase()
+      : 'high';
     return {
       id: String(p.id || 'p' + (i + 1)),
       name: explicitName || name,
@@ -86,6 +89,7 @@ function normalize(d) {
       died: String(p.died || ''),
       birthName: rawBirthName,
       note: String(p.note || ''),
+      confidence,
       x: Number.isFinite(+p.x) ? +p.x : 200 + i * 40,
       y: Number.isFinite(+p.y) ? +p.y : 200 + i * 40,
       parents: Array.isArray(p.parents) ? p.parents.map(String).filter(Boolean) : [],
@@ -193,6 +197,13 @@ function familyColor(key) {
   for (const ch of String(key || '')) hash = ((hash << 5) - hash + ch.charCodeAt(0)) | 0;
   return familyPalette[Math.abs(hash) % familyPalette.length];
 }
+function confidenceLabel(value) {
+  return ({ high: 'hoch', medium: 'mittel', low: 'niedrig' })[value || 'high'] || 'hoch';
+}
+function confidenceText(p) {
+  const value = p?.confidence || 'high';
+  return value === 'high' ? '' : `Sicherheit: ${confidenceLabel(value)}`;
+}
 function matchesFamily(p, key = activeFamily) {
   if (!key) return true;
   const own = familyKey(p);
@@ -209,10 +220,45 @@ function nextId() {
 }
 
 // -- View transform helpers --------------------------------------------
+function contentBounds() {
+  const ids = visibleIds();
+  const visible = data.people.filter(p => ids.has(p.id));
+  if (!visible.length) return null;
+  const xs = visible.map(p => p.x);
+  const ys = visible.map(p => p.y);
+  return {
+    minX: Math.min(...xs) - 260,
+    maxX: Math.max(...xs) + 260,
+    minY: Math.min(...ys) - 220,
+    maxY: Math.max(...ys) + 220
+  };
+}
+function clampView() {
+  const bounds = contentBounds();
+  if (!bounds || !main.clientWidth || !main.clientHeight) return;
+  const guard = Math.min(140, Math.max(72, Math.min(main.clientWidth, main.clientHeight) * 0.18));
+  const centerX = main.clientWidth / 2;
+  const centerY = main.clientHeight / 2;
+  const minViewX = guard - bounds.maxX * view.s - centerX;
+  const maxViewX = main.clientWidth - guard - bounds.minX * view.s - centerX;
+  const minViewY = guard - bounds.maxY * view.s - centerY;
+  const maxViewY = main.clientHeight - guard - bounds.minY * view.s - centerY;
+
+  view.x = Math.min(maxViewX, Math.max(minViewX, view.x));
+  view.y = Math.min(maxViewY, Math.max(minViewY, view.y));
+}
 function applyView() {
+  clampView();
   world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.s})`;
   updateZoomClass();
   updateMinimapViewport();
+}
+function withPreservedView(fn) {
+  const previous = { ...view };
+  const result = fn();
+  view = previous;
+  applyView();
+  return result;
 }
 function updateWorldBounds() {
   const margin = 600;
@@ -898,7 +944,8 @@ function personTileContent(p, className = '') {
   const dates = [p.born, p.died && '– ' + p.died].filter(Boolean).join(' ');
   const birth = birthNameDiffers(p) ? ` <span class="birthInfo">(geb. ${esc(p.birthName)})</span>` : '';
   const meta = dates || birth ? `<div class="meta">${esc(dates)}${birth}</div>` : '';
-  const tags = p.note ? `<div class="tags"><span class="tag">${esc(p.note).slice(0,22)}</span></div>` : '';
+  const tileTags = [p.note && p.note.slice(0,22), confidenceText(p)].filter(Boolean);
+  const tags = tileTags.length ? `<div class="tags">${tileTags.map(tag => `<span class="tag">${esc(tag)}</span>`).join('')}</div>` : '';
   const display = visibleName(p);
   const title = fullName(p) !== display ? ` title="${esc(fullName(p))}"` : '';
   const cls = className ? ` class="${className}"` : '';
@@ -1747,6 +1794,7 @@ function formSnapshot() {
     died: $('died')?.value || '',
     birthName: $('birthName')?.value || '',
     note: $('note')?.value || '',
+    confidence: $('confidence')?.value || 'high',
     parent1: $('parent1')?.value || '',
     parent2: $('parent2')?.value || '',
     partner: $('partner')?.value || ''
@@ -1798,6 +1846,7 @@ function renderPersonDetails(p) {
     p.died ? `gest. ${p.died}` : '',
     ageInfo(p)
   ].filter(Boolean).join(' · ') || 'Lebensdaten offen';
+  const confidence = confidenceText(p);
 
   details.innerHTML = `
     <div class="detailHero" style="--family-color:${esc(familyColor(familyKey(p)))}">
@@ -1812,6 +1861,7 @@ function renderPersonDetails(p) {
       <div class="detailBox"><span class="detailLabel">Eltern</span>${relationButtons(parents)}</div>
       <div class="detailBox full"><span class="detailLabel">Geschwister</span>${siblings.length ? relationButtons(siblings) : '<span class="detailValue">Keine eingetragen</span>'}</div>
       <div class="detailBox full"><span class="detailLabel">Kinder</span>${relationButtons(children)}</div>
+      ${confidence ? `<div class="detailBox full"><span class="detailLabel">Sicherheit</span><div class="detailValue">${esc(confidenceLabel(p.confidence))}</div></div>` : ''}
       ${p.note ? `<div class="detailBox full"><span class="detailLabel">Notiz</span><div class="detailValue">${esc(p.note)}</div></div>` : ''}
     </div>
   `;
@@ -1842,12 +1892,13 @@ function openSheet(id) {
   $('died').value = p?.died || '';
   $('birthName').value = p?.birthName || '';
   $('note').value = p?.note || '';
+  $('confidence').value = p?.confidence || 'high';
   fillSelects(id, p?.parents?.[0] || '', p?.parents?.[1] || '');
   sheetSnapshot = formSnapshot();
   renderPersonDetails(p);
 
   const editable = editMode || !p;
-  ['firstName','lastName','nickname','born','died','birthName','note','parent1','parent2','partner'].forEach(id => {
+  ['firstName','lastName','nickname','born','died','birthName','note','confidence','parent1','parent2','partner'].forEach(id => {
     const el = $(id);
     if (el) el.disabled = !editable;
   });
@@ -1885,6 +1936,7 @@ function saveSheet() {
   const nickname = $('nickname').value.trim();
   const born = $('born').value.trim();
   const died = $('died').value.trim();
+  const confidence = $('confidence').value || 'high';
   const parents = [$('parent1').value, $('parent2').value].filter(Boolean);
   const newPartner = $('partner').value;
 
@@ -1892,7 +1944,7 @@ function saveSheet() {
 
   if (!p) {
     const pos = pendingNewPos || screenToWorld(main.getBoundingClientRect().left + main.clientWidth / 2, main.getBoundingClientRect().top + main.clientHeight / 2);
-    p = { id: nextId(), name: '', born: '', died: '', birthName: '', note: '', x: pos.x, y: pos.y, parents: [], partner: '', partners: [] };
+    p = { id: nextId(), name: '', born: '', died: '', birthName: '', note: '', confidence: 'high', x: pos.x, y: pos.y, parents: [], partner: '', partners: [] };
     data.people.push(p);
     pendingNewPos = null;
   }
@@ -1905,6 +1957,7 @@ function saveSheet() {
   p.died = died;
   p.birthName = birthName;
   p.note = $('note').value.trim();
+  p.confidence = confidence;
   p.parents = parents;
 
   if (newPartner) {
@@ -1915,18 +1968,20 @@ function saveSheet() {
     }
   }
 
-  resetGeneratedLayout();
-  save();
-  render();
-  if($('sideNav')?.classList.contains('open')) renderNavigator();
-  if($('listSheet')?.classList.contains('open')) renderListEditor();
-  sheetSnapshot = formSnapshot();
-  closeSheet(true);
+  withPreservedView(() => {
+    resetGeneratedLayout();
+    save();
+    render();
+    if($('sideNav')?.classList.contains('open')) renderNavigator();
+    if($('listSheet')?.classList.contains('open')) renderListEditor();
+    sheetSnapshot = formSnapshot();
+    closeSheet(true);
+  });
   return true;
 }
 
 function newPersonNear(base, dx, dy) {
-  return { id: nextId(), name: 'Neue Person', born: '', died: '', birthName: '', note: '', x: Math.round((base?.x ?? 400) + dx), y: Math.round((base?.y ?? 300) + dy), parents: [], partner: '', partners: [] };
+  return { id: nextId(), name: 'Neue Person', born: '', died: '', birthName: '', note: '', confidence: 'high', x: Math.round((base?.x ?? 400) + dx), y: Math.round((base?.y ?? 300) + dy), parents: [], partner: '', partners: [] };
 }
 function addChildFor(id) {
   const p = person(id); if (!p) return;
@@ -2239,7 +2294,7 @@ function renderNavigator(){
 function personSearchText(p){
   const parentNames = (p.parents||[]).map(id=>person(id)?.name||'').join(' ');
   const partnerName = partnerIds(p).map(id => person(id)?.name || '').join(' ');
-  return [p.name,p.birthName,p.born,p.died,p.note,parentNames,partnerName].join(' ').toLowerCase();
+  return [p.name,p.birthName,p.born,p.died,p.note,confidenceText(p),parentNames,partnerName].join(' ').toLowerCase();
 }
 function comparePeopleForList(a,b){
   if(listSortMode === 'name'){
@@ -2267,11 +2322,12 @@ function renderListEditor(){
     const partner = partnerIds(p).map(id => person(id)?.name || id).join(', ');
     const birth = birthNameDiffers(p) ? ` · geb. ${esc(p.birthName)}` : '';
     const dates = [p.born, p.died && '– '+p.died].filter(Boolean).join(' ');
+    const confidence = confidenceText(p);
     return `
       <div class="listRow" tabindex="0" data-id="${esc(p.id)}">
         <div>
           <div class="listName">${esc(p.name)}</div>
-          <div class="listMeta">${esc([dates, birth].filter(Boolean).join('')) || 'Lebensdaten offen'}</div>
+          <div class="listMeta">${esc([dates, birth.trim(), confidence].filter(Boolean).join(' · ')) || 'Lebensdaten offen'}</div>
           <div class="listMeta">${partner ? 'Partner/in: '+esc(partner) : ''}${parents ? (partner ? ' · ' : '') + 'Eltern: '+esc(parents) : ''}</div>
         </div>
         <div class="listActions">
