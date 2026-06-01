@@ -109,17 +109,21 @@ function load() {
 }
 async function loadDefaultDataIfAvailable() {
   if (localStorage.getItem(storeKey)) return;
+  await loadDefaultData({ saveResult: true, fitResult: true });
+}
+async function loadDefaultData({ saveResult = true, fitResult = true } = {}) {
   try {
     const response = await fetch(defaultDataUrl, { cache: 'no-store' });
-    if (!response.ok) return;
-    const imported = normalize(await response.json());
-    data = imported;
-    save();
-    render();
-    fit();
-    if ($('sideNav')?.classList.contains('open')) renderNavigator();
-    if ($('scrollSheet')?.classList.contains('open')) renderScrollView();
-  } catch {}
+    if (!response.ok) throw new Error('Default JSON not reachable');
+    data = normalize(await response.json());
+  } catch {
+    data = normalize(structuredClone(sample));
+  }
+  if (saveResult) save();
+  render();
+  if (fitResult) fit();
+  if ($('sideNav')?.classList.contains('open')) renderNavigator();
+  if ($('scrollSheet')?.classList.contains('open')) renderScrollView();
 }
 function save() { localStorage.setItem(storeKey, JSON.stringify(data, null, 2)); }
 function person(id) { return data.people.find(p => p.id === id); }
@@ -2456,19 +2460,27 @@ $('collapseAllBtn').addEventListener('click', () => {
   saveCollapsed(); autoLayout();
 });
 
-$('resetBtn').addEventListener('click', () => {
+$('resetBtn').addEventListener('click', async () => {
   if (confirm('Beispiel wirklich zurücksetzen?')) {
-    data = normalize(structuredClone(sample));
+    localStorage.removeItem(storeKey);
+    localStorage.removeItem(storeKey + '-collapsed');
+    localStorage.removeItem(storeKey + '-root');
+    collapsed = new Set();
     focusMode = false;
     focusId = null;
     activeFamily = '';
     rootId = '';
-    localStorage.removeItem(storeKey + '-root');
+    selected = null;
+    closeSheet(true);
+    closeListEditor();
+    closeNavigator();
+    closeSearch();
+    closeBirthdays();
+    closeCheck();
+    closeScrollView();
     updateFocusButton();
     updateRootButton();
-    save();
-    render();
-    fit();
+    await loadDefaultData({ saveResult: true, fitResult: true });
   }
 });
 
