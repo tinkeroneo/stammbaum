@@ -402,13 +402,9 @@ function parentGroupKey(ids) {
 function parentGroupPoint(parents, children) {
   const parentX = parents.reduce((sum, p) => sum + p.x, 0) / parents.length;
   const parentY = parents.reduce((sum, p) => sum + p.y, 0) / parents.length;
-  const childXs = children.map(c => c.x).sort((a,b) => a - b);
-  const childCenterX = childXs.reduce((sum, x) => sum + x, 0) / childXs.length;
-  const childSpread = childXs[childXs.length - 1] - childXs[0];
   const firstChildY = Math.min(...children.map(c => c.y));
   const hubY = Math.min(parentY + 78, firstChildY - 72);
-  const hubX = childSpread > 1200 && Math.abs(childCenterX - parentX) > 420 ? childCenterX : parentX;
-  return { x: hubX, y: Math.max(parentY + 34, hubY) };
+  return { x: parentX, y: Math.max(parentY + 34, hubY) };
 }
 function renderFamilyLines(visible) {
   const groups = new Map();
@@ -1635,7 +1631,7 @@ function autoLayout(saveResult = true) {
     });
   }
 
-  function compactLeafSiblings() {
+  function compactThinSiblingUnits() {
     const groups = new Map();
     for (const child of data.people) {
       const key = parentGroupKey(child.parents || []);
@@ -1646,28 +1642,66 @@ function autoLayout(saveResult = true) {
 
     for (const siblings of groups.values()) {
       if (siblings.length < 2) continue;
-      const leafs = siblings.filter(child => !(childrenOf.get(child.id) || []).length && !partnerIds(child).length && !collapsed.has(child.id));
-      const anchors = siblings.filter(child => !leafs.includes(child));
-      if (!leafs.length || !anchors.length) continue;
+      const siblingIds = new Set(siblings.map(child => child.id));
+      const thinUnits = [];
+      const thinIds = new Set();
+      const seenUnits = new Set();
 
+      for (const child of siblings) {
+        if ((childrenOf.get(child.id) || []).length || collapsed.has(child.id)) continue;
+        const members = [child];
+        for (const partnerId of partnerIds(child)) {
+          const partner = byId.get(partnerId);
+          if (!partner) continue;
+          if ((childrenOf.get(partner.id) || []).length) continue;
+          members.push(partner);
+        }
+        const unitKey = members.map(member => member.id).sort().join('|');
+        if (seenUnits.has(unitKey)) continue;
+        seenUnits.add(unitKey);
+        const xs = members.map(member => member.x);
+        thinUnits.push({
+          child,
+          members,
+          center: xs.reduce((sum, x) => sum + x, 0) / xs.length,
+          width: Math.max(minSingle, Math.max(...xs) - Math.min(...xs) + minSingle)
+        });
+        members.forEach(member => {
+          if (siblingIds.has(member.id)) thinIds.add(member.id);
+        });
+      }
+
+      const anchors = siblings.filter(child => !thinIds.has(child.id));
+      if (!thinUnits.length) continue;
+
+      const parentIds = siblings[0].parents || [];
+      const parentCenter = parentIds
+        .map(id => byId.get(id))
+        .filter(Boolean)
+        .reduce((sum, parent, idx, arr) => sum + parent.x / arr.length, 0);
       const occupied = anchors.map(child => child.x).sort((a,b) => a - b);
-      const anchorCenter = occupied.reduce((sum, x) => sum + x, 0) / occupied.length;
+      const anchorCenter = occupied.length
+        ? occupied.reduce((sum, x) => sum + x, 0) / occupied.length
+        : parentCenter || siblings.reduce((sum, child) => sum + child.x, 0) / siblings.length;
       const y = Math.round(siblings.reduce((sum, child) => sum + child.y, 0) / siblings.length);
-      const offsets = [0, -190, 190, -380, 380, -570, 570];
+      const offsets = [0, -240, 240, -480, 480, -720, 720, -960, 960];
 
-      leafs
-        .sort((a,b) => (birthSortValue(a) ?? Infinity) - (birthSortValue(b) ?? Infinity) || fullName(a).localeCompare(fullName(b)))
-        .forEach((leaf, idx) => {
-          let target = leaf.x;
+      thinUnits
+        .sort((a,b) => (birthSortValue(a.child) ?? Infinity) - (birthSortValue(b.child) ?? Infinity) || a.center - b.center)
+        .forEach((unit, idx) => {
+          let target = unit.center;
           for (const offset of offsets) {
             const candidate = Math.round(anchorCenter + offset + idx * 8);
-            if (occupied.every(x => Math.abs(x - candidate) >= 150)) {
+            if (occupied.every(x => Math.abs(x - candidate) >= Math.max(160, unit.width / 2 + 70))) {
               target = candidate;
               break;
             }
           }
-          leaf.x = target;
-          leaf.y = y;
+          const delta = target - unit.center;
+          unit.members.forEach(member => {
+            member.x = Math.round(member.x + delta);
+            member.y = y;
+          });
           occupied.push(target);
           occupied.sort((a,b) => a - b);
         });
@@ -1713,7 +1747,7 @@ function autoLayout(saveResult = true) {
     left += w + 44;
   });
 
-  compactLeafSiblings();
+  compactThinSiblingUnits();
   alignPartnerClusters();
 
   if (saveResult) {
