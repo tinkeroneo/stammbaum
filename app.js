@@ -1674,6 +1674,31 @@ function autoLayout(saveResult = true) {
     }
   }
 
+  function alignPartnerClusters() {
+    const handled = new Set();
+    for (const p of data.people) {
+      const partners = partnerIds(p).map(id => byId.get(id)).filter(Boolean);
+      if (partners.length < 2) continue;
+
+      const clusterKey = [p.id, ...partners.map(q => q.id)].sort().join('|');
+      if (handled.has(clusterKey)) continue;
+      handled.add(clusterKey);
+
+      const primary = byId.get(p.partner) || partners[0];
+      const secondary = partners
+        .filter(q => q.id !== primary?.id)
+        .sort((a,b) => (birthSortValue(a) ?? Infinity) - (birthSortValue(b) ?? Infinity) || fullName(a).localeCompare(fullName(b)));
+      if (!secondary.length) continue;
+
+      const primaryOnRight = !primary || primary.x >= p.x;
+      const direction = primaryOnRight ? -1 : 1;
+      secondary.forEach((partner, idx) => {
+        partner.x = Math.round(p.x + direction * pairGap * (idx + 1));
+        partner.y = p.y;
+      });
+    }
+  }
+
   let left = startX;
   rootCandidates.forEach((r, idx) => {
     const w = subtreeWidth(r.id);
@@ -1689,6 +1714,7 @@ function autoLayout(saveResult = true) {
   });
 
   compactLeafSiblings();
+  alignPartnerClusters();
 
   if (saveResult) {
     clearGeneratedLayoutState();
