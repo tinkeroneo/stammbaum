@@ -1745,7 +1745,7 @@ function autoLayout(saveResult = true) {
   });
 
   data.people.forEach((p, idx) => {
-    if (placed.has(p.id)) return;
+    if (placed.has(p.id) || used.has(p.id)) return;
     const w = subtreeWidth(p.id);
     place(p.id, left, depthOf(p), idx);
     left += w + 44;
