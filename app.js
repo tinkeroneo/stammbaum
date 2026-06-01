@@ -1561,6 +1561,10 @@ function autoLayout(saveResult = true) {
 
   for (const p of data.people) {
     if (hasParents(p) || used.has(p.id)) continue;
+    if (partnerIds(p).some(pid => hasParents(byId.get(pid)))) {
+      used.add(p.id);
+      continue;
+    }
     const q = partnerOf(p);
     if (q && hasParents(q)) continue;
 
