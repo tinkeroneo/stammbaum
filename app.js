@@ -1581,6 +1581,110 @@ function autoLayout(saveResult = true) {
     return br - ar || subtreeWidth(b.id) - subtreeWidth(a.id);
   });
 
+  function rootGenerationDistances() {
+    const distances = new Map();
+    for (const root of rootCandidates) {
+      const queue = unitIds(root)
+        .filter(id => byId.has(id))
+        .map(id => ({ id, depth: 0 }));
+      const seen = new Set();
+
+      while (queue.length) {
+        const item = queue.shift();
+        if (!item.id || seen.has(item.id)) continue;
+        seen.add(item.id);
+
+        if (!distances.has(item.id)) distances.set(item.id, new Map());
+        const roots = distances.get(item.id);
+        if (!roots.has(root.id) || item.depth < roots.get(root.id)) {
+          roots.set(root.id, item.depth);
+        }
+
+        for (const child of childrenOf.get(item.id) || []) {
+          queue.push({ id: child.id, depth: item.depth + 1 });
+        }
+      }
+    }
+    return distances;
+  }
+
+  function generationOffsetsForBridgePairs() {
+    const distances = rootGenerationDistances();
+    const graph = new Map(rootCandidates.map(root => [root.id, []]));
+    const seenPairs = new Set();
+    const bestConstraints = new Map();
+
+    const addConstraint = (fromRoot, toRoot, delta) => {
+      if (fromRoot === toRoot || !graph.has(fromRoot) || !graph.has(toRoot)) return;
+      graph.get(fromRoot).push({ id: toRoot, delta });
+      graph.get(toRoot).push({ id: fromRoot, delta: -delta });
+    };
+
+    for (const p of data.people) {
+      if (!hasParents(p)) continue;
+      for (const partnerId of partnerIds(p)) {
+        const q = byId.get(partnerId);
+        if (!q || !hasParents(q)) continue;
+        const pairKey = [p.id, q.id].sort().join('|');
+        if (seenPairs.has(pairKey)) continue;
+        seenPairs.add(pairKey);
+
+        const pRoots = distances.get(p.id);
+        const qRoots = distances.get(q.id);
+        if (!pRoots || !qRoots) continue;
+
+        for (const [pRoot, pDepth] of pRoots.entries()) {
+          for (const [qRoot, qDepth] of qRoots.entries()) {
+            if (pRoot === qRoot) continue;
+            const rootsKey = [pRoot, qRoot].sort().join('|');
+            const score = Math.max(pDepth, qDepth);
+            const current = bestConstraints.get(rootsKey);
+            if (!current || score < current.score) {
+              bestConstraints.set(rootsKey, {
+                fromRoot: pRoot,
+                toRoot: qRoot,
+                delta: pDepth - qDepth,
+                score
+              });
+            }
+          }
+        }
+      }
+    }
+
+    for (const constraint of bestConstraints.values()) {
+      addConstraint(constraint.fromRoot, constraint.toRoot, constraint.delta);
+    }
+
+    const offsets = new Map(rootCandidates.map(root => [root.id, 0]));
+    const visited = new Set();
+    for (const root of rootCandidates) {
+      if (visited.has(root.id)) continue;
+      const queue = [root.id];
+      visited.add(root.id);
+
+      while (queue.length) {
+        const rootId = queue.shift();
+        const current = offsets.get(rootId) || 0;
+        for (const edge of graph.get(rootId) || []) {
+          if (visited.has(edge.id)) continue;
+          offsets.set(edge.id, current + edge.delta);
+          visited.add(edge.id);
+          queue.push(edge.id);
+        }
+      }
+    }
+
+    const minOffset = Math.min(0, ...offsets.values());
+    if (minOffset < 0) {
+      for (const [rootId, offset] of offsets.entries()) offsets.set(rootId, offset - minOffset);
+    }
+
+    return offsets;
+  }
+
+  const rootGenerationOffsets = generationOffsetsForBridgePairs();
+
   function yForPerson(p, fallbackDepth, siblingIndex = 0){
     const depth = Number.isFinite(fallbackDepth) ? fallbackDepth : depthOf(p);
     return Math.round(rootY + depth * fallbackRowGap);
@@ -1740,7 +1844,7 @@ function autoLayout(saveResult = true) {
   let left = startX;
   rootCandidates.forEach((r, idx) => {
     const w = subtreeWidth(r.id);
-    place(r.id, left, 0, idx);
+    place(r.id, left, rootGenerationOffsets.get(r.id) || 0, idx);
     left += w + 44;
   });
 
