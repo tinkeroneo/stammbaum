@@ -2,7 +2,7 @@
   "metadata": {
     "title": "Stammbaum korreliert v2",
     "description": "Aus Bild-Extrakt plus vorhandenem JSON korreliert, damit im Bild/JSON vorhandene Personen nicht verloren gehen.",
-    "peopleCount": 334,
+    "peopleCount": 332,
     "notes": [
       "IDs sind neu und stabil innerhalb dieser Datei.",
       "Gleichnamige Personen werden nur bei exakt gleichen Namen und Daten zusammengeführt.",
@@ -1104,7 +1104,8 @@
       "x": 27399,
       "y": 500,
       "parents": [
-        "p327"
+        "p348",
+        "p350"
       ],
       "partner": "k0168",
       "partners": [
@@ -5981,40 +5982,6 @@
         "k0211",
         "k0212"
       ],
-      "partner": "",
-      "partners": []
-    },
-    {
-      "id": "p327",
-      "name": "Generation -1 Bodensteiner",
-      "firstName": "Generation -1",
-      "lastName": "Bodensteiner",
-      "nickname": "",
-      "born": "",
-      "died": "",
-      "birthName": "",
-      "note": "",
-      "x": 27484,
-      "y": 315,
-      "parents": [
-        "p328"
-      ],
-      "partner": "",
-      "partners": []
-    },
-    {
-      "id": "p328",
-      "name": "Generation -2 Bodensteiner",
-      "firstName": "Generation -2",
-      "lastName": "Bodensteiner",
-      "nickname": "",
-      "born": "",
-      "died": "",
-      "birthName": "",
-      "note": "",
-      "x": 27484,
-      "y": 130,
-      "parents": [],
       "partner": "",
       "partners": []
     },
