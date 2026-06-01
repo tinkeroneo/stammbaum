@@ -2,7 +2,7 @@
   "metadata": {
     "title": "Stammbaum korreliert v2",
     "description": "Aus Bild-Extrakt plus vorhandenem JSON korreliert, damit im Bild/JSON vorhandene Personen nicht verloren gehen.",
-    "peopleCount": 332,
+    "peopleCount": 341,
     "notes": [
       "IDs sind neu und stabil innerhalb dieser Datei.",
       "Gleichnamige Personen werden nur bei exakt gleichen Namen und Daten zusammengeführt.",
@@ -6385,6 +6385,186 @@
       "partners": [
         "p348"
       ]
+    },
+    {
+      "id": "p351",
+      "name": "Maria Bodensteiner",
+      "firstName": "Maria",
+      "lastName": "Bodensteiner",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "confidence": "high",
+      "x": 26620,
+      "y": 1135,
+      "parents": [
+        "p348",
+        "p350"
+      ],
+      "partner": "",
+      "partners": []
+    },
+    {
+      "id": "p352",
+      "name": "Paul Bodensteiner",
+      "firstName": "Paul",
+      "lastName": "Bodensteiner",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "confidence": "high",
+      "x": 26810,
+      "y": 1135,
+      "parents": [
+        "p348",
+        "p350"
+      ],
+      "partner": "",
+      "partners": []
+    },
+    {
+      "id": "p353",
+      "name": "Margaretha Bodensteiner",
+      "firstName": "Margaretha",
+      "lastName": "Bodensteiner",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "confidence": "high",
+      "x": 27000,
+      "y": 1135,
+      "parents": [
+        "p348",
+        "p350"
+      ],
+      "partner": "",
+      "partners": []
+    },
+    {
+      "id": "p354",
+      "name": "Josef Bodensteiner",
+      "firstName": "Josef",
+      "lastName": "Bodensteiner",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "confidence": "high",
+      "x": 27190,
+      "y": 1135,
+      "parents": [
+        "p348",
+        "p350"
+      ],
+      "partner": "",
+      "partners": []
+    },
+    {
+      "id": "p355",
+      "name": "Barbara Bodensteiner",
+      "firstName": "Barbara",
+      "lastName": "Bodensteiner",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "confidence": "high",
+      "x": 27830,
+      "y": 1135,
+      "parents": [
+        "p348",
+        "p350"
+      ],
+      "partner": "",
+      "partners": []
+    },
+    {
+      "id": "p356",
+      "name": "Johann Bodensteiner",
+      "firstName": "Johann",
+      "lastName": "Bodensteiner",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "confidence": "high",
+      "x": 28020,
+      "y": 1135,
+      "parents": [
+        "p348",
+        "p350"
+      ],
+      "partner": "",
+      "partners": []
+    },
+    {
+      "id": "p357",
+      "name": "Franz Bodensteiner",
+      "firstName": "Franz",
+      "lastName": "Bodensteiner",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "confidence": "high",
+      "x": 28210,
+      "y": 1135,
+      "parents": [
+        "p348",
+        "p350"
+      ],
+      "partner": "",
+      "partners": []
+    },
+    {
+      "id": "p358",
+      "name": "Anna Bodensteiner",
+      "firstName": "Anna",
+      "lastName": "Bodensteiner",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "confidence": "high",
+      "x": 28400,
+      "y": 1135,
+      "parents": [
+        "p348",
+        "p350"
+      ],
+      "partner": "",
+      "partners": []
+    },
+    {
+      "id": "p359",
+      "name": "Therese Bodensteiner",
+      "firstName": "Therese",
+      "lastName": "Bodensteiner",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "confidence": "high",
+      "x": 28590,
+      "y": 1135,
+      "parents": [
+        "p348",
+        "p350"
+      ],
+      "partner": "",
+      "partners": []
     }
   ]
 }
