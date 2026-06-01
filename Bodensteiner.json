@@ -2,7 +2,7 @@
   "metadata": {
     "title": "Stammbaum korreliert v2",
     "description": "Aus Bild-Extrakt plus vorhandenem JSON korreliert, damit im Bild/JSON vorhandene Personen nicht verloren gehen.",
-    "peopleCount": 279,
+    "peopleCount": 334,
     "notes": [
       "IDs sind neu und stabil innerhalb dieser Datei.",
       "Gleichnamige Personen werden nur bei exakt gleichen Namen und Daten zusammengeführt.",
@@ -1986,13 +1986,13 @@
     },
     {
       "id": "k0168",
-      "name": "Theresia Gollwitzer",
+      "name": "Theresia Bodensteiner",
       "firstName": "Theresia",
-      "lastName": "Gollwitzer",
+      "lastName": "Bodensteiner",
       "nickname": "",
       "born": "",
       "died": "",
-      "birthName": "",
+      "birthName": "Gollwitzer",
       "note": "",
       "x": 27569,
       "y": 500,
@@ -6017,6 +6017,407 @@
       "parents": [],
       "partner": "",
       "partners": []
+    },
+    {
+      "id": "p329",
+      "name": "Wolf Podensteiner",
+      "firstName": "Wolf",
+      "lastName": "Podensteiner",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 27674,
+      "y": 130,
+      "parents": [],
+      "partner": "",
+      "partners": []
+    },
+    {
+      "id": "p330",
+      "name": "Nikolaus Podensteiner",
+      "firstName": "Nikolaus",
+      "lastName": "Podensteiner",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 27674,
+      "y": 315,
+      "parents": [
+        "p329"
+      ],
+      "partner": "",
+      "partners": []
+    },
+    {
+      "id": "p331",
+      "name": "Hans Bodensteiner",
+      "firstName": "Hans",
+      "lastName": "Bodensteiner",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 27674,
+      "y": 500,
+      "parents": [
+        "p330"
+      ],
+      "partner": "",
+      "partners": []
+    },
+    {
+      "id": "p332",
+      "name": "Hans Bodensteiner",
+      "firstName": "Hans",
+      "lastName": "Bodensteiner",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 27589,
+      "y": 685,
+      "parents": [
+        "p331"
+      ],
+      "partner": "p333",
+      "partners": [
+        "p333"
+      ]
+    },
+    {
+      "id": "p333",
+      "name": "Eva Peuerl",
+      "firstName": "Eva",
+      "lastName": "Peuerl",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 27759,
+      "y": 685,
+      "parents": [],
+      "partner": "p332",
+      "partners": [
+        "p332"
+      ]
+    },
+    {
+      "id": "p334",
+      "name": "Adam Bodensteiner",
+      "firstName": "Adam",
+      "lastName": "Bodensteiner",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 27589,
+      "y": 870,
+      "parents": [
+        "p332",
+        "p333"
+      ],
+      "partner": "p335",
+      "partners": [
+        "p335"
+      ]
+    },
+    {
+      "id": "p335",
+      "name": "Barbara Pielmeier",
+      "firstName": "Barbara",
+      "lastName": "Pielmeier",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 27759,
+      "y": 870,
+      "parents": [],
+      "partner": "p334",
+      "partners": [
+        "p334"
+      ]
+    },
+    {
+      "id": "p336",
+      "name": "Hans Adam Bodensteiner",
+      "firstName": "Hans Adam",
+      "lastName": "Bodensteiner",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 27494,
+      "y": 1055,
+      "parents": [
+        "p334",
+        "p335"
+      ],
+      "partner": "p338",
+      "partners": [
+        "p338"
+      ]
+    },
+    {
+      "id": "p337",
+      "name": "Magdalena Bodensteiner",
+      "firstName": "Magdalena",
+      "lastName": "Bodensteiner",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 31932,
+      "y": 1055,
+      "parents": [
+        "p334",
+        "p335"
+      ],
+      "partner": "",
+      "partners": []
+    },
+    {
+      "id": "p338",
+      "name": "Anna Margaretha Lukas",
+      "firstName": "Anna Margaretha",
+      "lastName": "Lukas",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 27664,
+      "y": 1055,
+      "parents": [],
+      "partner": "p336",
+      "partners": [
+        "p336"
+      ]
+    },
+    {
+      "id": "p339",
+      "name": "Johann Bodensteiner",
+      "firstName": "Johann",
+      "lastName": "Bodensteiner",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 27494,
+      "y": 1240,
+      "parents": [
+        "p336",
+        "p338"
+      ],
+      "partner": "p340",
+      "partners": [
+        "p340"
+      ]
+    },
+    {
+      "id": "p340",
+      "name": "Barbara Aertl",
+      "firstName": "Barbara",
+      "lastName": "Aertl",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 27664,
+      "y": 1240,
+      "parents": [],
+      "partner": "p339",
+      "partners": [
+        "p339"
+      ]
+    },
+    {
+      "id": "p341",
+      "name": "Georg Bartholomäus Bodensteiner",
+      "firstName": "Georg Bartholomäus",
+      "lastName": "Bodensteiner",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 27494,
+      "y": 1425,
+      "parents": [
+        "p339",
+        "p340"
+      ],
+      "partner": "p342",
+      "partners": [
+        "p342"
+      ]
+    },
+    {
+      "id": "p342",
+      "name": "Maria Anna Stahl",
+      "firstName": "Maria Anna",
+      "lastName": "Stahl",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 27664,
+      "y": 1425,
+      "parents": [],
+      "partner": "p341",
+      "partners": [
+        "p341"
+      ]
+    },
+    {
+      "id": "p343",
+      "name": "Georg Thomas Adam Bodensteiner",
+      "firstName": "Georg Thomas Adam",
+      "lastName": "Bodensteiner",
+      "nickname": "",
+      "born": "08.1802",
+      "died": "26.06.1878",
+      "birthName": "",
+      "note": "",
+      "x": 27494,
+      "y": 1610,
+      "parents": [
+        "p341",
+        "p342"
+      ],
+      "partner": "p344",
+      "partners": [
+        "p344"
+      ]
+    },
+    {
+      "id": "p344",
+      "name": "Katharina Ertl",
+      "firstName": "Katharina",
+      "lastName": "Ertl",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 27664,
+      "y": 1610,
+      "parents": [],
+      "partner": "p343",
+      "partners": [
+        "p343"
+      ]
+    },
+    {
+      "id": "p345",
+      "name": "Georg Bartholomäus Bodensteiner",
+      "firstName": "Georg Bartholomäus",
+      "lastName": "Bodensteiner",
+      "nickname": "",
+      "born": "08.1843",
+      "died": "24.05.1910",
+      "birthName": "",
+      "note": "",
+      "x": 27494,
+      "y": 1795,
+      "parents": [
+        "p343",
+        "p344"
+      ],
+      "partner": "p346",
+      "partners": [
+        "p346"
+      ]
+    },
+    {
+      "id": "p346",
+      "name": "Barbara Lukas",
+      "firstName": "Barbara",
+      "lastName": "Lukas",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 27664,
+      "y": 1795,
+      "parents": [],
+      "partner": "p345",
+      "partners": [
+        "p345"
+      ]
+    },
+    {
+      "id": "p347",
+      "name": "Elisabeth Bodensteiner",
+      "firstName": "Elisabeth",
+      "lastName": "Bodensteiner",
+      "nickname": "",
+      "born": "16.05.1873",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 23416,
+      "y": 1980,
+      "parents": [
+        "p345",
+        "p346"
+      ],
+      "partner": "",
+      "partners": []
+    },
+    {
+      "id": "p348",
+      "name": "Bartl Bodensteiner",
+      "firstName": "Bartl",
+      "lastName": "Bodensteiner",
+      "nickname": "",
+      "born": "29.01.1877",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 27589,
+      "y": 1980,
+      "parents": [
+        "p345",
+        "p346"
+      ],
+      "partner": "p350",
+      "partners": [
+        "p350"
+      ]
+    },
+    {
+      "id": "p350",
+      "name": "Margaretha Waldhier",
+      "firstName": "Margaretha",
+      "lastName": "Waldhier",
+      "nickname": "",
+      "born": "",
+      "died": "",
+      "birthName": "",
+      "note": "",
+      "x": 27759,
+      "y": 1980,
+      "parents": [],
+      "partner": "p348",
+      "partners": [
+        "p348"
+      ]
     }
   ]
 }
