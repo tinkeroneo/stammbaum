@@ -686,7 +686,10 @@ function updateModeUI() {
   document.body.classList.toggle('viewMode', !editMode);
   const btn = $('modeBtn');
   if (btn) {
-    btn.textContent = editMode ? 'Ansehen' : 'Bearbeiten';
+    const label = editMode ? 'Ansehen' : 'Bearbeiten';
+    btn.textContent = editMode ? '👁' : '✎';
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
     btn.setAttribute('aria-pressed', editMode ? 'true' : 'false');
     btn.classList.add('primary');
   }
@@ -718,6 +721,57 @@ function updateLayoutButton() {
   const labels = { classic: 'Klassisch', tree: 'Baum', radial: 'Radial' };
   const btn = $('layoutBtn');
   if (btn) btn.textContent = `Layout: ${labels[layoutMode]}`;
+}
+function closeSettingsMenu() {
+  const menu = $('settingsMenu');
+  const btn = $('settingsBtn');
+  if (!menu) return;
+  menu.classList.remove('open');
+  menu.setAttribute('aria-hidden', 'true');
+  btn?.setAttribute('aria-expanded', 'false');
+}
+function toggleSettingsMenu() {
+  const menu = $('settingsMenu');
+  const btn = $('settingsBtn');
+  if (!menu) return;
+  const open = !menu.classList.contains('open');
+  if (open && btn) {
+    const rect = btn.getBoundingClientRect();
+    const menuWidth = Math.min(248, window.innerWidth - 28);
+    const left = Math.min(Math.max(10, rect.left), window.innerWidth - menuWidth - 10);
+    const bottom = Math.max(58, window.innerHeight - rect.top + 10);
+    menu.style.left = `${left}px`;
+    menu.style.bottom = `${bottom}px`;
+  }
+  menu.classList.toggle('open', open);
+  menu.setAttribute('aria-hidden', open ? 'false' : 'true');
+  btn?.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+function closeFileMenu() {
+  const menu = $('fileMenu');
+  const btn = $('fileBtn');
+  if (!menu) return;
+  menu.classList.remove('open');
+  menu.setAttribute('aria-hidden', 'true');
+  btn?.setAttribute('aria-expanded', 'false');
+}
+function toggleFileMenu() {
+  const menu = $('fileMenu');
+  const btn = $('fileBtn');
+  if (!menu) return;
+  const open = !menu.classList.contains('open');
+  if (open && btn) {
+    const rect = btn.getBoundingClientRect();
+    const menuWidth = Math.min(220, window.innerWidth - 28);
+    const left = Math.min(Math.max(10, rect.right - menuWidth), window.innerWidth - menuWidth - 10);
+    menu.style.left = `${left}px`;
+    menu.style.right = 'auto';
+    menu.style.top = `${rect.bottom + 8}px`;
+  }
+  menu.classList.toggle('open', open);
+  menu.setAttribute('aria-hidden', open ? 'false' : 'true');
+  btn?.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (open) closeSettingsMenu();
 }
 function updateRootButton() {
   const btn = $('rootBtn');
@@ -1454,13 +1508,15 @@ function autoLayout(saveResult = true) {
     }
   }
 
-  const pairGap = 170;
-  const nodeGap = 34;
-  const parentGroupGap = 78;
+  const pairGap = 186;
+  const nodeGap = 36;
+  const parentGroupGap = 86;
   const rootY = 130;
   const startX = 110;
-  const minSingle = 156;
-  const minPair = 318;
+  const singleCardWidth = 196;
+  const coupleCardWidth = 322;
+  const minSingle = 196;
+  const minPair = 352;
   const fallbackRowGap = 185;
   const memo = new Map();
   const depthMemo = new Map();
@@ -1842,22 +1898,114 @@ function autoLayout(saveResult = true) {
     }
   }
 
+  function resolveRowOverlaps() {
+    const rowTolerance = 92;
+    const minGap = 18;
+    const usedInUnit = new Set();
+    const units = [];
+
+    const sameRow = (a, b) => Math.abs(a.y - b.y) <= 8;
+    for (const p of data.people) {
+      if (usedInUnit.has(p.id)) continue;
+      const partner = partnerIds(p)
+        .map(id => byId.get(id))
+        .find(q => q && !usedInUnit.has(q.id) && sameRow(p, q));
+      if (partner) {
+        const members = [p, partner].sort((a,b) => a.x - b.x || a.id.localeCompare(b.id));
+        members.forEach(member => usedInUnit.add(member.id));
+        const minX = Math.min(...members.map(member => member.x));
+        const maxX = Math.max(...members.map(member => member.x));
+        const center = (minX + maxX) / 2;
+        units.push({
+          members,
+          center,
+          y: Math.round(members.reduce((sum, member) => sum + member.y, 0) / members.length),
+          width: Math.max(coupleCardWidth, maxX - minX + singleCardWidth)
+        });
+      } else {
+        usedInUnit.add(p.id);
+        units.push({ members: [p], center: p.x, y: p.y, width: singleCardWidth });
+      }
+    }
+
+    const rows = [];
+    for (const unit of units.sort((a,b) => a.y - b.y || a.center - b.center)) {
+      const row = rows.find(item => Math.abs(item.y - unit.y) <= rowTolerance);
+      if (row) {
+        row.units.push(unit);
+        row.y = row.units.reduce((sum, item) => sum + item.y, 0) / row.units.length;
+      } else {
+        rows.push({ y: unit.y, units: [unit] });
+      }
+    }
+
+    for (const row of rows) {
+      const rowUnits = row.units.sort((a,b) => a.center - b.center);
+      let rightEdge = -Infinity;
+      for (const unit of rowUnits) {
+        const half = unit.width / 2;
+        const minCenter = rightEdge + minGap + half;
+        const target = Math.max(unit.center, minCenter);
+        const delta = Math.round(target - unit.center);
+        if (delta) {
+          unit.members.forEach(member => {
+            member.x = Math.round(member.x + delta);
+          });
+          unit.center += delta;
+        }
+        rightEdge = unit.center + half;
+      }
+    }
+  }
+
+  function packRelationComponents() {
+    const componentGap = 96;
+    let nextLeft = startX;
+
+    const boxes = relationComponents()
+      .map(ids => {
+        const people = ids.map(id => byId.get(id)).filter(Boolean);
+        if (!people.length) return null;
+        return {
+          people,
+          minX: Math.min(...people.map(p => p.x)),
+          maxX: Math.max(...people.map(p => p.x)),
+          minY: Math.min(...people.map(p => p.y)),
+          count: people.length
+        };
+      })
+      .filter(Boolean)
+      .sort((a,b) => a.minX - b.minX || b.count - a.count || a.minY - b.minY);
+
+    for (const box of boxes) {
+      const targetLeft = Math.max(startX, nextLeft);
+      const delta = Math.round(targetLeft - box.minX);
+      if (delta) {
+        box.people.forEach(p => { p.x = Math.round(p.x + delta); });
+        box.maxX += delta;
+      }
+      nextLeft = box.maxX + componentGap;
+    }
+  }
+
   let left = startX;
   rootCandidates.forEach((r, idx) => {
     const w = subtreeWidth(r.id);
     place(r.id, left, rootGenerationOffsets.get(r.id) || 0, idx);
-    left += w + 44;
+    left += w + 18;
   });
 
   data.people.forEach((p, idx) => {
     if (placed.has(p.id) || used.has(p.id)) return;
     const w = subtreeWidth(p.id);
     place(p.id, left, depthOf(p), idx);
-    left += w + 44;
+    left += w + 18;
   });
 
   compactThinSiblingUnits();
   alignPartnerClusters();
+  resolveRowOverlaps();
+  packRelationComponents();
 
   if (saveResult) {
     clearGeneratedLayoutState();
@@ -2599,7 +2747,9 @@ window.addEventListener('keydown', e => {
   const active = document.activeElement;
   const isTyping = active && ['INPUT','TEXTAREA','SELECT'].includes(active.tagName);
   if (e.key === 'Escape') {
-    if ($('sheet').classList.contains('open')) { closeSheet(); e.preventDefault(); }
+    if ($('fileMenu')?.classList.contains('open')) { closeFileMenu(); e.preventDefault(); }
+    else if ($('settingsMenu')?.classList.contains('open')) { closeSettingsMenu(); e.preventDefault(); }
+    else if ($('sheet').classList.contains('open')) { closeSheet(); e.preventDefault(); }
     else if ($('sideNav').classList.contains('open')) { closeNavigator(); e.preventDefault(); }
     else if ($('searchSheet').classList.contains('open')) { closeSearch(); e.preventDefault(); }
     else if ($('birthdaySheet').classList.contains('open')) { closeBirthdays(); e.preventDefault(); }
@@ -2658,13 +2808,33 @@ $('deleteBtn').addEventListener('click', () => {
 $('zin').addEventListener('click', () => zoomTo(view.s * 1.18));
 $('zout').addEventListener('click', () => zoomTo(view.s / 1.18));
 $('home').addEventListener('click', fit);
-$('fitBtn').addEventListener('click', fit);
+$('fileBtn')?.addEventListener('click', e => {
+  e.stopPropagation();
+  toggleFileMenu();
+});
+$('fileMenu')?.addEventListener('click', e => e.stopPropagation());
+$('settingsBtn')?.addEventListener('click', e => {
+  e.stopPropagation();
+  toggleSettingsMenu();
+});
+$('settingsMenu')?.addEventListener('click', e => e.stopPropagation());
+document.addEventListener('click', e => {
+  if ($('fileMenu')?.classList.contains('open') && !e.target.closest('.fileWrap')) closeFileMenu();
+  if (!$('settingsMenu')?.classList.contains('open')) return;
+  if (e.target.closest('.settingsWrap')) return;
+  closeSettingsMenu();
+});
+$('fitBtn').addEventListener('click', () => {
+  fit();
+  closeSettingsMenu();
+});
 $('autoBtn').addEventListener('click', () => { if (confirm('Automatische kompakte Anordnung anwenden? Aktuelle Positionen werden überschrieben.')) autoLayout(); });
 $('collapseAllBtn').addEventListener('click', () => {
   const anyOpen = data.people.some(p=>hasChildren(p.id) && !collapsed.has(p.id));
-  if(anyOpen){ data.people.forEach(p=>{ if(hasChildren(p.id)) collapsed.add(p.id); }); $('collapseAllBtn').textContent='Ausklappen'; }
-  else { collapsed.clear(); $('collapseAllBtn').textContent='Einklappen'; }
+  if(anyOpen){ data.people.forEach(p=>{ if(hasChildren(p.id)) collapsed.add(p.id); }); $('collapseAllBtn').textContent='Alle ausklappen'; }
+  else { collapsed.clear(); $('collapseAllBtn').textContent='Alle einklappen'; }
   saveCollapsed(); autoLayout();
+  closeSettingsMenu();
 });
 
 $('resetBtn').addEventListener('click', async () => {
@@ -2691,13 +2861,18 @@ $('resetBtn').addEventListener('click', async () => {
   }
 });
 
-$('exportBtn').addEventListener('click', () => {
+function exportTreeJson() {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'stammbaum.json';
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+$('exportBtn').addEventListener('click', () => {
+  closeFileMenu();
+  exportTreeJson();
 });
 
 $('listBtn').addEventListener('click', openListEditor);
@@ -2712,11 +2887,18 @@ $('navBtn').addEventListener('click', openNavigator);
 $('navCloseBtn').addEventListener('click', closeNavigator);
 $('navClearBtn').addEventListener('click', () => jumpToFamily(''));
 $('navSearch').addEventListener('input', renderNavigator);
-$('layoutBtn').addEventListener('click', cycleLayoutMode);
+$('layoutBtn').addEventListener('click', () => {
+  cycleLayoutMode();
+  closeSettingsMenu();
+});
 $('nameModeBtn').addEventListener('click', () => {
   cycleViewPreset();
+  closeSettingsMenu();
 });
-$('compactBtn')?.addEventListener('click', () => cycleViewPreset());
+$('compactBtn')?.addEventListener('click', () => {
+  cycleViewPreset();
+  closeSettingsMenu();
+});
 $('checkBtn').addEventListener('click', openCheck);
 $('checkCloseBtn').addEventListener('click', closeCheck);
 $('imageBtn').addEventListener('click', exportImageView);
@@ -2726,7 +2908,10 @@ $('listSearch').addEventListener('input', renderListEditor);
 $('listSortNameBtn').addEventListener('click', () => { listSortMode='name'; renderListEditor(); });
 $('listSortBirthBtn').addEventListener('click', () => { listSortMode='birth'; renderListEditor(); });
 $('listSortFamilyBtn').addEventListener('click', () => { listSortMode='family'; renderListEditor(); });
-$('importBtn').addEventListener('click', () => $('fileInput').click());
+$('importBtn').addEventListener('click', () => {
+  closeFileMenu();
+  $('fileInput').click();
+});
 if (minimap) {
   minimap.addEventListener('click', e => {
     if (!minimapState) return;

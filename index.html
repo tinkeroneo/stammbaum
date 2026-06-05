@@ -14,10 +14,20 @@
             <div class="brand">
                 <h1>Stammbaum</h1>
             </div>
-            <button type="button" class="pill primary" id="modeBtn"
-                aria-label="Anzeige- oder Bearbeitungsmodus umschalten">Bearbeiten</button>
-            <button type="button" class="pill" id="exportBtn" aria-label="Stammbaum exportieren">Export</button>
-            <button type="button" class="pill primary" id="addBtn" aria-label="Neue Person hinzufügen">+ Person</button>
+            <button type="button" class="pill iconBtn primary" id="modeBtn"
+                aria-label="Anzeige- oder Bearbeitungsmodus umschalten" title="Bearbeiten">✎</button>
+            <div class="fileWrap">
+                <button type="button" class="pill iconBtn" id="fileBtn" aria-label="Import und Export öffnen"
+                    aria-expanded="false" title="Import / Export">⇅</button>
+                <div class="fileMenu" id="fileMenu" aria-hidden="true">
+                    <button type="button" class="settingsItem editOnly" id="importBtn"
+                        aria-label="Daten importieren">Importieren</button>
+                    <button type="button" class="settingsItem" id="exportBtn"
+                        aria-label="Stammbaum exportieren">Exportieren</button>
+                </div>
+            </div>
+            <button type="button" class="pill iconBtn primary" id="addBtn" aria-label="Neue Person hinzufügen"
+                title="Person hinzufügen">+</button>
         </header>
         <main id="main">
             <div class="stage">
@@ -39,26 +49,37 @@
                     aria-label="Rauszoomen">−</button><button type="button" id="home"
                     aria-label="Ansicht anpassen">⌂</button></div>
             <div class="toolbar" role="toolbar" aria-label="Bedienleiste"><button type="button"
-                    class="pill ghost editOnly" id="resetBtn" aria-label="Beispiel zurücksetzen">Beispiel
-                    neu</button><button type="button" class="pill editOnly" id="importBtn"
-                    aria-label="Daten importieren">Import</button><button type="button" class="pill editOnly"
-                    id="listBtn" aria-label="Listeneditor öffnen">Liste</button><button type="button" class="pill"
-                    id="searchBtn" aria-label="Person suchen">Suche</button><button type="button" class="pill"
-                    id="scrollBtn" aria-label="Scrollbare Stammbaumansicht öffnen">Scroll</button><button type="button"
-                    class="pill" id="birthdayBtn" aria-label="Geburtstagskalender öffnen">Geburtstage</button><button
-                    type="button" class="pill" id="navBtn" aria-label="Familiennavigator öffnen">Zweige</button><button
-                    type="button" class="pill" id="layoutBtn" aria-label="Layoutansicht umschalten">Layout: Klassisch</button><button
-                    type="button" class="pill" id="nameModeBtn" aria-label="Ansicht umschalten">Ansicht</button><button
-                    type="button" class="pill hidden" id="compactBtn"
-                    aria-label="Kompakte Übersicht umschalten">Übersicht</button><button type="button"
-                    class="pill editOnly" id="autoBtn"
-                    aria-label="Automatische Anordnung ausführen">Auto</button><button type="button"
-                    class="pill editOnly" id="checkBtn" aria-label="Datenprüfung öffnen">Prüfen</button><button
-                    type="button" class="pill editOnly" id="imageBtn"
-                    aria-label="Aktuelle Ansicht als SVG exportieren">Bild</button><button type="button"
-                    class="pill editOnly" id="collapseAllBtn"
-                    aria-label="Alle Zweige ein- oder ausklappen">Einklappen</button><button type="button" class="pill"
-                    id="fitBtn" aria-label="Stammbaum anpassen">Anpassen</button></div>
+                    class="pill iconBtn ghost editOnly" id="resetBtn" aria-label="Beispiel zurücksetzen"
+                    title="Beispiel neu laden">↺</button><button type="button"
+                    class="pill iconBtn editOnly" id="listBtn" aria-label="Listeneditor öffnen"
+                    title="Liste">☷</button><button type="button" class="pill iconBtn" id="searchBtn"
+                    aria-label="Person suchen" title="Suche">⌕</button><button type="button" class="pill iconBtn"
+                    id="scrollBtn" aria-label="Scrollbare Stammbaumansicht öffnen"
+                    title="Scrollansicht">☰</button><button type="button" class="pill iconBtn" id="birthdayBtn"
+                    aria-label="Geburtstagskalender öffnen" title="Geburtstage">📅</button><button type="button"
+                    class="pill iconBtn" id="navBtn" aria-label="Familiennavigator öffnen"
+                    title="Zweige">⎇</button><button type="button" class="pill iconBtn editOnly" id="autoBtn"
+                    aria-label="Automatische Anordnung ausführen" title="Auto-Layout">◎</button><button type="button"
+                    class="pill iconBtn editOnly" id="checkBtn" aria-label="Datenprüfung öffnen"
+                    title="Daten prüfen">✓</button><button type="button" class="pill iconBtn editOnly" id="imageBtn"
+                    aria-label="Aktuelle Ansicht als SVG exportieren" title="Bild exportieren">▧</button>
+                <div class="settingsWrap">
+                    <button type="button" class="pill iconBtn" id="settingsBtn" aria-label="Einstellungen öffnen"
+                        aria-expanded="false" title="Einstellungen">⚙</button>
+                    <div class="settingsMenu" id="settingsMenu" aria-hidden="true">
+                        <button type="button" class="settingsItem" id="layoutBtn"
+                            aria-label="Layoutansicht umschalten">Layout: Klassisch</button>
+                        <button type="button" class="settingsItem" id="nameModeBtn"
+                            aria-label="Ansicht umschalten">Ansicht</button>
+                        <button type="button" class="settingsItem hidden" id="compactBtn"
+                            aria-label="Kompakte Übersicht umschalten">Übersicht</button>
+                        <button type="button" class="settingsItem" id="fitBtn"
+                            aria-label="Stammbaum anpassen">Anpassen</button>
+                        <button type="button" class="settingsItem editOnly" id="collapseAllBtn"
+                            aria-label="Alle Zweige ein- oder ausklappen">Alle einklappen</button>
+                    </div>
+                </div>
+            </div>
             <div class="backdrop" id="backdrop" aria-hidden="true"></div>
             <aside class="sideNav" id="sideNav" aria-hidden="true">
                 <div class="sideTop">
