@@ -56,6 +56,7 @@ localStorage.removeItem(storeKey + '-root');
 let spotlightId = null;
 let spotlightTimer = null;
 let sheetSnapshot = '';
+let imageDraft = '';
 let scrollExpanded = new Set();
 let checkCollapsed = new Set();
 
@@ -63,6 +64,33 @@ const familyPalette = [
   '#6b8f71', '#c9895e', '#6f88b6', '#b86b77', '#8f7ab8',
   '#5d9a9a', '#b39a4d', '#7b8d57', '#b0709b', '#8a765f'
 ];
+const personFieldSettingsKey = storeKey + '-person-fields';
+const optionalPersonFields = [
+  { key: 'occupation', label: 'Beruf' },
+  { key: 'location', label: 'Ort' },
+  { key: 'link', label: 'Link' },
+  { key: 'image', label: 'Bild' }
+];
+let personFieldSettings = loadPersonFieldSettings();
+
+function loadPersonFieldSettings() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(personFieldSettingsKey) || '{}');
+    return Object.fromEntries(optionalPersonFields.map(field => [field.key, parsed[field.key] !== false]));
+  } catch {
+    return Object.fromEntries(optionalPersonFields.map(field => [field.key, true]));
+  }
+}
+function savePersonFieldSettings() {
+  localStorage.setItem(personFieldSettingsKey, JSON.stringify(personFieldSettings));
+}
+function applyPersonFieldSettings() {
+  for (const field of optionalPersonFields) {
+    const visible = personFieldSettings[field.key] !== false;
+    document.querySelectorAll(`[data-person-field="${field.key}"]`).forEach(el => el.classList.toggle('hidden', !visible));
+    document.querySelectorAll(`[data-field-toggle="${field.key}"]`).forEach(el => { el.checked = visible; });
+  }
+}
 
 function normalize(d) {
   if (!d || !Array.isArray(d.people)) d = structuredClone(sample);
@@ -89,6 +117,10 @@ function normalize(d) {
       born: String(p.born || ''),
       died: String(p.died || ''),
       birthName: rawBirthName,
+      occupation: String(p.occupation || p.beruf || ''),
+      location: String(p.location || p.ort || ''),
+      link: String(p.link || p.url || ''),
+      image: String(p.image || p.photo || p.picture || ''),
       note: String(p.note || ''),
       confidence,
       x: Number.isFinite(+p.x) ? +p.x : 200 + i * 40,
@@ -126,7 +158,15 @@ async function loadDefaultData({ saveResult = true, fitResult = true } = {}) {
   if ($('sideNav')?.classList.contains('open')) renderNavigator();
   if ($('scrollSheet')?.classList.contains('open')) renderScrollView();
 }
-function save() { localStorage.setItem(storeKey, JSON.stringify(data, null, 2)); }
+function save() {
+  try {
+    localStorage.setItem(storeKey, JSON.stringify(data, null, 2));
+    return true;
+  } catch {
+    alert('Speichern fehlgeschlagen. Das Bild ist vermutlich zu groß für den Browser-Speicher. Bitte ein kleineres Bild wählen oder das Bild entfernen.');
+    return false;
+  }
+}
 function person(id) { return data.people.find(p => p.id === id); }
 function uniqueIds(ids) { return [...new Set((ids || []).map(String).filter(Boolean))]; }
 function setPartnerIds(p, ids) {
@@ -157,7 +197,20 @@ function removePartnerLink(p, otherId, reciprocal = true) {
   }
 }
 function esc(s) { return String(s || '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+function safeUrl(value) {
+  const url = String(value || '').trim();
+  if (!url) return '';
+  if (/^(https?:|mailto:|tel:)/i.test(url)) return url;
+  if (/^[\w.-]+\.[a-z]{2,}(?:[/?#].*)?$/i.test(url)) return `https://${url}`;
+  return '';
+}
 function initials(n) { return (n || '?').split(/\s+/).slice(0,2).map(x => x[0]).join('').toUpperCase(); }
+function avatarHtml(p, label = '') {
+  const name = label || fullName(p) || p?.name || '';
+  return p?.image
+    ? `<img src="${esc(p.image)}" alt="${esc(name)}" loading="lazy" />`
+    : esc(initials(name));
+}
 function fullName(p) {
   if (!p) return '';
   const name = `${p.firstName || ''} ${p.lastName || ''}`.trim();
@@ -518,10 +571,32 @@ function downloadBlob(blob, filename) {
   a.click();
   URL.revokeObjectURL(a.href);
 }
+async function saveBlobAs(blob, filename, types = []) {
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: filename,
+        types
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return true;
+    } catch (err) {
+      if (err?.name !== 'AbortError') alert('Speichern am gewählten Zielort ist fehlgeschlagen. Es wird ein Download gestartet.');
+      if (err?.name === 'AbortError') return false;
+    }
+  }
+  downloadBlob(blob, filename);
+  return true;
+}
 function exportSvgView() {
   const output = buildExportSvg();
   if (!output) return;
-  downloadBlob(new Blob([output.svg], { type:'image/svg+xml' }), 'stammbaum-ansicht.svg');
+  saveBlobAs(new Blob([output.svg], { type:'image/svg+xml' }), 'stammbaum-ansicht.svg', [{
+    description: 'SVG-Bild',
+    accept: { 'image/svg+xml': ['.svg'] }
+  }]);
 }
 function exportPngView(scaleChoice = '') {
   const output = buildExportSvg();
@@ -542,7 +617,10 @@ function exportPngView(scaleChoice = '') {
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     URL.revokeObjectURL(url);
     canvas.toBlob(png => {
-      if (png) downloadBlob(png, 'stammbaum-ansicht.png');
+      if (png) saveBlobAs(png, 'stammbaum-ansicht.png', [{
+        description: 'PNG-Bild',
+        accept: { 'image/png': ['.png'] }
+      }]);
     }, 'image/png');
   };
   img.onerror = () => {
@@ -999,12 +1077,12 @@ function personTileContent(p, className = '') {
   const dates = [p.born, p.died && '– ' + p.died].filter(Boolean).join(' ');
   const birth = birthNameDiffers(p) ? ` <span class="birthInfo">(geb. ${esc(p.birthName)})</span>` : '';
   const meta = dates || birth ? `<div class="meta">${esc(dates)}${birth}</div>` : '';
-  const tileTags = [p.note && p.note.slice(0,22), confidenceText(p)].filter(Boolean);
+  const tileTags = [p.occupation && p.occupation.slice(0,22), p.location && p.location.slice(0,22), p.note && p.note.slice(0,22), confidenceText(p)].filter(Boolean).slice(0, 3);
   const tags = tileTags.length ? `<div class="tags">${tileTags.map(tag => `<span class="tag">${esc(tag)}</span>`).join('')}</div>` : '';
   const display = visibleName(p);
   const title = fullName(p) !== display ? ` title="${esc(fullName(p))}"` : '';
   const cls = className ? ` class="${className}"` : '';
-  return `<div${cls} data-member-id="${esc(p.id)}"><div class="avatar">${esc(initials(display))}</div><h3${title}>${esc(display)}</h3>${meta}${tags}</div>`;
+  return `<div${cls} data-member-id="${esc(p.id)}"><div class="avatar">${avatarHtml(p, display)}</div><h3${title}>${esc(display)}</h3>${meta}${tags}</div>`;
 }
 
 // -- Rendering ---------------------------------------------------------
@@ -2105,6 +2183,14 @@ function linkPartners(p, q, reciprocal = true) {
   addPartnerLink(p, q, reciprocal);
 }
 
+function updateImagePreview() {
+  const preview = $('imagePreview');
+  if (!preview) return;
+  preview.innerHTML = imageDraft ? `<img src="${esc(imageDraft)}" alt="" />` : '';
+  const editable = editMode || !person(selected);
+  if ($('clearImageBtn')) $('clearImageBtn').disabled = !editable || !imageDraft;
+}
+
 function formSnapshot() {
   return JSON.stringify({
     selected: selected || '',
@@ -2114,6 +2200,10 @@ function formSnapshot() {
     born: $('born')?.value || '',
     died: $('died')?.value || '',
     birthName: $('birthName')?.value || '',
+    occupation: $('occupation')?.value || '',
+    location: $('location')?.value || '',
+    link: $('personLink')?.value || '',
+    image: imageDraft || '',
     note: $('note')?.value || '',
     confidence: $('confidence')?.value || 'high',
     parent1: $('parent1')?.value || '',
@@ -2168,10 +2258,11 @@ function renderPersonDetails(p) {
     ageInfo(p)
   ].filter(Boolean).join(' · ') || 'Lebensdaten offen';
   const confidence = confidenceText(p);
+  const link = safeUrl(p.link);
 
   details.innerHTML = `
     <div class="detailHero" style="--family-color:${esc(familyColor(familyKey(p)))}">
-      <div class="detailAvatar">${esc(initials(fullName(p) || p.name))}</div>
+      <div class="detailAvatar">${avatarHtml(p)}</div>
       <div>
         <div class="detailName">${esc(displayName(p))}</div>
         <div class="detailMeta">${esc(dates)}</div>
@@ -2182,6 +2273,9 @@ function renderPersonDetails(p) {
       <div class="detailBox"><span class="detailLabel">Eltern</span>${relationButtons(parents)}</div>
       <div class="detailBox full"><span class="detailLabel">Geschwister</span>${siblings.length ? relationButtons(siblings) : '<span class="detailValue">Keine eingetragen</span>'}</div>
       <div class="detailBox full"><span class="detailLabel">Kinder</span>${relationButtons(children)}</div>
+      ${p.occupation ? `<div class="detailBox"><span class="detailLabel">Beruf</span><div class="detailValue">${esc(p.occupation)}</div></div>` : ''}
+      ${p.location ? `<div class="detailBox"><span class="detailLabel">Ort</span><div class="detailValue">${esc(p.location)}</div></div>` : ''}
+      ${link ? `<div class="detailBox full"><span class="detailLabel">Link</span><a class="detailValue" href="${esc(link)}" target="_blank" rel="noopener noreferrer">${esc(p.link)}</a></div>` : ''}
       ${confidence ? `<div class="detailBox full"><span class="detailLabel">Sicherheit</span><div class="detailValue">${esc(confidenceLabel(p.confidence))}</div></div>` : ''}
       ${p.note ? `<div class="detailBox full"><span class="detailLabel">Notiz</span><div class="detailValue">${esc(p.note)}</div></div>` : ''}
     </div>
@@ -2212,17 +2306,25 @@ function openSheet(id) {
   $('born').value = p?.born || '';
   $('died').value = p?.died || '';
   $('birthName').value = p?.birthName || '';
+  $('occupation').value = p?.occupation || '';
+  $('location').value = p?.location || '';
+  $('personLink').value = p?.link || '';
+  imageDraft = p?.image || '';
+  updateImagePreview();
   $('note').value = p?.note || '';
   $('confidence').value = p?.confidence || 'high';
   fillSelects(id, p?.parents?.[0] || '', p?.parents?.[1] || '');
+  applyPersonFieldSettings();
   sheetSnapshot = formSnapshot();
   renderPersonDetails(p);
 
   const editable = editMode || !p;
-  ['firstName','lastName','nickname','born','died','birthName','note','confidence','parent1','parent2','partner'].forEach(id => {
+  ['firstName','lastName','nickname','born','died','birthName','occupation','location','personLink','note','confidence','parent1','parent2','partner'].forEach(id => {
     const el = $(id);
     if (el) el.disabled = !editable;
   });
+  $('chooseImageBtn').disabled = !editable;
+  $('clearImageBtn').disabled = !editable || !imageDraft;
   $('deleteBtn').style.display = p && editMode ? 'block' : 'none';
   $('saveBtn').style.display = editable ? 'block' : 'none';
   setDialogVisibility($('sheet'), true);
@@ -2233,6 +2335,7 @@ function closeSheet(force = false) {
   if (!force && !confirmDiscardSheetChanges()) return false;
   selected = null;
   sheetSnapshot = '';
+  imageDraft = '';
   setDialogVisibility($('sheet'), false);
   showBackdrop(false);
   render();
@@ -2257,6 +2360,7 @@ function saveSheet() {
   const nickname = $('nickname').value.trim();
   const born = $('born').value.trim();
   const died = $('died').value.trim();
+  const link = $('personLink').value.trim();
   const confidence = $('confidence').value || 'high';
   const parents = [$('parent1').value, $('parent2').value].filter(Boolean);
   const newPartner = $('partner').value;
@@ -2265,7 +2369,7 @@ function saveSheet() {
 
   if (!p) {
     const pos = pendingNewPos || screenToWorld(main.getBoundingClientRect().left + main.clientWidth / 2, main.getBoundingClientRect().top + main.clientHeight / 2);
-    p = { id: nextId(), name: '', born: '', died: '', birthName: '', note: '', confidence: 'high', x: pos.x, y: pos.y, parents: [], partner: '', partners: [] };
+    p = { id: nextId(), name: '', born: '', died: '', birthName: '', occupation: '', location: '', link: '', image: '', note: '', confidence: 'high', x: pos.x, y: pos.y, parents: [], partner: '', partners: [] };
     data.people.push(p);
     pendingNewPos = null;
   }
@@ -2277,6 +2381,10 @@ function saveSheet() {
   p.born = born;
   p.died = died;
   p.birthName = birthName;
+  p.occupation = $('occupation').value.trim();
+  p.location = $('location').value.trim();
+  p.link = link;
+  p.image = imageDraft;
   p.note = $('note').value.trim();
   p.confidence = confidence;
   p.parents = parents;
@@ -2291,7 +2399,7 @@ function saveSheet() {
 
   withPreservedView(() => {
     resetGeneratedLayout();
-    save();
+    if (!save()) return;
     render();
     if($('sideNav')?.classList.contains('open')) renderNavigator();
     if($('listSheet')?.classList.contains('open')) renderListEditor();
@@ -2302,7 +2410,7 @@ function saveSheet() {
 }
 
 function newPersonNear(base, dx, dy) {
-  return { id: nextId(), name: 'Neue Person', born: '', died: '', birthName: '', note: '', confidence: 'high', x: Math.round((base?.x ?? 400) + dx), y: Math.round((base?.y ?? 300) + dy), parents: [], partner: '', partners: [] };
+  return { id: nextId(), name: 'Neue Person', born: '', died: '', birthName: '', occupation: '', location: '', link: '', image: '', note: '', confidence: 'high', x: Math.round((base?.x ?? 400) + dx), y: Math.round((base?.y ?? 300) + dy), parents: [], partner: '', partners: [] };
 }
 function addChildFor(id) {
   const p = person(id); if (!p) return;
@@ -2438,8 +2546,8 @@ function renderScrollView(){
       <div class="scrollNode ${level === 0 ? 'root' : ''} ${isOpen ? 'open' : ''}" style="--level:${level};--family-color:${esc(familyColor(familyKey(p)))}">
         <div class="scrollPerson" role="button" tabindex="0" data-id="${esc(p.id)}" data-expandable="${canExpand ? '1' : '0'}">
           <span class="scrollToggle">${canExpand ? (isOpen ? '−' : '+') : ''}</span>
-          <span class="scrollAvatar">${esc(initials(fullName(p) || p.name))}</span>
-          <span><strong>${esc(fullName(p) || p.name)}</strong>${meta ? `<small>${esc(meta)}</small>` : ''}${partnerChip}${attachedPartner ? `<span class="scrollPartner"><span class="scrollAvatar mini" style="--family-color:${esc(familyColor(familyKey(attachedPartner)))}">${esc(initials(fullName(attachedPartner) || attachedPartner.name))}</span><span><strong>${esc(fullName(attachedPartner) || attachedPartner.name)}</strong>${attachedMeta ? `<small>${esc(attachedMeta)}</small>` : ''}</span></span>` : ''}</span>
+          <span class="scrollAvatar">${avatarHtml(p)}</span>
+          <span><strong>${esc(fullName(p) || p.name)}</strong>${meta ? `<small>${esc(meta)}</small>` : ''}${partnerChip}${attachedPartner ? `<span class="scrollPartner"><span class="scrollAvatar mini" style="--family-color:${esc(familyColor(familyKey(attachedPartner)))}">${avatarHtml(attachedPartner)}</span><span><strong>${esc(fullName(attachedPartner) || attachedPartner.name)}</strong>${attachedMeta ? `<small>${esc(attachedMeta)}</small>` : ''}</span></span>` : ''}</span>
           <span class="scrollJump" data-jump="1">↗</span>
         </div>
         ${isOpen && children.length ? `<div class="scrollChildren">${children.map(child => row(child, level + 1, branchPath)).join('')}</div>` : ''}
@@ -2537,10 +2645,11 @@ function renderSearchResults(){
 
   $('searchRows').innerHTML = rows.map(p => {
     const dates = [p.born, p.died && '- '+p.died].filter(Boolean).join(' ');
+    const extra = [birthNameDiffers(p) && 'geb. '+p.birthName, p.occupation, p.location].filter(Boolean).join(' · ');
     return `
       <button type="button" class="searchRow" data-id="${esc(p.id)}">
         <span class="swatch" style="background:${esc(familyColor(familyKey(p)))}"></span>
-        <span><strong>${esc(fullName(p) || p.name)}</strong><small>${esc([dates, birthNameDiffers(p) && 'geb. '+p.birthName].filter(Boolean).join(' · ')) || 'Lebensdaten offen'}</small></span>
+        <span><strong>${esc(fullName(p) || p.name)}</strong><small>${esc([dates, extra].filter(Boolean).join(' · ')) || 'Lebensdaten offen'}</small></span>
       </button>
     `;
   }).join('');
@@ -2653,7 +2762,7 @@ function renderNavigator(){
 function personSearchText(p){
   const parentNames = (p.parents||[]).map(id=>person(id)?.name||'').join(' ');
   const partnerName = partnerIds(p).map(id => person(id)?.name || '').join(' ');
-  return [p.name,p.birthName,p.born,p.died,p.note,confidenceText(p),parentNames,partnerName].join(' ').toLowerCase();
+  return [p.name,p.birthName,p.born,p.died,p.occupation,p.location,p.link,p.note,confidenceText(p),parentNames,partnerName].join(' ').toLowerCase();
 }
 function comparePeopleForList(a,b){
   if(listSortMode === 'name'){
@@ -2682,11 +2791,13 @@ function renderListEditor(){
     const birth = birthNameDiffers(p) ? ` · geb. ${esc(p.birthName)}` : '';
     const dates = [p.born, p.died && '– '+p.died].filter(Boolean).join(' ');
     const confidence = confidenceText(p);
+    const extra = [p.occupation, p.location].filter(Boolean).join(' · ');
     return `
       <div class="listRow" tabindex="0" data-id="${esc(p.id)}">
         <div>
           <div class="listName">${esc(p.name)}</div>
           <div class="listMeta">${esc([dates, birth.trim(), confidence].filter(Boolean).join(' · ')) || 'Lebensdaten offen'}</div>
+          ${extra ? `<div class="listMeta">${esc(extra)}</div>` : ''}
           <div class="listMeta">${partner ? 'Partner/in: '+esc(partner) : ''}${parents ? (partner ? ' · ' : '') + 'Eltern: '+esc(parents) : ''}</div>
         </div>
         <div class="listActions">
@@ -2734,6 +2845,15 @@ $('parent1').addEventListener('change', () => {
 
 $('saveBtn').addEventListener('click', saveSheet);
 $('closeBtn').addEventListener('click', closeSheet);
+$('chooseImageBtn')?.addEventListener('click', () => {
+  if (!(editMode || !person(selected))) return;
+  $('personImageInput').click();
+});
+$('clearImageBtn')?.addEventListener('click', () => {
+  if (!(editMode || !person(selected))) return;
+  imageDraft = '';
+  updateImagePreview();
+});
 $('backdrop').addEventListener('click', () => {
   if($('sideNav').classList.contains('open')) closeNavigator();
   else if($('searchSheet').classList.contains('open')) closeSearch();
@@ -2818,6 +2938,13 @@ $('settingsBtn')?.addEventListener('click', e => {
   toggleSettingsMenu();
 });
 $('settingsMenu')?.addEventListener('click', e => e.stopPropagation());
+$('settingsMenu')?.addEventListener('change', e => {
+  const key = e.target?.dataset?.fieldToggle;
+  if (!key) return;
+  personFieldSettings[key] = !!e.target.checked;
+  savePersonFieldSettings();
+  applyPersonFieldSettings();
+});
 document.addEventListener('click', e => {
   if ($('fileMenu')?.classList.contains('open') && !e.target.closest('.fileWrap')) closeFileMenu();
   if (!$('settingsMenu')?.classList.contains('open')) return;
@@ -2861,18 +2988,29 @@ $('resetBtn').addEventListener('click', async () => {
   }
 });
 
-function exportTreeJson() {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'stammbaum.json';
-  a.click();
-  URL.revokeObjectURL(a.href);
+function exportData(includeImages = true) {
+  if (includeImages) return data;
+  return {
+    ...data,
+    people: data.people.map(p => ({ ...p, image: '' }))
+  };
+}
+async function exportTreeJson() {
+  const hasImages = data.people.some(p => p.image);
+  const includeImages = hasImages
+    ? confirm('Bilder in den JSON-Export aufnehmen?\n\nOK = Export inklusive Bilder\nAbbrechen = Export ohne Bilder')
+    : false;
+  const filename = includeImages ? 'stammbaum-mit-bildern.json' : 'stammbaum.json';
+  const blob = new Blob([JSON.stringify(exportData(includeImages), null, 2)], { type: 'application/json' });
+  await saveBlobAs(blob, filename, [{
+    description: 'Stammbaum JSON',
+    accept: { 'application/json': ['.json'] }
+  }]);
 }
 
-$('exportBtn').addEventListener('click', () => {
+$('exportBtn').addEventListener('click', async () => {
   closeFileMenu();
-  exportTreeJson();
+  await exportTreeJson();
 });
 
 $('listBtn').addEventListener('click', openListEditor);
@@ -2950,10 +3088,27 @@ $('fileInput').addEventListener('change', e => {
   r.readAsText(f);
   e.target.value = '';
 });
+$('personImageInput')?.addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  if (!/^image\/(jpeg|png|svg\+xml)$/.test(f.type)) {
+    alert('Bitte JPG, PNG oder SVG auswählen.');
+    e.target.value = '';
+    return;
+  }
+  const r = new FileReader();
+  r.onload = () => {
+    imageDraft = String(r.result || '');
+    updateImagePreview();
+  };
+  r.readAsDataURL(f);
+  e.target.value = '';
+});
 
 window.addEventListener('resize', fit);
 
 render();
+applyPersonFieldSettings();
 updateModeUI();
 updateNameModeButton();
 updateLayoutButton();

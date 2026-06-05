@@ -77,6 +77,13 @@
                             aria-label="Stammbaum anpassen">Anpassen</button>
                         <button type="button" class="settingsItem editOnly" id="collapseAllBtn"
                             aria-label="Alle Zweige ein- oder ausklappen">Alle einklappen</button>
+                        <div class="settingsGroup editOnly" id="fieldSettings" aria-label="Personenfelder konfigurieren">
+                            <span class="settingsGroupTitle">Personenfelder</span>
+                            <label class="settingsCheck"><input type="checkbox" data-field-toggle="occupation" /> Beruf</label>
+                            <label class="settingsCheck"><input type="checkbox" data-field-toggle="location" /> Ort</label>
+                            <label class="settingsCheck"><input type="checkbox" data-field-toggle="link" /> Link</label>
+                            <label class="settingsCheck"><input type="checkbox" data-field-toggle="image" /> Bild</label>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -142,6 +149,22 @@
                     </div>
                     <div class="field full"><label for="birthName">Geburtsname</label><input id="birthName"
                             placeholder="z. B. Meißner" /></div>
+                    <div class="field full optionalField" data-person-field="occupation"><label for="occupation">Beruf</label><input id="occupation"
+                            placeholder="z. B. Schreinerin, Lehrer, Landwirt …" /></div>
+                    <div class="field full optionalField" data-person-field="location"><label for="location">Ort</label><input id="location"
+                            placeholder="Wohnort, Herkunftsort oder Station" /></div>
+                    <div class="field full optionalField" data-person-field="link"><label for="personLink">Link</label><input id="personLink"
+                            type="url" inputmode="url" placeholder="https://…" /></div>
+                    <div class="field full optionalField" data-person-field="image">
+                        <label>Bild</label>
+                        <div class="imageField">
+                            <div class="imagePreview" id="imagePreview" aria-hidden="true"></div>
+                            <div class="imageActions">
+                                <button type="button" class="pill" id="chooseImageBtn">Bild wählen</button>
+                                <button type="button" class="pill ghost" id="clearImageBtn">Entfernen</button>
+                            </div>
+                        </div>
+                    </div>
                     <div class="field full"><label for="note">Notiz</label><textarea id="note"
                             placeholder="Beruf, Ort, Besonderheiten …"></textarea></div>
                     <div class="field full"><label for="confidence">Sicherheit</label><select id="confidence">
@@ -181,6 +204,7 @@
         </main>
     </div>
     <input type="file" id="fileInput" accept="application/json" class="hidden" />
+    <input type="file" id="personImageInput" accept="image/jpeg,image/png,image/svg+xml" class="hidden" />
 
     <script src="app.js"></script>
 </body>
