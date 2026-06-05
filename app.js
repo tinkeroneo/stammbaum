@@ -2410,16 +2410,16 @@ function dataIssues(){
 
   for (const p of data.people) {
     const name = fullName(p) || p.name;
-    if (!p.lastName || p.lastName === '?') issues.push({ id:p.id, text:`${name}: Nachname fehlt/unklar.` });
-    if (!p.born) issues.push({ id:p.id, text:`${name}: Geburtsdatum fehlt.` });
-    if (nameCount.get(name) > 1) issues.push({ id:p.id, text:`${name}: Name kommt mehrfach vor.` });
+    if (!p.lastName || p.lastName === '?') issues.push({ id:p.id, group:'name', text:`${name}: Nachname fehlt/unklar.` });
+    if (!p.born) issues.push({ id:p.id, group:'dates', text:`${name}: Geburtsdatum fehlt.` });
+    if (nameCount.get(name) > 1) issues.push({ id:p.id, group:'duplicates', text:`${name}: Name kommt mehrfach vor.` });
     for (const partnerId of uniqueIds([...(p.partners || []), p.partner])) {
-      if (!ids.has(partnerId)) issues.push({ id:p.id, text:`${name}: Partner-Referenz ${partnerId} fehlt.` });
+      if (!ids.has(partnerId)) issues.push({ id:p.id, group:'references', text:`${name}: Partner-Referenz ${partnerId} fehlt.` });
     }
     for (const pid of p.parents || []) {
-      if (!ids.has(pid)) issues.push({ id:p.id, text:`${name}: Eltern-Referenz ${pid} fehlt.` });
+      if (!ids.has(pid)) issues.push({ id:p.id, group:'references', text:`${name}: Eltern-Referenz ${pid} fehlt.` });
     }
-    if ((p.parents || []).length === 1) issues.push({ id:p.id, text:`${name}: nur ein Elternteil eingetragen.` });
+    if ((p.parents || []).length === 1) issues.push({ id:p.id, group:'relations', text:`${name}: nur ein Elternteil eingetragen.` });
   }
   return issues;
 }
@@ -2434,9 +2434,32 @@ function closeCheck(){
 }
 function renderCheck(){
   const issues = dataIssues();
-  $('checkRows').innerHTML = issues.length ? issues.map(issue => `
-    <button type="button" class="checkRow" data-id="${esc(issue.id)}">${esc(issue.text)}</button>
-  `).join('') : '<p class="emptyState">Keine offensichtlichen Datenprobleme gefunden.</p>';
+  const groups = [
+    ['references', 'Fehlende Verknüpfungen'],
+    ['relations', 'Unvollständige Beziehungen'],
+    ['duplicates', 'Mögliche Dubletten'],
+    ['name', 'Namen'],
+    ['dates', 'Lebensdaten']
+  ];
+  const grouped = new Map(groups.map(([key]) => [key, []]));
+  for (const issue of issues) {
+    const key = grouped.has(issue.group) ? issue.group : 'other';
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(issue);
+  }
+  const html = groups
+    .map(([key, label]) => {
+      const rows = grouped.get(key) || [];
+      if (!rows.length) return '';
+      return `
+        <section class="checkGroup">
+          <h3>${esc(label)} <span>${rows.length}</span></h3>
+          ${rows.map(issue => `<button type="button" class="checkRow" data-id="${esc(issue.id)}">${esc(issue.text)}</button>`).join('')}
+        </section>
+      `;
+    })
+    .join('');
+  $('checkRows').innerHTML = issues.length ? html : '<p class="emptyState">Keine offensichtlichen Datenprobleme gefunden.</p>';
   $('checkRows').querySelectorAll('.checkRow').forEach(row => {
     row.addEventListener('click', () => {
       closeCheck();
