@@ -57,6 +57,7 @@ let spotlightId = null;
 let spotlightTimer = null;
 let sheetSnapshot = '';
 let scrollExpanded = new Set();
+let checkCollapsed = new Set();
 
 const familyPalette = [
   '#6b8f71', '#c9895e', '#6f88b6', '#b86b77', '#8f7ab8',
@@ -2451,15 +2452,30 @@ function renderCheck(){
     .map(([key, label]) => {
       const rows = grouped.get(key) || [];
       if (!rows.length) return '';
+      const closed = checkCollapsed.has(key);
       return `
-        <section class="checkGroup">
-          <h3>${esc(label)} <span>${rows.length}</span></h3>
-          ${rows.map(issue => `<button type="button" class="checkRow" data-id="${esc(issue.id)}">${esc(issue.text)}</button>`).join('')}
+        <section class="checkGroup${closed ? ' collapsed' : ''}" data-group="${esc(key)}">
+          <button type="button" class="checkGroupTitle" data-check-group="${esc(key)}" aria-expanded="${closed ? 'false' : 'true'}">
+            <span class="checkGroupToggle">${closed ? '+' : '−'}</span>
+            <span>${esc(label)}</span>
+            <span class="checkGroupCount">${rows.length}</span>
+          </button>
+          <div class="checkGroupRows">
+            ${rows.map(issue => `<button type="button" class="checkRow" data-id="${esc(issue.id)}">${esc(issue.text)}</button>`).join('')}
+          </div>
         </section>
       `;
     })
     .join('');
   $('checkRows').innerHTML = issues.length ? html : '<p class="emptyState">Keine offensichtlichen Datenprobleme gefunden.</p>';
+  $('checkRows').querySelectorAll('[data-check-group]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.checkGroup;
+      if (checkCollapsed.has(key)) checkCollapsed.delete(key);
+      else checkCollapsed.add(key);
+      renderCheck();
+    });
+  });
   $('checkRows').querySelectorAll('.checkRow').forEach(row => {
     row.addEventListener('click', () => {
       closeCheck();
