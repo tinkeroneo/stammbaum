@@ -20,10 +20,14 @@
                 <button type="button" class="pill iconBtn" id="fileBtn" aria-label="Import und Export öffnen"
                     aria-expanded="false" title="Import / Export">⇅</button>
                 <div class="fileMenu" id="fileMenu" aria-hidden="true">
+                    <button type="button" class="settingsItem editOnly" id="workingFileBtn"
+                        aria-label="JSON-Arbeitsdatei öffnen">Arbeitsdatei öffnen</button>
                     <button type="button" class="settingsItem editOnly" id="importBtn"
                         aria-label="Daten importieren">Importieren</button>
                     <button type="button" class="settingsItem" id="exportBtn"
                         aria-label="Stammbaum exportieren">Exportieren</button>
+                    <button type="button" class="settingsItem" id="copyJsonBtn"
+                        aria-label="Aktuelle JSON-Daten kopieren">JSON kopieren</button>
                 </div>
             </div>
             <button type="button" class="pill iconBtn primary" id="addBtn" aria-label="Neue Person hinzufügen"
@@ -52,7 +56,8 @@
                     class="pill iconBtn ghost editOnly" id="resetBtn" aria-label="Beispiel zurücksetzen"
                     title="Beispiel neu laden">↺</button><button type="button"
                     class="pill iconBtn editOnly" id="listBtn" aria-label="Listeneditor öffnen"
-                    title="Liste">☷</button><button type="button" class="pill iconBtn" id="searchBtn"
+                    title="Liste">☷</button><button type="button" class="pill iconBtn editOnly poolToolbarBtn" id="poolBtn"
+                    aria-label="Personenvorrat öffnen" title="Vorrat" data-count="0">◫</button><button type="button" class="pill iconBtn" id="searchBtn"
                     aria-label="Person suchen" title="Suche">⌕</button><button type="button" class="pill iconBtn"
                     id="scrollBtn" aria-label="Scrollbare Stammbaumansicht öffnen"
                     title="Scrollansicht">☰</button><button type="button" class="pill iconBtn" id="birthdayBtn"
@@ -80,9 +85,11 @@
                         <div class="settingsGroup editOnly" id="fieldSettings" aria-label="Personenfelder konfigurieren">
                             <span class="settingsGroupTitle">Personenfelder</span>
                             <label class="settingsCheck"><input type="checkbox" data-field-toggle="occupation" /> Beruf</label>
+                            <label class="settingsCheck"><input type="checkbox" data-field-toggle="religion" /> Glaubensrichtung</label>
                             <label class="settingsCheck"><input type="checkbox" data-field-toggle="location" /> Ort</label>
                             <label class="settingsCheck"><input type="checkbox" data-field-toggle="link" /> Link</label>
                             <label class="settingsCheck"><input type="checkbox" data-field-toggle="image" /> Bild</label>
+                            <label class="settingsCheck"><input type="checkbox" data-field-toggle="mentions" /> Erwähnungen</label>
                         </div>
                     </div>
                 </div>
@@ -132,8 +139,8 @@
                 <div class="actions" style="margin-top:0;margin-bottom:12px"><button type="button" class="pill"
                         id="quickFocus" aria-label="Fokusansicht für diese Person">Fokus</button><button
                         type="button" class="pill" id="quickChild" aria-label="Kind hinzufügen">+ Kind</button><button
-                        type="button" class="pill" id="quickPartner" aria-label="Partner oder Partnerin hinzufügen">+
-                        Partner/in</button><button type="button" class="pill" id="quickParents"
+                        type="button" class="pill" id="quickPartner" aria-label="Neue Partnerin oder neuen Partner hinzufügen">+
+                        Neue Partner/in</button><button type="button" class="pill" id="quickParents"
                         aria-label="Eltern hinzufügen">+ Eltern</button></div>
                 <div class="personDetails hidden" id="personDetails"></div>
                 <div class="grid">
@@ -151,6 +158,8 @@
                             placeholder="z. B. Meißner" /></div>
                     <div class="field full optionalField" data-person-field="occupation"><label for="occupation">Beruf</label><input id="occupation"
                             placeholder="z. B. Schreinerin, Lehrer, Landwirt …" /></div>
+                    <div class="field full optionalField" data-person-field="religion"><label for="religion">Glaubensrichtung</label><input id="religion"
+                            placeholder="z. B. katholisch, evangelisch, jüdisch …" /></div>
                     <div class="field full optionalField" data-person-field="location"><label for="location">Ort</label><input id="location"
                             placeholder="Wohnort, Herkunftsort oder Station" /></div>
                     <div class="field full optionalField" data-person-field="link"><label for="personLink">Link</label><input id="personLink"
@@ -165,6 +174,11 @@
                             </div>
                         </div>
                     </div>
+                    <div class="field full optionalField" data-person-field="mentions">
+                        <label>Erwähnungen / Quellen</label>
+                        <div class="mentionRows" id="mentionRows"></div>
+                        <button type="button" class="pill mentionAddBtn" id="addMentionBtn">+ Erwähnung</button>
+                    </div>
                     <div class="field full"><label for="note">Notiz</label><textarea id="note"
                             placeholder="Beruf, Ort, Besonderheiten …"></textarea></div>
                     <div class="field full"><label for="confidence">Sicherheit</label><select id="confidence">
@@ -172,9 +186,14 @@
                             <option value="medium">Mittel</option>
                             <option value="low">Niedrig</option>
                         </select></div>
+                    <div class="field full"><label class="poolCheck"><input type="checkbox" id="inPool" /> Diesen Zweig im Vorrat behalten und nicht im Stammbaum anzeigen</label></div>
+                    <div class="field full"><label class="poolCheck"><input type="checkbox" id="mainRoot" /> Diese Person als Hauptwurzel festlegen (maximal zwei)</label></div>
                     <div class="field"><label for="parent1">Elternteil 1</label><select id="parent1"></select></div>
                     <div class="field"><label for="parent2">Elternteil 2</label><select id="parent2"></select></div>
-                    <div class="field full"><label for="partner">Partner/in hinzufügen</label><select id="partner"></select></div>
+                    <div class="field full"><label>Partner/innen</label><div class="partnerChips" id="currentPartners"></div></div>
+                    <div class="field full"><label for="partner">Weitere / frühere Partnerperson ergänzen</label><select id="partner"></select></div>
+                    <div class="field full"><label for="partnerMarriageDate">Heiratsdatum zur neuen Partnerperson</label><input id="partnerMarriageDate"
+                            placeholder="z. B. 12.05.1972 oder 1972" /></div>
                 </div>
                 <p class="small">Position: Karte im Stammbaum ziehen. Neue Personen landen in der Nähe der aktuellen
                     Ansicht.</p>
@@ -185,7 +204,7 @@
 
             <section class="listSheet" id="listSheet" role="dialog" aria-modal="true" aria-hidden="true">
                 <div class="listTop">
-                    <h2>Listeneditor</h2>
+                    <h2 id="listTitle">Listeneditor</h2>
                     <button type="button" class="pill" id="listAddBtn" aria-label="Neue Person hinzufügen">+
                         Person</button>
                     <button type="button" class="pill" id="listCloseBtn"

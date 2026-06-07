@@ -35,6 +35,7 @@ svg.lines{position:absolute;inset:0;width:100%;height:100%;overflow:visible;poin
 .familyStem{opacity:.46}
 .stemBridge{stroke-dasharray:10 12;stroke-width:3;opacity:.36}
 .singleParentLine{stroke-dasharray:4 9;opacity:.46}
+.singleParentHub{stroke-dasharray:3 4;opacity:.68}
 .familyHub{fill:var(--panel);stroke:var(--line-color,var(--line));stroke-width:4;opacity:.8}
 .partner{stroke-dasharray:9 10;opacity:.42}
 .world.zoomCompactLevel .line{stroke-width:4;opacity:.46}
@@ -49,7 +50,9 @@ svg.lines{position:absolute;inset:0;width:100%;height:100%;overflow:visible;poin
 .person.selected{outline:4px solid rgba(107,143,113,.38)}
 .person.focusRoot{outline:4px solid rgba(201,137,94,.56)}
 .person.rootPerson{outline:4px solid rgba(111,136,182,.55)}
+.person.branchDragging{outline:4px solid rgba(201,137,94,.64);filter:brightness(1.04)}
 .person.directPerson{box-shadow:0 12px 34px rgba(107,143,113,.24),var(--shadow)}
+.person.affiliatePerson{opacity:.76}
 .person.sidePerson{opacity:.42}
 .person.familyMuted{opacity:.34}
 .person.spotlight{animation:spotlightPulse 1.8s ease both}
@@ -65,13 +68,22 @@ svg.lines{position:absolute;inset:0;width:100%;height:100%;overflow:visible;poin
 .coupleMembers{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .coupleMember{min-width:0;padding:4px 8px 4px 4px;border-radius:14px;cursor:pointer}
 .coupleMember + .coupleMember{border-left:1px solid rgba(78,54,30,.13);padding-left:10px}
+.coupleMember.affiliateMember{opacity:.76}
 .coupleMember .avatar{width:34px;height:34px;font-size:13px;margin-right:8px}
 .coupleMember h3{font-size:14px;overflow:hidden;text-overflow:ellipsis}
 .coupleMember .meta{font-size:10.5px}
 .coupleMember .tags{display:none}
+.multiPartnerCard{width:320px}
+.multiPartnerCard .coupleMembers{grid-template-columns:1fr 1fr;align-items:stretch}
+.multiPartnerCard .partnerStack{display:grid;align-content:stretch;border-left:1px solid rgba(78,54,30,.13);padding-left:8px}
+.multiPartnerCard .partnerStack .coupleMember{padding:4px;min-height:0}
+.multiPartnerCard .partnerStack .coupleMember + .coupleMember{border-left:0;border-top:1px solid rgba(78,54,30,.13);padding:8px 4px 4px}
 .toolbar{position:absolute;left:10px;right:10px;bottom:max(10px,env(safe-area-inset-bottom));display:flex;gap:8px;z-index:10;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;max-width:calc(100vw - 20px)}
 .toolbar::-webkit-scrollbar{display:none}
 .toolbar button{flex:0 0 auto;white-space:nowrap}
+.poolToolbarBtn{position:relative}
+.poolToolbarBtn::after{content:attr(data-count);position:absolute;right:-3px;top:-5px;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:var(--accent2);color:#fff;display:grid;place-items:center;font-size:10px;font-weight:900;box-shadow:0 2px 7px rgba(0,0,0,.2)}
+.poolToolbarBtn[data-count="0"]::after{display:none}
 .settingsWrap{position:relative;flex:0 0 auto}
 .fileWrap{position:relative;flex:0 0 auto}
 .fileMenu{position:fixed;right:10px;top:58px;display:none;grid-template-columns:1fr;gap:6px;width:min(220px,calc(100vw - 28px));padding:8px;border-radius:16px;background:rgba(255,250,240,.96);border:1px solid rgba(78,54,30,.14);box-shadow:0 16px 44px rgba(0,0,0,.22);z-index:40}
@@ -83,6 +95,8 @@ svg.lines{position:absolute;inset:0;width:100%;height:100%;overflow:visible;poin
 .settingsGroupTitle{font-size:11px;font-weight:900;color:var(--muted);text-transform:uppercase;letter-spacing:0}
 .settingsCheck{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink)}
 .settingsCheck input{width:auto;min-width:0}
+.poolCheck{display:flex;align-items:center;gap:9px;padding:10px 11px;border-radius:14px;background:#fff7ea;border:1px solid rgba(78,54,30,.12);color:var(--ink);font-size:13px}
+.poolCheck input{width:auto;min-width:0}
 .zoom{position:absolute;right:10px;top:12px;display:grid;gap:8px;z-index:10}
 .selectionRect{position:absolute;border:2px dashed rgba(107,143,113,.9);background:rgba(107,143,113,.12);pointer-events:none;z-index:15;}
 .minimap{position:absolute;right:12px;bottom:96px;width:168px;height:108px;border:1px solid rgba(0,0,0,.12);border-radius:14px;background:rgba(255,250,240,.92);box-shadow:0 12px 30px rgba(0,0,0,.12);padding:6px;z-index:12;pointer-events:auto;}
@@ -126,6 +140,23 @@ textarea{min-height:70px;resize:vertical}
 .imagePreview:empty::before{content:'Bild'}
 .imageActions{display:flex;gap:8px;flex-wrap:wrap}
 .imageActions .pill{flex:1 1 112px}
+.partnerChips{display:flex;flex-wrap:wrap;gap:6px;min-height:38px;align-items:center;padding:7px;border-radius:14px;background:#fff;border:1px solid rgba(0,0,0,.14)}
+.partnerChip{display:grid;grid-template-columns:auto minmax(90px,1fr) minmax(110px,140px) auto;align-items:center;gap:6px;width:100%;border-radius:12px;background:#efe1cd;color:#5e4937;padding:6px 9px;font-size:12px;font-weight:800}
+.partnerChipAvatar{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;overflow:hidden;background:var(--family-color,#6b8f71);color:#fff;font-size:9px}
+.partnerChipAvatar img{width:100%;height:100%;object-fit:cover}
+.partnerChipName{min-width:0;overflow-wrap:anywhere}
+.partnerMarriageDate{min-width:0;padding:7px 8px;font-size:12px}
+.partnerRemove{width:22px;height:22px;padding:0;border:0;border-radius:50%;display:grid;place-items:center;background:rgba(94,73,55,.12);color:#5e4937;font-size:17px;line-height:1;box-shadow:none}
+.partnerRemove:hover{background:#b55245;color:#fff}
+.partnerEmpty{font-size:12px;color:var(--muted);padding:2px 4px}
+.mentionRows{display:grid;gap:8px}
+.mentionRow{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(100px,.7fr) auto;gap:7px;padding:8px;border-radius:14px;background:#fff;border:1px solid rgba(0,0,0,.12)}
+.mentionRow .mentionLink{grid-column:1/3}
+.mentionRemove{grid-column:3;grid-row:1/3;align-self:stretch;min-width:42px;border-radius:12px;background:#f4dfda;color:var(--danger);font-size:18px}
+.mentionAddBtn{justify-self:start;box-shadow:none}
+.mentionList{display:grid;gap:7px}
+.mentionItem{padding:8px;border-radius:12px;background:#fff7ea;border:1px solid rgba(78,54,30,.1)}
+.mentionItem small{display:block;margin-top:3px;color:var(--muted);font-size:11px}
 body.viewMode .sheet .grid,body.viewMode .sheet .small{display:none}
 .personDetails{display:grid;gap:10px;margin-bottom:12px}
 .detailHero{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;padding:12px;border-radius:18px;background:#fff7ea;border:1px solid rgba(78,54,30,.13)}
@@ -205,6 +236,11 @@ body.viewMode .sheet .grid,body.viewMode .sheet .small{display:none}
   .sheet h2{position:sticky;top:-14px;z-index:2;margin:-14px -14px 12px;padding:14px;background:var(--panel);border-radius:22px 22px 0 0;box-shadow:0 1px 0 rgba(78,54,30,.08)}
   .grid,.detailGrid{grid-template-columns:1fr}
   .field.full,.detailBox.full{grid-column:auto}
+  .mentionRow{grid-template-columns:1fr auto}
+  .mentionRow .mentionDate,.mentionRow .mentionLink{grid-column:1}
+  .mentionRemove{grid-column:2;grid-row:1/4}
+  .partnerChip{grid-template-columns:auto minmax(0,1fr) auto}
+  .partnerMarriageDate{grid-column:1/-1;width:100%}
   .sheet .actions{flex-wrap:wrap}
   .sheet .actions button{flex:1 1 128px}
   .sheet > .actions:last-child{position:sticky;bottom:-16px;margin:12px -14px -16px;padding:10px 14px 14px;background:linear-gradient(180deg,rgba(255,250,240,0),var(--panel) 22%)}
@@ -216,18 +252,29 @@ body.viewMode .sheet .grid,body.viewMode .sheet .small{display:none}
 .listSheet{position:absolute;left:0;right:0;bottom:0;z-index:32;background:var(--panel);border-radius:24px 24px 0 0;box-shadow:0 -16px 50px rgba(0,0,0,.28);padding:14px max(14px,env(safe-area-inset-left)) max(14px,env(safe-area-inset-bottom));transform:translateY(110%);transition:.22s ease;max-height:88%;overflow:hidden;display:grid;grid-template-rows:auto auto 1fr auto;gap:10px}
 .listSheet.open{transform:translateY(0)}
 .listTop{display:flex;gap:8px;align-items:center}
-.listTop h2{font-size:18px;margin:0;flex:1}
+.listTop h2{font-size:18px;margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .listSearch{width:100%;border:1px solid rgba(0,0,0,.14);border-radius:14px;padding:11px;background:#fff;color:var(--ink)}
 .listRows{overflow:auto;display:grid;gap:8px;padding-right:2px}
 .listRow{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;background:#fff7ea;border:1px solid rgba(78,54,30,.13);border-radius:16px;padding:10px;box-shadow:0 4px 14px rgba(0,0,0,.07);cursor:pointer}
+.listRow.poolRow{border-style:dashed}
 .listRow:focus-visible{outline:3px solid rgba(107,143,113,.9);outline-offset:3px}
 .listName{font-weight:800;font-size:14px}
 .listMeta{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.25}
-.listActions{display:flex;gap:5px}
+.listActions{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
 .miniBtn{border-radius:999px;background:#efe1cd;color:#5e4937;padding:7px 9px;font-size:12px}
 .listFooter{display:flex;gap:8px}
 .listFooter button{flex:1}
 @media (min-width:760px){
-  .listSheet{left:auto;width:460px;top:0;bottom:0;border-radius:24px 0 0 24px;transform:translateX(110%)}
+  .listSheet{left:auto;width:min(460px,calc(100vw - 16px));top:0;bottom:0;border-radius:24px 0 0 24px;transform:translateX(110%)}
   .listSheet.open{transform:translateX(0)}
+}
+@media (max-width:980px){
+  .listSheet{left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));top:max(8px,env(safe-area-inset-top));bottom:max(8px,env(safe-area-inset-bottom));width:auto;max-width:calc(100vw - 16px);max-height:none;border-radius:18px;padding:12px;transform:translateY(110%)}
+  .listSheet.open{transform:translateY(0)}
+  .listTop{flex-wrap:wrap}
+  .listTop h2{flex-basis:100%}
+  .listRow{grid-template-columns:minmax(0,1fr)}
+  .listActions{justify-content:flex-start}
+  .listFooter{flex-wrap:wrap}
+  .listFooter button{flex:1 1 100px}
 }

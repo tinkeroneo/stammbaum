@@ -48,17 +48,22 @@ let focusMode = false;
 let focusId = null;
 let activeFamily = '';
 let editMode = false;
-let nameMode = 'short';
+let nameMode = 'full';
 let layoutMode = 'classic';
 let savedClassicPositions = null;
-let rootId = '';
-localStorage.removeItem(storeKey + '-root');
+let rootIds = [...(data.rootIds || [])];
 let spotlightId = null;
 let spotlightTimer = null;
 let sheetSnapshot = '';
 let imageDraft = '';
+let mentionsDraft = [];
+let removedPartnerDraft = new Set();
+let marriageDraft = {};
 let scrollExpanded = new Set();
 let checkCollapsed = new Set();
+let workingFileHandle = null;
+let workingFileWriteTimer = null;
+let workingFileWriteChain = Promise.resolve();
 
 const familyPalette = [
   '#6b8f71', '#c9895e', '#6f88b6', '#b86b77', '#8f7ab8',
@@ -67,9 +72,11 @@ const familyPalette = [
 const personFieldSettingsKey = storeKey + '-person-fields';
 const optionalPersonFields = [
   { key: 'occupation', label: 'Beruf' },
+  { key: 'religion', label: 'Glaubensrichtung' },
   { key: 'location', label: 'Ort' },
   { key: 'link', label: 'Link' },
-  { key: 'image', label: 'Bild' }
+  { key: 'image', label: 'Bild' },
+  { key: 'mentions', label: 'Erwähnungen' }
 ];
 let personFieldSettings = loadPersonFieldSettings();
 
@@ -105,9 +112,22 @@ function normalize(d) {
       ...(Array.isArray(p.partners) ? p.partners.map(String) : []),
       String(p.partner || '')
     ].filter(Boolean))];
+    const partnerDetails = Object.fromEntries(
+      Object.entries(p.partnerDetails || p.partner_details || {}).map(([id, details]) => [
+        String(id),
+        { married: String(details?.married || details?.marriageDate || details?.heiratsdatum || '') }
+      ])
+    );
     const confidence = ['high', 'medium', 'low'].includes(String(p.confidence || '').toLowerCase())
       ? String(p.confidence).toLowerCase()
       : 'high';
+    const mentions = (Array.isArray(p.mentions) ? p.mentions : Array.isArray(p.sources) ? p.sources : [])
+      .map(item => ({
+        title: String(item?.title || item?.name || ''),
+        date: String(item?.date || item?.datum || ''),
+        link: String(item?.link || item?.url || '')
+      }))
+      .filter(item => item.title || item.date || item.link);
     return {
       id: String(p.id || 'p' + (i + 1)),
       name: explicitName || name,
@@ -118,18 +138,30 @@ function normalize(d) {
       died: String(p.died || ''),
       birthName: rawBirthName,
       occupation: String(p.occupation || p.beruf || ''),
+      religion: String(p.religion || p.faith || p.glaubensrichtung || ''),
       location: String(p.location || p.ort || ''),
       link: String(p.link || p.url || ''),
       image: String(p.image || p.photo || p.picture || ''),
+      mentions,
+      pool: p.pool === true || p.inPool === true || p.status === 'pool',
       note: String(p.note || ''),
       confidence,
       x: Number.isFinite(+p.x) ? +p.x : 200 + i * 40,
       y: Number.isFinite(+p.y) ? +p.y : 200 + i * 40,
       parents: Array.isArray(p.parents) ? p.parents.map(String).filter(Boolean) : [],
       partner: partners[0] || '',
-      partners
+      partners,
+      partnerDetails
     };
   });
+  const requestedRootIds = uniqueIds([
+    ...(Array.isArray(d.rootIds) ? d.rootIds : []),
+    d.rootId,
+    d.mainRootId,
+    d.hauptwurzel
+  ]).filter(id => d.people.some(p => p.id === id)).slice(0, 2);
+  d.rootIds = requestedRootIds;
+  delete d.rootId;
   return d;
 }
 
@@ -152,6 +184,8 @@ async function loadDefaultData({ saveResult = true, fitResult = true } = {}) {
   } catch {
     data = normalize(structuredClone(sample));
   }
+  rootIds = [...(data.rootIds || [])];
+  updateRootButton();
   if (saveResult) save();
   render();
   if (fitResult) fit();
@@ -160,11 +194,87 @@ async function loadDefaultData({ saveResult = true, fitResult = true } = {}) {
 }
 function save() {
   try {
+    data.rootIds = rootIds.filter(id => person(id)).slice(0, 2);
     localStorage.setItem(storeKey, JSON.stringify(data, null, 2));
+    scheduleWorkingFileWrite();
     return true;
   } catch {
     alert('Speichern fehlgeschlagen. Das Bild ist vermutlich zu groß für den Browser-Speicher. Bitte ein kleineres Bild wählen oder das Bild entfernen.');
     return false;
+  }
+}
+function updateWorkingFileButton() {
+  const btn = $('workingFileBtn');
+  if (!btn) return;
+  btn.textContent = workingFileHandle ? `Arbeitsdatei: ${workingFileHandle.name}` : 'Arbeitsdatei öffnen';
+  btn.title = workingFileHandle
+    ? 'Änderungen werden automatisch in diese Datei geschrieben'
+    : 'JSON-Datei öffnen und künftig direkt aktualisieren';
+}
+function scheduleWorkingFileWrite() {
+  if (!workingFileHandle) return;
+  clearTimeout(workingFileWriteTimer);
+  workingFileWriteTimer = setTimeout(() => {
+    const json = JSON.stringify(data, null, 2);
+    workingFileWriteChain = workingFileWriteChain
+      .then(async () => {
+        const writable = await workingFileHandle.createWritable();
+        await writable.write(json);
+        await writable.close();
+      })
+      .catch(() => {
+        workingFileHandle = null;
+        updateWorkingFileButton();
+        alert('Die Arbeitsdatei konnte nicht aktualisiert werden. Bitte erneut öffnen.');
+      });
+  }, 180);
+}
+async function openWorkingFile() {
+  if (!window.showOpenFilePicker) {
+    alert('Direktes Bearbeiten lokaler Dateien wird von diesem Browser nicht unterstützt. Nutze bitte „JSON kopieren“.');
+    return;
+  }
+  try {
+    const [handle] = await window.showOpenFilePicker({
+      multiple: false,
+      types: [{
+        description: 'Stammbaum JSON',
+        accept: { 'application/json': ['.json'] }
+      }]
+    });
+    const file = await handle.getFile();
+    const imported = normalize(JSON.parse(await file.text()));
+    workingFileHandle = handle;
+    data = imported;
+    focusMode = false;
+    focusId = null;
+    activeFamily = '';
+    rootIds = [...(imported.rootIds || [])];
+    updateFocusButton();
+    updateRootButton();
+    updateWorkingFileButton();
+    save();
+    render();
+    fit();
+  } catch (err) {
+    if (err?.name !== 'AbortError') alert('Arbeitsdatei konnte nicht geöffnet werden.');
+  }
+}
+async function copyTreeJson() {
+  const json = JSON.stringify(exportData(true), null, 2);
+  try {
+    await navigator.clipboard.writeText(json);
+    alert('Aktuelle JSON-Daten wurden in die Zwischenablage kopiert.');
+  } catch {
+    const area = document.createElement('textarea');
+    area.value = json;
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    const copied = document.execCommand('copy');
+    area.remove();
+    alert(copied ? 'Aktuelle JSON-Daten wurden in die Zwischenablage kopiert.' : 'JSON konnte nicht kopiert werden.');
   }
 }
 function person(id) { return data.people.find(p => p.id === id); }
@@ -191,9 +301,28 @@ function addPartnerLink(p, q, reciprocal = true) {
 function removePartnerLink(p, otherId, reciprocal = true) {
   if (!p || !otherId) return;
   setPartnerIds(p, partnerIds(p).filter(id => id !== otherId));
+  if (p.partnerDetails) delete p.partnerDetails[otherId];
   if (reciprocal) {
     const q = person(otherId);
-    if (q) setPartnerIds(q, partnerIds(q).filter(id => id !== p.id));
+    if (q) {
+      setPartnerIds(q, partnerIds(q).filter(id => id !== p.id));
+      if (q.partnerDetails) delete q.partnerDetails[p.id];
+    }
+  }
+}
+function marriageDateFor(p, partnerId) {
+  return String(p?.partnerDetails?.[partnerId]?.married || person(partnerId)?.partnerDetails?.[p?.id]?.married || '');
+}
+function setMarriageDate(p, q, value, reciprocal = true) {
+  if (!p || !q) return;
+  const married = String(value || '').trim();
+  p.partnerDetails ||= {};
+  if (married) p.partnerDetails[q.id] = { ...(p.partnerDetails[q.id] || {}), married };
+  else delete p.partnerDetails[q.id];
+  if (reciprocal) {
+    q.partnerDetails ||= {};
+    if (married) q.partnerDetails[p.id] = { ...(q.partnerDetails[p.id] || {}), married };
+    else delete q.partnerDetails[p.id];
   }
 }
 function esc(s) { return String(s || '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
@@ -231,7 +360,7 @@ function selectPersonLabel(p, mode = 'person') {
     .map(q => fullName(q) || q.name)
     .join(', ');
   const relation = partners ? `Partner/in: ${partners}` : '';
-  const parts = [dates, birth, mode === 'partner' ? relation : ''].filter(Boolean);
+  const parts = [p.pool ? 'Vorrat' : '', dates, birth, mode === 'partner' ? relation : ''].filter(Boolean);
   return `${displayName(p)}${parts.length ? ' - ' + parts.join(' · ') : ''}`;
 }
 function visibleName(p) {
@@ -320,8 +449,9 @@ function withPreservedView(fn) {
 }
 function updateWorldBounds() {
   const margin = 600;
-  const maxX = Math.max(1600, ...data.people.map(p => p.x)) + margin;
-  const maxY = Math.max(1100, ...data.people.map(p => p.y)) + margin;
+  const visiblePeople = data.people.filter(p => !p.pool);
+  const maxX = Math.max(1600, ...visiblePeople.map(p => p.x)) + margin;
+  const maxY = Math.max(1100, ...visiblePeople.map(p => p.y)) + margin;
   world.style.width = maxX + 'px';
   world.style.height = maxY + 'px';
   lines.setAttribute('width', maxX);
@@ -462,6 +592,7 @@ function parentGroupPoint(parents, children) {
 }
 function renderFamilyLines(visible) {
   const groups = new Map();
+  const singleParentGroups = new Map();
 
   for (const child of data.people) {
     if (!visible.has(child.id)) continue;
@@ -470,9 +601,9 @@ function renderFamilyLines(visible) {
 
     if (parents.length === 1) {
       const parent = parents[0];
-      const color = lineageColorFor([parent, child]);
-      const bridge = isStemBridge(child, parents) ? ' stemBridge' : '';
-      addLine(parent.x, parent.y + 38, child.x, child.y - 46, `line childLine lineageLine singleParentLine${bridge}`, color);
+      const group = singleParentGroups.get(parent.id) || { parent, children: [] };
+      group.children.push(child);
+      singleParentGroups.set(parent.id, group);
       continue;
     }
 
@@ -494,11 +625,23 @@ function renderFamilyLines(visible) {
       addLine(hub.x, hub.y, child.x, child.y - 46, `line childLine lineageLine${bridge}`, color);
     }
   }
+
+  for (const group of singleParentGroups.values()) {
+    const hub = parentGroupPoint([group.parent], group.children);
+    hub.x = group.children.reduce((sum, child) => sum + child.x, 0) / group.children.length;
+    const color = lineageColorFor([group.parent, ...group.children]);
+    addLine(group.parent.x, group.parent.y + 28, hub.x, hub.y, 'line familyStem lineageLine singleParentLine', color);
+    addDot(hub.x, hub.y, 'familyHub singleParentHub', color);
+    for (const child of group.children) {
+      const bridge = isStemBridge(child, [group.parent]) ? ' stemBridge' : '';
+      addLine(hub.x, hub.y, child.x, child.y - 46, `line childLine lineageLine singleParentLine${bridge}`, color);
+    }
+  }
 }
 
 function familyStats() {
   const stats = new Map();
-  for (const p of data.people) {
+  for (const p of data.people.filter(p => !p.pool)) {
     const key = familyKey(p);
     const label = familyLabel(p);
     const item = stats.get(key) || { key, label, count: 0, people: [] };
@@ -683,6 +826,37 @@ function hiddenIds(){
 function hasChildren(id){
   return data.people.some(p=>(p.parents||[]).includes(id));
 }
+function poolBranchIds(id) {
+  const ids = new Set();
+  const queue = [id];
+  while (queue.length) {
+    const currentId = queue.shift();
+    if (!currentId || ids.has(currentId)) continue;
+    ids.add(currentId);
+    const current = person(currentId);
+    partnerIds(current).forEach(partnerId => {
+      if (!ids.has(partnerId)) queue.push(partnerId);
+    });
+    data.people
+      .filter(child => (child.parents || []).includes(currentId))
+      .forEach(child => {
+        if (!ids.has(child.id)) queue.push(child.id);
+      });
+  }
+  return ids;
+}
+function movableBranchIds(id) {
+  const source = person(id);
+  if (!source) return new Set();
+  return new Set([...poolBranchIds(id)].filter(branchId => person(branchId)?.pool === source.pool));
+}
+function setPoolBranch(id, pooled) {
+  const ids = poolBranchIds(id);
+  data.people.forEach(p => {
+    if (ids.has(p.id)) p.pool = pooled;
+  });
+  return ids;
+}
 function depthMap(){
   const byId = new Map(data.people.map(p => [p.id, p]));
   const memo = new Map();
@@ -733,7 +907,7 @@ function visibleIds() {
   const hidden = hiddenIds();
   const focused = focusMode && focusId ? focusNeighborhood(focusId) : null;
   return new Set(data.people
-    .filter(p => !hidden.has(p.id) && (!focused || focused.has(p.id)))
+    .filter(p => !p.pool && !hidden.has(p.id) && (!focused || focused.has(p.id)))
     .map(p => p.id));
 }
 function directLineIds(id) {
@@ -741,14 +915,18 @@ function directLineIds(id) {
   const root = person(id);
   if (!root) return ids;
 
+  const ancestorIds = new Set();
   const walkAncestors = pid => {
-    if (!pid || ids.has(pid)) return;
+    if (!pid || ancestorIds.has(pid)) return;
+    ancestorIds.add(pid);
     ids.add(pid);
     const p = person(pid);
     (p?.parents || []).forEach(walkAncestors);
   };
+  const descendantIds = new Set();
   const walkDescendants = pid => {
-    if (!pid || ids.has(pid)) return;
+    if (!pid || descendantIds.has(pid)) return;
+    descendantIds.add(pid);
     ids.add(pid);
     data.people
       .filter(p => (p.parents || []).includes(pid))
@@ -757,6 +935,31 @@ function directLineIds(id) {
 
   walkAncestors(id);
   walkDescendants(id);
+  return ids;
+}
+function mainLineIds() {
+  const ids = new Set();
+  rootIds.forEach(rootId => directLineIds(rootId).forEach(id => ids.add(id)));
+  return ids;
+}
+function isMainRoot(id) {
+  return rootIds.includes(id);
+}
+function connectedIds(id) {
+  const ids = new Set();
+  if (!person(id) || person(id).pool) return ids;
+  const queue = [id];
+  while (queue.length) {
+    const currentId = queue.shift();
+    if (ids.has(currentId)) continue;
+    ids.add(currentId);
+    const current = person(currentId);
+    partnerIds(current).forEach(partnerId => { if (!ids.has(partnerId) && !person(partnerId)?.pool) queue.push(partnerId); });
+    (current?.parents || []).forEach(parentId => { if (!ids.has(parentId) && !person(parentId)?.pool) queue.push(parentId); });
+    data.people
+      .filter(child => !child.pool && (child.parents || []).includes(currentId))
+      .forEach(child => { if (!ids.has(child.id)) queue.push(child.id); });
+  }
   return ids;
 }
 function updateModeUI() {
@@ -799,6 +1002,14 @@ function updateLayoutButton() {
   const labels = { classic: 'Klassisch', tree: 'Baum', radial: 'Radial' };
   const btn = $('layoutBtn');
   if (btn) btn.textContent = `Layout: ${labels[layoutMode]}`;
+}
+function updatePoolButton() {
+  const btn = $('poolBtn');
+  if (!btn) return;
+  const count = data.people.filter(p => p.pool).length;
+  btn.dataset.count = String(count);
+  btn.title = `Vorrat (${count})`;
+  btn.setAttribute('aria-label', `Personenvorrat öffnen, ${count} Personen`);
 }
 function closeSettingsMenu() {
   const menu = $('settingsMenu');
@@ -854,8 +1065,8 @@ function toggleFileMenu() {
 function updateRootButton() {
   const btn = $('rootBtn');
   if (!btn) return;
-  btn.textContent = rootId ? 'Start*' : 'Start';
-  btn.classList.toggle('primary', !!rootId);
+  btn.textContent = rootIds.length ? `Start* ${rootIds.length}` : 'Start';
+  btn.classList.toggle('primary', !!rootIds.length);
 }
 function zoomClass() {
   if (view.s < 0.12) return ' mini';
@@ -892,8 +1103,9 @@ function restoreClassicPositions() {
   }
 }
 function relationComponents() {
-  const ids = data.people.map(p => p.id);
-  const byId = new Map(data.people.map(p => [p.id, p]));
+  const activePeople = data.people.filter(p => !p.pool);
+  const ids = activePeople.map(p => p.id);
+  const byId = new Map(activePeople.map(p => [p.id, p]));
   const links = new Map(ids.map(id => [id, new Set()]));
 
   const link = (a, b) => {
@@ -902,7 +1114,7 @@ function relationComponents() {
     links.get(b).add(a);
   };
 
-  for (const p of data.people) {
+  for (const p of activePeople) {
     partnerIds(p).forEach(partnerId => link(p.id, partnerId));
     for (const pid of p.parents || []) link(p.id, pid);
   }
@@ -991,13 +1203,14 @@ function componentDepths(ids) {
 }
 function applyTreeLayout() {
   autoLayout(false);
-  if (!data.people.length) return;
+  const activePeople = data.people.filter(p => !p.pool);
+  if (!activePeople.length) return;
 
   const top = 130;
-  const ys = data.people.map(p => p.y);
+  const ys = activePeople.map(p => p.y);
   const minY = Math.min(...ys);
   const maxY = Math.max(...ys);
-  for (const p of data.people) {
+  for (const p of activePeople) {
     p.y = Math.round(top + (maxY - p.y) + (minY - top));
   }
 }
@@ -1077,7 +1290,7 @@ function personTileContent(p, className = '') {
   const dates = [p.born, p.died && '– ' + p.died].filter(Boolean).join(' ');
   const birth = birthNameDiffers(p) ? ` <span class="birthInfo">(geb. ${esc(p.birthName)})</span>` : '';
   const meta = dates || birth ? `<div class="meta">${esc(dates)}${birth}</div>` : '';
-  const tileTags = [p.occupation && p.occupation.slice(0,22), p.location && p.location.slice(0,22), p.note && p.note.slice(0,22), confidenceText(p)].filter(Boolean).slice(0, 3);
+  const tileTags = [p.occupation && p.occupation.slice(0,22), p.religion && p.religion.slice(0,22), p.location && p.location.slice(0,22), p.note && p.note.slice(0,22), confidenceText(p)].filter(Boolean).slice(0, 3);
   const tags = tileTags.length ? `<div class="tags">${tileTags.map(tag => `<span class="tag">${esc(tag)}</span>`).join('')}</div>` : '';
   const display = visibleName(p);
   const title = fullName(p) !== display ? ` title="${esc(fullName(p))}"` : '';
@@ -1087,10 +1300,23 @@ function personTileContent(p, className = '') {
 
 // -- Rendering ---------------------------------------------------------
 function render() {
+  updatePoolButton();
   updateWorldBounds();
   updateZoomClass();
   const visible = visibleIds();
-  const directIds = rootId ? directLineIds(rootId) : new Set();
+  const directIds = mainLineIds();
+  const affiliateIds = new Set();
+  const affiliateQueue = [...directIds];
+  const affiliateSeen = new Set(directIds);
+  while (affiliateQueue.length) {
+    const id = affiliateQueue.shift();
+    mutualPartnerIds(person(id)).forEach(partnerId => {
+      if (affiliateSeen.has(partnerId)) return;
+      affiliateSeen.add(partnerId);
+      affiliateQueue.push(partnerId);
+      if (!directIds.has(partnerId)) affiliateIds.add(partnerId);
+    });
+  }
   const zClass = zoomClass();
   nodes.innerHTML = '';
   lines.innerHTML = '';
@@ -1098,49 +1324,72 @@ function render() {
 
   for (const p of data.people) {
     if(!visible.has(p.id)) continue;
-    if (editMode) {
-      for (const partnerId of partnerIds(p)) {
-        if (!(p.id < partnerId) || !visible.has(partnerId)) continue;
-        const q = person(partnerId);
-        if (q && visible.has(q.id)) addLine(p.x, p.y, q.x, q.y, 'line partner');
-      }
+    if (!editMode) continue;
+    for (const partnerId of partnerIds(p)) {
+      if (!(p.id < partnerId) || !visible.has(partnerId)) continue;
+      const q = person(partnerId);
+      if (q && visible.has(q.id)) addLine(p.x, p.y, q.x, q.y, 'line partner');
     }
   }
 
   renderFamilyLines(visible);
 
-  const renderedPairs = new Set();
   const renderedCoupleMembers = new Set();
+  const partnerCluster = start => {
+    const members = [];
+    const seen = new Set();
+    const queue = [start.id];
+    while (queue.length) {
+      const id = queue.shift();
+      if (!id || seen.has(id) || !visible.has(id)) continue;
+      seen.add(id);
+      const member = person(id);
+      if (!member) continue;
+      members.push(member);
+      mutualPartnerIds(member).forEach(partnerId => {
+        if (!seen.has(partnerId) && visible.has(partnerId)) queue.push(partnerId);
+      });
+    }
+    return members;
+  };
   for (const p of data.people) {
     if(!visible.has(p.id)) continue;
     if (renderedCoupleMembers.has(p.id)) continue;
-    const partner = !editMode ? person(mutualPartnerIds(p).find(id => visible.has(id) && !renderedCoupleMembers.has(id))) : null;
-    const isCouple = !editMode && partner && visible.has(partner.id);
+    const cluster = !editMode ? partnerCluster(p) : [p];
+    const isCouple = !editMode && cluster.length > 1;
     if (isCouple) {
-      const pairKey = [p.id, partner.id].sort().join('|');
-      if (renderedPairs.has(pairKey)) continue;
-      renderedPairs.add(pairKey);
-      renderedCoupleMembers.add(p.id);
-      renderedCoupleMembers.add(partner.id);
-      const pair = [p, partner].sort((a,b) => a.x - b.x || a.id.localeCompare(b.id));
-      const [a, b] = pair;
+      cluster.forEach(member => renderedCoupleMembers.add(member.id));
+      const members = [...cluster].sort((a,b) =>
+        Number(directIds.has(b.id)) - Number(directIds.has(a.id)) ||
+        (a.x - b.x) ||
+        a.id.localeCompare(b.id)
+      );
+      const anchor = members.find(member => directIds.has(member.id)) || members[0];
       const el = document.createElement('div');
-      const collapseId = hasChildren(a.id) ? a.id : hasChildren(b.id) ? b.id : '';
-      const key = familyKey(a);
-      const familyMuted = activeFamily && !pair.some(member => matchesFamily(member, activeFamily));
-      const sideLine = rootId && !pair.some(member => directIds.has(member.id));
-      el.className = 'person couplePerson' + zClass + (compactMode ? ' compact' : '') + (pair.some(member => selected === member.id) ? ' selected' : '') + (pair.some(member => focusMode && focusId === member.id) ? ' focusRoot' : '') + (pair.some(member => rootId === member.id) ? ' rootPerson' : '') + (pair.some(member => directIds.has(member.id)) ? ' directPerson' : '') + (sideLine ? ' sidePerson' : '') + (pair.some(member => spotlightId === member.id) ? ' spotlight' : '') + (familyMuted ? ' familyMuted' : '') + (collapseId && collapsed.has(collapseId) ? ' collapsed' : '');
-      el.style.left = Math.round((a.x + b.x) / 2) + 'px';
-      el.style.top = Math.round((a.y + b.y) / 2) + 'px';
+      const collapseId = members.find(member => hasChildren(member.id))?.id || '';
+      const key = familyKey(anchor);
+      const familyMuted = activeFamily && !members.some(member => matchesFamily(member, activeFamily));
+      const sideLine = rootIds.length && !members.some(member => directIds.has(member.id) || affiliateIds.has(member.id));
+      el.className = 'person couplePerson' + (members.length > 2 ? ' multiPartnerCard' : '') + zClass + (compactMode ? ' compact' : '') + (members.some(member => selected === member.id) ? ' selected' : '') + (members.some(member => focusMode && focusId === member.id) ? ' focusRoot' : '') + (members.some(member => isMainRoot(member.id)) ? ' rootPerson' : '') + (members.some(member => directIds.has(member.id)) ? ' directPerson' : '') + (sideLine ? ' sidePerson' : '') + (members.some(member => spotlightId === member.id) ? ' spotlight' : '') + (familyMuted ? ' familyMuted' : '') + (collapseId && collapsed.has(collapseId) ? ' collapsed' : '');
+      const primaryPartner = person(anchor.partner) || members.find(member => member.id !== anchor.id);
+      const positionMembers = members.length > 2 && primaryPartner
+        ? [anchor, primaryPartner]
+        : members;
+      el.style.left = Math.round(positionMembers.reduce((sum, member) => sum + member.x, 0) / positionMembers.length) + 'px';
+      el.style.top = Math.round(positionMembers.reduce((sum, member) => sum + member.y, 0) / positionMembers.length) + 'px';
       el.style.setProperty('--family-color', familyColor(key));
-      el.style.setProperty('--partner-color', familyColor(familyKey(b)));
-      el.dataset.id = a.id;
-      el.innerHTML = `<div class="coupleMembers">${personTileContent(a, 'coupleMember')}${personTileContent(b, 'coupleMember')}</div>${collapseId ? `<button class="collapseBtn" title="Ast ein-/ausklappen">${collapsed.has(collapseId)?'+' : '−'}</button>` : ''}`;
+      el.style.setProperty('--partner-color', familyColor(familyKey(members[1])));
+      el.dataset.id = anchor.id;
+      const memberClass = member => `coupleMember${affiliateIds.has(member.id) ? ' affiliateMember' : ''}`;
+      const memberHtml = members.length > 2
+        ? `${personTileContent(anchor, memberClass(anchor))}<div class="partnerStack">${members.filter(member => member.id !== anchor.id).map(member => personTileContent(member, memberClass(member))).join('')}</div>`
+        : members.map(member => personTileContent(member, memberClass(member))).join('');
+      el.innerHTML = `<div class="coupleMembers">${memberHtml}</div>${collapseId ? `<button class="collapseBtn" title="Ast ein-/ausklappen">${collapsed.has(collapseId)?'+' : '−'}</button>` : ''}`;
       el.addEventListener('click', e => {
         e.stopPropagation();
         if (Date.now() < suppressOpenUntil) return;
         const member = e.target.closest('[data-member-id]');
-        selected = member?.dataset.memberId || a.id;
+        selected = member?.dataset.memberId || anchor.id;
         openSheet(selected);
       });
       el.addEventListener('touchend', e => {
@@ -1148,7 +1397,7 @@ function render() {
         e.preventDefault();
         e.stopPropagation();
         const member = e.target.closest('[data-member-id]');
-        selected = member?.dataset.memberId || a.id;
+        selected = member?.dataset.memberId || anchor.id;
         openSheet(selected);
       }, { passive:false });
       const cb = el.querySelector('.collapseBtn');
@@ -1173,12 +1422,13 @@ function render() {
     const canCollapse = hasChildren(p.id);
     const key = familyKey(p);
     const familyMuted = activeFamily && !matchesFamily(p, activeFamily);
-    const sideLine = rootId && !directIds.has(p.id);
-    el.className = 'person' + zClass + (compactMode ? ' compact' : '') + (selected === p.id ? ' selected' : '') + (focusMode && focusId === p.id ? ' focusRoot' : '') + (rootId === p.id ? ' rootPerson' : '') + (directIds.has(p.id) ? ' directPerson' : '') + (sideLine ? ' sidePerson' : '') + (spotlightId === p.id ? ' spotlight' : '') + (familyMuted ? ' familyMuted' : '') + (collapsed.has(p.id) ? ' collapsed' : '');
+    const sideLine = rootIds.length && !directIds.has(p.id) && !affiliateIds.has(p.id);
+    el.className = 'person' + zClass + (compactMode ? ' compact' : '') + (selected === p.id ? ' selected' : '') + (focusMode && focusId === p.id ? ' focusRoot' : '') + (isMainRoot(p.id) ? ' rootPerson' : '') + (directIds.has(p.id) ? ' directPerson' : '') + (affiliateIds.has(p.id) ? ' affiliatePerson' : '') + (sideLine ? ' sidePerson' : '') + (spotlightId === p.id ? ' spotlight' : '') + (familyMuted ? ' familyMuted' : '') + (drag?.branch && drag.positions?.has(p.id) ? ' branchDragging' : '') + (collapsed.has(p.id) ? ' collapsed' : '');
     el.style.left = p.x + 'px';
     el.style.top = p.y + 'px';
     el.style.setProperty('--family-color', familyColor(key));
     el.dataset.id = p.id;
+    if (editMode) el.title = 'Ziehen: Person bewegen · Shift + Ziehen: gesamten Ast bewegen';
 
     el.innerHTML = `${personTileContent(p)}${canCollapse ? `<button class="collapseBtn" title="Ast ein-/ausklappen">${collapsed.has(p.id)?'+' : '−'}</button>` : ''}`;
 
@@ -1250,19 +1500,29 @@ function onNodePointerDown(e) {
   const p = person(id);
   if (!p) return;
   selected = id;
-  drag = { id, sx: e.clientX, sy: e.clientY, px: p.x, py: p.y, moved: false };
+  const branchIds = e.shiftKey ? movableBranchIds(id) : new Set([id]);
+  const positions = new Map([...branchIds].map(branchId => {
+    const member = person(branchId);
+    return [branchId, { x: member.x, y: member.y }];
+  }));
+  drag = { id, sx: e.clientX, sy: e.clientY, positions, branch: e.shiftKey, moved: false };
+  if (drag.branch) {
+    nodes.querySelectorAll('.person').forEach(el => el.classList.toggle('branchDragging', branchIds.has(el.dataset.id)));
+  }
 }
 
 window.addEventListener('pointermove', e => {
   if (!drag) return;
-  const p = person(drag.id);
-  if (!p) return;
   const dx = (e.clientX - drag.sx) / view.s;
   const dy = (e.clientY - drag.sy) / view.s;
   if (Math.abs(dx) + Math.abs(dy) > 7) drag.moved = true;
   if (drag.moved) {
-    p.x = drag.px + dx;
-    p.y = drag.py + dy;
+    drag.positions.forEach((position, id) => {
+      const member = person(id);
+      if (!member) return;
+      member.x = position.x + dx;
+      member.y = position.y + dy;
+    });
     scheduleRender();
   }
 });
@@ -1272,6 +1532,7 @@ window.addEventListener('pointerup', e => {
   const id = drag.id;
   const moved = drag.moved;
   drag = null;
+  nodes.querySelectorAll('.branchDragging').forEach(el => el.classList.remove('branchDragging'));
   if (moved) {
     if (renderFrame) {
       cancelAnimationFrame(renderFrame);
@@ -1372,7 +1633,15 @@ window.addEventListener('pointerup', e => {
   selected = id;
   openSheet(id);
 });
-window.addEventListener('pointercancel', e => { clearTimeout(longPressTimer); main.releasePointerCapture?.(e.pointerId); pan = null; drag = null; selection = null; selectionRect.classList.add('hidden'); });
+window.addEventListener('pointercancel', e => {
+  clearTimeout(longPressTimer);
+  main.releasePointerCapture?.(e.pointerId);
+  pan = null;
+  drag = null;
+  selection = null;
+  selectionRect.classList.add('hidden');
+  nodes.querySelectorAll('.branchDragging').forEach(el => el.classList.remove('branchDragging'));
+});
 
 // -- Touch / pointer helpers -------------------------------------------
 function isInteractiveTarget(t) {
@@ -1576,11 +1845,12 @@ function estimatedGenerationYear(p, depth, siblingIndex){
 
 // -- Automatic layout algorithm ----------------------------------------
 function autoLayout(saveResult = true) {
-  if (!data.people.length) return;
+  const activePeople = data.people.filter(p => !p.pool);
+  if (!activePeople.length) return;
 
-  const byId = new Map(data.people.map(p => [p.id, p]));
-  const childrenOf = new Map(data.people.map(p => [p.id, []]));
-  for (const p of data.people) {
+  const byId = new Map(activePeople.map(p => [p.id, p]));
+  const childrenOf = new Map(activePeople.map(p => [p.id, []]));
+  for (const p of activePeople) {
     for (const pid of p.parents || []) {
       if (childrenOf.has(pid)) childrenOf.get(pid).push(p);
     }
@@ -1694,7 +1964,8 @@ function autoLayout(saveResult = true) {
   const rootCandidates = [];
   const used = new Set();
 
-  for (const p of data.people) {
+  for (const p of activePeople) {
+    if (p.pool) continue;
     if (hasParents(p) || used.has(p.id)) continue;
     if (partnerIds(p).some(pid => hasParents(byId.get(pid)))) {
       used.add(p.id);
@@ -1755,7 +2026,7 @@ function autoLayout(saveResult = true) {
       graph.get(toRoot).push({ id: fromRoot, delta: -delta });
     };
 
-    for (const p of data.people) {
+    for (const p of activePeople) {
       if (!hasParents(p)) continue;
       for (const partnerId of partnerIds(p)) {
         const q = byId.get(partnerId);
@@ -1815,10 +2086,57 @@ function autoLayout(saveResult = true) {
       for (const [rootId, offset] of offsets.entries()) offsets.set(rootId, offset - minOffset);
     }
 
-    return offsets;
+    return { offsets, graph };
   }
 
-  const rootGenerationOffsets = generationOffsetsForBridgePairs();
+  const bridgeLayout = generationOffsetsForBridgePairs();
+  const rootGenerationOffsets = bridgeLayout.offsets;
+
+  function orderRootsByBridgeAffinity() {
+    const originalIndex = new Map(rootCandidates.map((root, index) => [root.id, index]));
+    const directIds = mainLineIds();
+    const mainRoots = rootCandidates
+      .filter(root => directIds.has(root.id) || unitIds(root).some(id => directIds.has(id)))
+      .sort((a, b) => originalIndex.get(a.id) - originalIndex.get(b.id));
+    const ordered = [];
+    const visited = new Set();
+    const queue = [];
+
+    // Direct roots must claim the shared descendants before roots from
+    // partner-side ancestry get a chance to reserve that same subtree.
+    for (const root of mainRoots) {
+      if (visited.has(root.id)) continue;
+      visited.add(root.id);
+      ordered.push(root);
+      queue.push(root.id);
+    }
+
+    const appendBridgeNeighbors = () => {
+      while (queue.length) {
+        const id = queue.shift();
+        const neighbors = (bridgeLayout.graph.get(id) || [])
+          .map(edge => byId.get(edge.id))
+          .filter(root => root && !visited.has(root.id))
+          .sort((a, b) => subtreeWidth(b.id) - subtreeWidth(a.id) || originalIndex.get(a.id) - originalIndex.get(b.id));
+        for (const root of neighbors) {
+          visited.add(root.id);
+          ordered.push(root);
+          queue.push(root.id);
+        }
+      }
+    };
+    appendBridgeNeighbors();
+
+    for (const seed of rootCandidates) {
+      if (visited.has(seed.id)) continue;
+      visited.add(seed.id);
+      ordered.push(seed);
+      queue.push(seed.id);
+      appendBridgeNeighbors();
+    }
+    rootCandidates.splice(0, rootCandidates.length, ...ordered);
+  }
+  orderRootsByBridgeAffinity();
 
   function yForPerson(p, fallbackDepth, siblingIndex = 0){
     const depth = Number.isFinite(fallbackDepth) ? fallbackDepth : depthOf(p);
@@ -1826,6 +2144,7 @@ function autoLayout(saveResult = true) {
   }
 
   const placed = new Set();
+  const rootBranchIds = [];
 
   function place(id, left, fallbackDepth = 0, siblingIndex = 0) {
     const p = byId.get(id);
@@ -1876,7 +2195,7 @@ function autoLayout(saveResult = true) {
 
   function compactThinSiblingUnits() {
     const groups = new Map();
-    for (const child of data.people) {
+    for (const child of activePeople) {
       const key = parentGroupKey(child.parents || []);
       if (!key) continue;
       if (!groups.has(key)) groups.set(key, []);
@@ -1922,38 +2241,112 @@ function autoLayout(saveResult = true) {
         .map(id => byId.get(id))
         .filter(Boolean)
         .reduce((sum, parent, idx, arr) => sum + parent.x / arr.length, 0);
-      const occupied = anchors.map(child => child.x).sort((a,b) => a - b);
+      const occupied = anchors.map(child => ({
+        center: child.x,
+        width: partnerIds(child).some(id => byId.has(id)) ? coupleCardWidth : singleCardWidth
+      }));
       const anchorCenter = occupied.length
-        ? occupied.reduce((sum, x) => sum + x, 0) / occupied.length
+        ? occupied.reduce((sum, item) => sum + item.center, 0) / occupied.length
         : parentCenter || siblings.reduce((sum, child) => sum + child.x, 0) / siblings.length;
       const y = Math.round(siblings.reduce((sum, child) => sum + child.y, 0) / siblings.length);
-      const offsets = [0, -240, 240, -480, 480, -720, 720, -960, 960];
+      const fits = (center, width) => occupied.every(item =>
+        Math.abs(item.center - center) >= (item.width + width) / 2 + 24
+      );
 
       thinUnits
         .sort((a,b) => (birthSortValue(a.child) ?? Infinity) - (birthSortValue(b.child) ?? Infinity) || a.center - b.center)
-        .forEach((unit, idx) => {
-          let target = unit.center;
-          for (const offset of offsets) {
-            const candidate = Math.round(anchorCenter + offset + idx * 8);
-            if (occupied.every(x => Math.abs(x - candidate) >= Math.max(160, unit.width / 2 + 70))) {
-              target = candidate;
-              break;
-            }
+        .forEach(unit => {
+          const candidates = [anchorCenter];
+          for (const item of occupied) {
+            const distance = (item.width + unit.width) / 2 + 24;
+            candidates.push(item.center - distance, item.center + distance);
           }
+          const target = Math.round(candidates
+            .filter(candidate => fits(candidate, unit.width))
+            .sort((a, b) => Math.abs(a - parentCenter) - Math.abs(b - parentCenter) || a - b)[0] ?? anchorCenter);
           const delta = target - unit.center;
           unit.members.forEach(member => {
             member.x = Math.round(member.x + delta);
             member.y = y;
           });
-          occupied.push(target);
-          occupied.sort((a,b) => a - b);
+          occupied.push({ center: target, width: unit.width });
         });
     }
   }
 
+  function compactSiblingSubtrees() {
+    const groups = new Map();
+    for (const child of activePeople) {
+      const key = parentGroupKey(child.parents || []);
+      if (!key) continue;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(child);
+    }
+
+    const branchIdsFor = (startId, blockedRootIds) => {
+      const ids = new Set();
+      const queue = [startId];
+      while (queue.length) {
+        const id = queue.shift();
+        if (!id || ids.has(id) || !byId.has(id) || (id !== startId && blockedRootIds.has(id))) continue;
+        ids.add(id);
+        partnerIds(byId.get(id)).forEach(partnerId => queue.push(partnerId));
+        (childrenOf.get(id) || []).forEach(child => queue.push(child.id));
+      }
+      return ids;
+    };
+    const boundsFor = ids => {
+      const people = [...ids].map(id => byId.get(id)).filter(Boolean);
+      return {
+        min: Math.min(...people.map(p => p.x)) - singleCardWidth / 2,
+        max: Math.max(...people.map(p => p.x)) + singleCardWidth / 2
+      };
+    };
+
+    [...groups.values()]
+      .filter(siblings => siblings.length > 1)
+      .sort((a, b) => Math.max(...b.map(person => depthOf(person))) - Math.max(...a.map(person => depthOf(person))))
+      .forEach(siblings => {
+        const units = [];
+        const claimed = new Set();
+        const siblingIds = new Set(siblings.map(sibling => sibling.id));
+        siblings
+          .sort((a,b) => a.x - b.x)
+          .forEach(child => {
+            const ids = branchIdsFor(child.id, siblingIds);
+            const exclusiveIds = new Set([...ids].filter(id => !claimed.has(id)));
+            exclusiveIds.forEach(id => claimed.add(id));
+            if (!exclusiveIds.size) return;
+            const bounds = boundsFor(exclusiveIds);
+            units.push({ ids: exclusiveIds, min: bounds.min, max: bounds.max, width: bounds.max - bounds.min });
+          });
+        if (units.length < 2) return;
+
+        const parents = (siblings[0].parents || [])
+          .map(id => byId.get(id))
+          .filter(Boolean);
+        const parentCenter = parents.length
+          ? parents.reduce((sum, parent) => sum + parent.x, 0) / parents.length
+          : null;
+        const totalWidth = units.reduce((sum, unit) => sum + unit.width, 0) + (units.length - 1) * 54;
+        const groupCenter = parentCenter !== null
+          ? parentCenter
+          : (units[0].min + units[units.length - 1].max) / 2;
+        let cursor = Math.round(groupCenter - totalWidth / 2);
+        units.forEach(unit => {
+          const delta = Math.round(cursor - unit.min);
+          unit.ids.forEach(id => {
+            const member = byId.get(id);
+            if (member) member.x = Math.round(member.x + delta);
+          });
+          cursor += unit.width + 54;
+        });
+      });
+  }
+
   function alignPartnerClusters() {
     const handled = new Set();
-    for (const p of data.people) {
+    for (const p of activePeople) {
       const partners = partnerIds(p).map(id => byId.get(id)).filter(Boolean);
       if (partners.length < 2) continue;
 
@@ -1976,6 +2369,94 @@ function autoLayout(saveResult = true) {
     }
   }
 
+  function anchorInLawAncestorBranches() {
+    const directIds = mainLineIds();
+    if (!directIds.size) return;
+    const shifted = new Set();
+
+    const ancestorBranchIds = partner => {
+      const ids = new Set([partner.id]);
+      const queue = [...(partner.parents || []), ...partnerIds(partner).filter(id => !directIds.has(id))];
+      while (queue.length) {
+        const id = queue.shift();
+        if (!id || ids.has(id) || directIds.has(id)) continue;
+        const current = byId.get(id);
+        if (!current) continue;
+        ids.add(id);
+        (current.parents || []).forEach(parentId => queue.push(parentId));
+        partnerIds(current).forEach(partnerId => {
+          if (!directIds.has(partnerId)) queue.push(partnerId);
+        });
+      }
+      const branchQueue = [...ids];
+      while (branchQueue.length) {
+        const id = branchQueue.shift();
+        data.people
+          .filter(child => !child.pool && (child.parents || []).includes(id))
+          .forEach(child => {
+            if (directIds.has(child.id) || ids.has(child.id) || !byId.has(child.id)) return;
+            ids.add(child.id);
+            branchQueue.push(child.id);
+            partnerIds(child).forEach(partnerId => {
+              if (directIds.has(partnerId) || ids.has(partnerId) || !byId.has(partnerId)) return;
+              ids.add(partnerId);
+              branchQueue.push(partnerId);
+            });
+          });
+      }
+      return ids;
+    };
+    const sideDescendantIds = startId => {
+      const ids = new Set();
+      const queue = [startId];
+      while (queue.length) {
+        const id = queue.shift();
+        if (!id || ids.has(id) || directIds.has(id) || !byId.has(id)) continue;
+        ids.add(id);
+        partnerIds(byId.get(id)).forEach(partnerId => {
+          if (!directIds.has(partnerId)) queue.push(partnerId);
+        });
+        (childrenOf.get(id) || []).forEach(child => {
+          if (!directIds.has(child.id)) queue.push(child.id);
+        });
+      }
+      return ids;
+    };
+
+    for (const mainPerson of activePeople.filter(p => directIds.has(p.id))) {
+      for (const partnerId of partnerIds(mainPerson)) {
+        const partner = byId.get(partnerId);
+        if (!partner || directIds.has(partner.id) || shifted.has(partner.id)) continue;
+        const branchIds = ancestorBranchIds(partner);
+        const direction = partner.x >= mainPerson.x ? 1 : -1;
+        const targetX = Math.round(mainPerson.x + direction * pairGap);
+        const delta = targetX - partner.x;
+        branchIds.forEach(id => {
+          const member = byId.get(id);
+          if (!member) return;
+          member.x = Math.round(member.x + delta);
+          shifted.add(id);
+        });
+        partner.y = mainPerson.y;
+
+        const sideChildren = (childrenOf.get(partner.id) || [])
+          .filter(child => !directIds.has(child.id) && !(child.parents || []).some(parentId => directIds.has(parentId)))
+          .sort((a,b) => (birthSortValue(a) ?? Infinity) - (birthSortValue(b) ?? Infinity) || a.x - b.x);
+        const step = 224;
+        const sideCenterX = Math.round(partner.x + direction * pairGap * .72);
+        sideChildren.forEach((child, index) => {
+          const centeredIndex = index - (sideChildren.length - 1) / 2;
+          const targetChildX = Math.round(sideCenterX + centeredIndex * step);
+          const childDelta = targetChildX - child.x;
+          sideDescendantIds(child.id).forEach(id => {
+            const member = byId.get(id);
+            if (member) member.x = Math.round(member.x + childDelta);
+          });
+        });
+      }
+    }
+  }
+
   function resolveRowOverlaps() {
     const rowTolerance = 92;
     const minGap = 18;
@@ -1983,7 +2464,8 @@ function autoLayout(saveResult = true) {
     const units = [];
 
     const sameRow = (a, b) => Math.abs(a.y - b.y) <= 8;
-    for (const p of data.people) {
+    for (const p of activePeople) {
+      if (p.pool) continue;
       if (usedInUnit.has(p.id)) continue;
       const partner = partnerIds(p)
         .map(id => byId.get(id))
@@ -2068,22 +2550,98 @@ function autoLayout(saveResult = true) {
 
   let left = startX;
   rootCandidates.forEach((r, idx) => {
+    const before = new Set(placed);
     const w = subtreeWidth(r.id);
     place(r.id, left, rootGenerationOffsets.get(r.id) || 0, idx);
+    const ids = new Set([...placed].filter(id => !before.has(id)));
+    if (ids.size) rootBranchIds.push(ids);
     left += w + 18;
   });
 
-  data.people.forEach((p, idx) => {
+  activePeople.forEach((p, idx) => {
     if (placed.has(p.id) || used.has(p.id)) return;
+    const before = new Set(placed);
     const w = subtreeWidth(p.id);
     place(p.id, left, depthOf(p), idx);
+    const ids = new Set([...placed].filter(id => !before.has(id)));
+    if (ids.size) rootBranchIds.push(ids);
     left += w + 18;
   });
 
-  compactThinSiblingUnits();
-  alignPartnerClusters();
+  function packRootBranches() {
+    const branchGap = 96;
+    let cursor = startX;
+    for (const ids of rootBranchIds) {
+      const people = [...ids].map(id => byId.get(id)).filter(Boolean);
+      if (!people.length) continue;
+      const minX = Math.min(...people.map(person => person.x - singleCardWidth / 2));
+      const maxX = Math.max(...people.map(person => person.x + singleCardWidth / 2));
+      const delta = Math.round(cursor - minX);
+      people.forEach(person => { person.x = Math.round(person.x + delta); });
+      cursor += maxX - minX + branchGap;
+    }
+  }
+
+  function compressEmptyHorizontalSpace() {
+    const maxEmptyGap = 620;
+    const columns = new Map();
+    for (const person of activePeople) {
+      const x = Math.round(person.x);
+      if (!columns.has(x)) columns.set(x, []);
+      columns.get(x).push(person);
+    }
+
+    let offset = 0;
+    let previousX = null;
+    for (const [originalX, people] of [...columns.entries()].sort((a, b) => a[0] - b[0])) {
+      let targetX = originalX - offset;
+      if (previousX !== null && targetX - previousX > maxEmptyGap) {
+        offset += targetX - previousX - maxEmptyGap;
+        targetX = originalX - offset;
+      }
+      people.forEach(person => { person.x = targetX; });
+      previousX = targetX;
+    }
+  }
+
+  function interlockRootBranches() {
+    const cardGap = singleCardWidth + 28;
+    const rowTolerance = 96;
+    const branches = rootBranchIds
+      .map(ids => ({
+        ids,
+        people: [...ids].map(id => byId.get(id)).filter(Boolean)
+      }))
+      .filter(branch => branch.people.length)
+      .sort((a, b) =>
+        Math.min(...a.people.map(person => person.x)) - Math.min(...b.people.map(person => person.x))
+      );
+    const occupied = [];
+
+    for (const branch of branches) {
+      const minX = Math.min(...branch.people.map(person => person.x));
+      let minimumDelta = startX - minX;
+      for (const person of branch.people) {
+        for (const fixed of occupied) {
+          if (Math.abs(person.y - fixed.y) > rowTolerance) continue;
+          minimumDelta = Math.max(minimumDelta, fixed.x + cardGap - person.x);
+        }
+      }
+      const delta = Math.min(0, Math.round(minimumDelta));
+      if (delta) branch.people.forEach(person => { person.x = Math.round(person.x + delta); });
+      occupied.push(...branch.people);
+    }
+  }
+
   resolveRowOverlaps();
   packRelationComponents();
+  compactSiblingSubtrees();
+  compactThinSiblingUnits();
+  packRootBranches();
+  alignPartnerClusters();
+  anchorInLawAncestorBranches();
+  interlockRootBranches();
+  compressEmptyHorizontalSpace();
 
   if (saveResult) {
     clearGeneratedLayoutState();
@@ -2127,9 +2685,27 @@ function fillSelects(
   $('parent1').value = selectedParent1;
   $('parent2').innerHTML = opt(suggestParentOrder(current, selectedParent1));
   $('parent2').value = selectedParent2;
-  const existingPartners = new Set(partnerIds(person(current)));
+  const existingPartners = new Set(partnerIds(person(current)).filter(id => !removedPartnerDraft.has(id)));
   $('partner').innerHTML = partnerOpt(data.people.filter(p => p.id !== current && !existingPartners.has(p.id)).sort((a,b) => fullName(a).localeCompare(fullName(b))));
   $('partner').value = selectedPartner;
+}
+
+function renderCurrentPartners(p) {
+  const container = $('currentPartners');
+  if (!container) return;
+  const partners = partnerIds(p).filter(id => !removedPartnerDraft.has(id)).map(person).filter(Boolean);
+  container.innerHTML = partners.length
+    ? partners.map(partner => `
+      <span class="partnerChip">
+        <span class="partnerChipAvatar" style="--family-color:${esc(familyColor(familyKey(partner)))}">${avatarHtml(partner)}</span>
+        <span class="partnerChipName">${esc(fullName(partner) || partner.name)}</span>
+        ${editMode
+          ? `<input class="partnerMarriageDate" data-marriage-partner="${esc(partner.id)}" value="${esc(marriageDraft[partner.id] || '')}" placeholder="Heiratsdatum" aria-label="Heiratsdatum mit ${esc(fullName(partner) || partner.name)}" />`
+          : marriageDraft[partner.id] ? `<small>verh. ${esc(formatBirthDate(marriageDraft[partner.id]))}</small>` : ''}
+        ${editMode ? `<button type="button" class="partnerRemove" data-remove-partner="${esc(partner.id)}" aria-label="Beziehung zu ${esc(fullName(partner) || partner.name)} entfernen">×</button>` : ''}
+      </span>
+    `).join('')
+    : '<span class="partnerEmpty">Noch keine Partner/in verknüpft</span>';
 }
 
 function isValidDateInput(value) {
@@ -2191,6 +2767,28 @@ function updateImagePreview() {
   if ($('clearImageBtn')) $('clearImageBtn').disabled = !editable || !imageDraft;
 }
 
+function cleanMentions(items = mentionsDraft) {
+  return items
+    .map(item => ({
+      title: String(item?.title || '').trim(),
+      date: String(item?.date || '').trim(),
+      link: String(item?.link || '').trim()
+    }))
+    .filter(item => item.title || item.date || item.link);
+}
+function renderMentionEditor() {
+  const container = $('mentionRows');
+  if (!container) return;
+  container.innerHTML = mentionsDraft.map((item, index) => `
+    <div class="mentionRow" data-mention-index="${index}">
+      <input data-mention-key="title" value="${esc(item.title)}" placeholder="Titel / Quelle" aria-label="Titel der Erwähnung" />
+      <input class="mentionDate" data-mention-key="date" value="${esc(item.date)}" placeholder="Datum" aria-label="Datum der Erwähnung" />
+      <input class="mentionLink" data-mention-key="link" value="${esc(item.link)}" type="url" inputmode="url" placeholder="Link, optional" aria-label="Link der Erwähnung" />
+      <button type="button" class="mentionRemove" data-remove-mention="${index}" aria-label="Erwähnung entfernen">×</button>
+    </div>
+  `).join('');
+}
+
 function formSnapshot() {
   return JSON.stringify({
     selected: selected || '',
@@ -2201,14 +2799,21 @@ function formSnapshot() {
     died: $('died')?.value || '',
     birthName: $('birthName')?.value || '',
     occupation: $('occupation')?.value || '',
+    religion: $('religion')?.value || '',
     location: $('location')?.value || '',
     link: $('personLink')?.value || '',
     image: imageDraft || '',
+    mentions: cleanMentions(),
+    pool: $('inPool')?.checked || false,
+    mainRoot: $('mainRoot')?.checked || false,
     note: $('note')?.value || '',
     confidence: $('confidence')?.value || 'high',
     parent1: $('parent1')?.value || '',
     parent2: $('parent2')?.value || '',
-    partner: $('partner')?.value || ''
+    partner: $('partner')?.value || '',
+    newMarriageDate: $('partnerMarriageDate')?.value || '',
+    marriages: marriageDraft,
+    removedPartners: [...removedPartnerDraft].sort()
   });
 }
 
@@ -2248,6 +2853,12 @@ function renderPersonDetails(p) {
 
   const parents = (p.parents || []).map(person).filter(Boolean);
   const partners = partnerIds(p).map(person).filter(Boolean);
+  const partnerDetails = partners.length
+    ? `<div class="detailLinks">${partners.map(partner => {
+        const married = marriageDateFor(p, partner.id);
+        return `<button type="button" class="detailLink" data-id="${esc(partner.id)}">${esc(fullName(partner) || partner.name)}${married ? ` · verh. ${esc(formatBirthDate(married))}` : ''}</button>`;
+      }).join('')}</div>`
+    : '<span class="detailValue">Offen</span>';
   const siblings = siblingList(p);
   const children = data.people
     .filter(child => (child.parents || []).includes(p.id))
@@ -2259,6 +2870,14 @@ function renderPersonDetails(p) {
   ].filter(Boolean).join(' · ') || 'Lebensdaten offen';
   const confidence = confidenceText(p);
   const link = safeUrl(p.link);
+  const mentions = cleanMentions(p.mentions);
+  const mentionHtml = mentions.map(item => {
+    const url = safeUrl(item.link);
+    const title = url
+      ? `<a class="detailValue" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(item.title || item.link)}</a>`
+      : `<div class="detailValue">${esc(item.title || item.link || 'Erwähnung')}</div>`;
+    return `<div class="mentionItem">${title}${item.date ? `<small>${esc(item.date)}</small>` : ''}</div>`;
+  }).join('');
 
   details.innerHTML = `
     <div class="detailHero" style="--family-color:${esc(familyColor(familyKey(p)))}">
@@ -2269,13 +2888,16 @@ function renderPersonDetails(p) {
       </div>
     </div>
     <div class="detailGrid">
-      <div class="detailBox"><span class="detailLabel">Partner/in</span>${relationButtons(partners)}</div>
+      ${isMainRoot(p.id) ? '<div class="detailBox full"><span class="detailLabel">Hauptwurzel</span><div class="detailValue">Ausgangspunkt des Stammbaums</div></div>' : ''}
+      <div class="detailBox"><span class="detailLabel">Partner/in</span>${partnerDetails}</div>
       <div class="detailBox"><span class="detailLabel">Eltern</span>${relationButtons(parents)}</div>
       <div class="detailBox full"><span class="detailLabel">Geschwister</span>${siblings.length ? relationButtons(siblings) : '<span class="detailValue">Keine eingetragen</span>'}</div>
       <div class="detailBox full"><span class="detailLabel">Kinder</span>${relationButtons(children)}</div>
       ${p.occupation ? `<div class="detailBox"><span class="detailLabel">Beruf</span><div class="detailValue">${esc(p.occupation)}</div></div>` : ''}
+      ${p.religion ? `<div class="detailBox"><span class="detailLabel">Glaubensrichtung</span><div class="detailValue">${esc(p.religion)}</div></div>` : ''}
       ${p.location ? `<div class="detailBox"><span class="detailLabel">Ort</span><div class="detailValue">${esc(p.location)}</div></div>` : ''}
       ${link ? `<div class="detailBox full"><span class="detailLabel">Link</span><a class="detailValue" href="${esc(link)}" target="_blank" rel="noopener noreferrer">${esc(p.link)}</a></div>` : ''}
+      ${mentionHtml ? `<div class="detailBox full"><span class="detailLabel">Erwähnungen / Quellen</span><div class="mentionList">${mentionHtml}</div></div>` : ''}
       ${confidence ? `<div class="detailBox full"><span class="detailLabel">Sicherheit</span><div class="detailValue">${esc(confidenceLabel(p.confidence))}</div></div>` : ''}
       ${p.note ? `<div class="detailBox full"><span class="detailLabel">Notiz</span><div class="detailValue">${esc(p.note)}</div></div>` : ''}
     </div>
@@ -2307,24 +2929,39 @@ function openSheet(id) {
   $('died').value = p?.died || '';
   $('birthName').value = p?.birthName || '';
   $('occupation').value = p?.occupation || '';
+  $('religion').value = p?.religion || '';
   $('location').value = p?.location || '';
   $('personLink').value = p?.link || '';
   imageDraft = p?.image || '';
   updateImagePreview();
+  mentionsDraft = (p?.mentions || []).map(item => ({ ...item }));
+  removedPartnerDraft = new Set();
+  marriageDraft = Object.fromEntries(partnerIds(p).map(partnerId => [partnerId, marriageDateFor(p, partnerId)]));
+  renderMentionEditor();
   $('note').value = p?.note || '';
   $('confidence').value = p?.confidence || 'high';
+  $('inPool').checked = !!p?.pool;
+  $('mainRoot').checked = !!p && isMainRoot(p.id);
   fillSelects(id, p?.parents?.[0] || '', p?.parents?.[1] || '');
+  $('partnerMarriageDate').value = '';
+  renderCurrentPartners(p);
   applyPersonFieldSettings();
   sheetSnapshot = formSnapshot();
   renderPersonDetails(p);
 
   const editable = editMode || !p;
-  ['firstName','lastName','nickname','born','died','birthName','occupation','location','personLink','note','confidence','parent1','parent2','partner'].forEach(id => {
+  ['firstName','lastName','nickname','born','died','birthName','occupation','religion','location','personLink','note','confidence','inPool','mainRoot','parent1','parent2','partner','partnerMarriageDate'].forEach(id => {
     const el = $(id);
     if (el) el.disabled = !editable;
   });
+  $('partnerMarriageDate').disabled = !editable || !$('partner').value;
   $('chooseImageBtn').disabled = !editable;
   $('clearImageBtn').disabled = !editable || !imageDraft;
+  $('addMentionBtn').disabled = !editable;
+  $('mentionRows').querySelectorAll('input,button').forEach(el => { el.disabled = !editable; });
+  $('inPool').disabled = !editable;
+  $('mainRoot').disabled = !editable;
+  $('inPool').title = p ? `${poolBranchIds(p.id).size} Person(en) in diesem Zweig` : '';
   $('deleteBtn').style.display = p && editMode ? 'block' : 'none';
   $('saveBtn').style.display = editable ? 'block' : 'none';
   setDialogVisibility($('sheet'), true);
@@ -2333,12 +2970,18 @@ function openSheet(id) {
 
 function closeSheet(force = false) {
   if (!force && !confirmDiscardSheetChanges()) return false;
+  const returnMode = listReturnMode;
+  listReturnMode = '';
   selected = null;
   sheetSnapshot = '';
   imageDraft = '';
+  mentionsDraft = [];
+  removedPartnerDraft = new Set();
+  marriageDraft = {};
   setDialogVisibility($('sheet'), false);
   showBackdrop(false);
   render();
+  if (returnMode) setTimeout(() => openListEditor(returnMode), 0);
   return true;
 }
 
@@ -2364,12 +3007,32 @@ function saveSheet() {
   const confidence = $('confidence').value || 'high';
   const parents = [$('parent1').value, $('parent2').value].filter(Boolean);
   const newPartner = $('partner').value;
+  const newMarriageDate = $('partnerMarriageDate').value.trim();
+  const keepBranchInPool = $('inPool').checked;
+  const makeMainRoot = $('mainRoot').checked;
 
   if (!validatePersonForm(selected, parents, newPartner, born, died)) return false;
+  if (makeMainRoot && keepBranchInPool) {
+    alert('Die Hauptwurzel kann nicht gleichzeitig im Vorrat liegen.');
+    return false;
+  }
+  if (makeMainRoot && !isMainRoot(selected) && rootIds.length >= 2) {
+    alert('Es können höchstens zwei Hauptwurzeln festgelegt werden.');
+    return false;
+  }
+  const invalidMarriageDate = [...Object.values(marriageDraft), newPartner ? newMarriageDate : ''].find(value => !isValidDateInput(value));
+  if (invalidMarriageDate) {
+    alert('Heiratsdatum bitte als Jahr, MM.JJJJ oder TT.MM.JJJJ eingeben.');
+    return false;
+  }
+  if (p && keepBranchInPool && !p.pool) {
+    const branchSize = poolBranchIds(p.id).size;
+    if (!confirm(`${branchSize} Person(en) dieses Zweigs in den Vorrat verschieben?\n\nDie Verknüpfungen bleiben erhalten, der Zweig verschwindet aber aus der normalen Anzeige.`)) return false;
+  }
 
   if (!p) {
     const pos = pendingNewPos || screenToWorld(main.getBoundingClientRect().left + main.clientWidth / 2, main.getBoundingClientRect().top + main.clientHeight / 2);
-    p = { id: nextId(), name: '', born: '', died: '', birthName: '', occupation: '', location: '', link: '', image: '', note: '', confidence: 'high', x: pos.x, y: pos.y, parents: [], partner: '', partners: [] };
+    p = { id: nextId(), name: '', born: '', died: '', birthName: '', occupation: '', religion: '', location: '', link: '', image: '', mentions: [], pool: false, note: '', confidence: 'high', x: pos.x, y: pos.y, parents: [], partner: '', partners: [] };
     data.people.push(p);
     pendingNewPos = null;
   }
@@ -2382,20 +3045,46 @@ function saveSheet() {
   p.died = died;
   p.birthName = birthName;
   p.occupation = $('occupation').value.trim();
+  p.religion = $('religion').value.trim();
   p.location = $('location').value.trim();
   p.link = link;
   p.image = imageDraft;
+  p.mentions = cleanMentions();
   p.note = $('note').value.trim();
   p.confidence = confidence;
   p.parents = parents;
+  if (makeMainRoot && !isMainRoot(p.id)) {
+    rootIds.push(p.id);
+  } else if (!makeMainRoot) {
+    rootIds = rootIds.filter(id => id !== p.id);
+  }
+  for (const partnerId of removedPartnerDraft) removePartnerLink(p, partnerId, true);
+  for (const [partnerId, married] of Object.entries(marriageDraft)) {
+    const q = person(partnerId);
+    if (q && !removedPartnerDraft.has(partnerId)) setMarriageDate(p, q, married, true);
+  }
+  parents.map(person).filter(Boolean).forEach((parent, index) => {
+    if (parent.pool && !keepBranchInPool) {
+      parent.x = Math.round(p.x + (index === 0 ? -120 : 120));
+      parent.y = Math.round(p.y - 260);
+      setPoolBranch(parent.id, false);
+    }
+  });
 
   if (newPartner) {
     const q = person(newPartner);
     if (q && !partnerIds(p).includes(q.id)) {
+      if (q.pool && !keepBranchInPool) {
+        q.x = Math.round(p.x + 230);
+        q.y = Math.round(p.y);
+        setPoolBranch(q.id, false);
+      }
       const reciprocal = !partnerIds(p).length || confirm('Partner/in auch bei der anderen Person eintragen?\n\nOK = gegenseitig verknüpfen\nAbbrechen = nur bei dieser Person eintragen');
       linkPartners(p, q, reciprocal);
+      setMarriageDate(p, q, newMarriageDate, reciprocal);
     }
   }
+  setPoolBranch(p.id, keepBranchInPool);
 
   withPreservedView(() => {
     resetGeneratedLayout();
@@ -2403,6 +3092,8 @@ function saveSheet() {
     render();
     if($('sideNav')?.classList.contains('open')) renderNavigator();
     if($('listSheet')?.classList.contains('open')) renderListEditor();
+    updatePoolButton();
+    updateRootButton();
     sheetSnapshot = formSnapshot();
     closeSheet(true);
   });
@@ -2410,12 +3101,17 @@ function saveSheet() {
 }
 
 function newPersonNear(base, dx, dy) {
-  return { id: nextId(), name: 'Neue Person', born: '', died: '', birthName: '', occupation: '', location: '', link: '', image: '', note: '', confidence: 'high', x: Math.round((base?.x ?? 400) + dx), y: Math.round((base?.y ?? 300) + dy), parents: [], partner: '', partners: [] };
+  return { id: nextId(), name: 'Neue Person', born: '', died: '', birthName: '', occupation: '', religion: '', location: '', link: '', image: '', mentions: [], pool: false, note: '', confidence: 'high', x: Math.round((base?.x ?? 400) + dx), y: Math.round((base?.y ?? 300) + dy), parents: [], partner: '', partners: [] };
 }
 function addChildFor(id) {
   const p = person(id); if (!p) return;
   const child = newPersonNear(p, 0, 260);
-  child.name = 'Kind von ' + p.name;
+  child.pool = !!p.pool;
+  const inheritedName = String(p.lastName || p.birthName || fullName(p).trim().split(/\s+/).slice(-1)[0] || '').trim();
+  child.firstName = '';
+  child.lastName = inheritedName;
+  child.birthName = child.lastName;
+  child.name = child.lastName || 'Kind von ' + p.name;
   child.parents = [p.id];
   const partner = primaryPartner(p);
   if (partner) child.parents.push(partner.id);
@@ -2425,6 +3121,7 @@ function addChildFor(id) {
 function addPartnerFor(id) {
   const p = person(id); if (!p) return;
   const q = newPersonNear(p, 230, 0);
+  q.pool = !!p.pool;
   q.name = 'Partner/in von ' + p.name;
   linkPartners(p, q);
   data.people.push(q);
@@ -2434,6 +3131,8 @@ function addParentsFor(id) {
   const p = person(id); if (!p) return;
   const a = newPersonNear(p, -120, -260);
   const b = newPersonNear(p, 120, -260);
+  a.pool = !!p.pool;
+  b.pool = !!p.pool;
   a.name = 'Elternteil 1 von ' + p.name;
   b.name = 'Elternteil 2 von ' + p.name;
   linkPartners(a, b);
@@ -2443,6 +3142,8 @@ function addParentsFor(id) {
 }
 
 let listSortMode = 'family';
+let listViewMode = 'tree';
+let listReturnMode = '';
 
 function setDialogVisibility(el, visible){
   el.classList.toggle('open', visible);
@@ -2453,15 +3154,26 @@ function showBackdrop(visible){
   back.classList.toggle('show', visible);
   back.setAttribute('aria-hidden', visible ? 'false' : 'true');
 }
-function openListEditor(){
+function openListEditor(mode = 'tree'){
+  listViewMode = mode;
+  $('listTitle').textContent = mode === 'pool' ? 'Personenvorrat' : 'Listeneditor';
+  $('listAddBtn').textContent = mode === 'pool' ? '+ Vorratsperson' : '+ Person';
+  $('listSheet').classList.remove('hidden');
   setDialogVisibility($('listSheet'), true);
   showBackdrop(true);
   renderListEditor();
   setTimeout(()=>$('listSearch').focus(), 80);
 }
-function closeListEditor(){
+function closeListEditor(suspend = false){
   setDialogVisibility($('listSheet'), false);
+  $('listSheet').classList.toggle('hidden', suspend);
+  if (!suspend) listReturnMode = '';
   showBackdrop(false);
+}
+function openSheetFromList(id) {
+  listReturnMode = listViewMode;
+  closeListEditor(true);
+  openSheet(id);
 }
 function openNavigator(){
   setDialogVisibility($('sideNav'), true);
@@ -2590,6 +3302,7 @@ function birthdayRows() {
   const today = new Date();
   const todayKey = (today.getMonth() + 1) * 100 + today.getDate();
   return data.people
+    .filter(p => !p.pool)
     .map(p => ({ p, b: birthdayInfo(p) }))
     .filter(item => item.b && (item.b.precision === 'day' || item.b.precision === 'birthday'))
     .map(item => {
@@ -2639,13 +3352,13 @@ function jumpToPerson(id) {
 function renderSearchResults(){
   const q = ($('personSearch')?.value || '').trim().toLowerCase();
   const rows = [...data.people]
-    .filter(p => !q || personSearchText(p).includes(q))
+    .filter(p => !p.pool && (!q || personSearchText(p).includes(q)))
     .sort((a,b) => fullName(a).localeCompare(fullName(b)))
     .slice(0, 80);
 
   $('searchRows').innerHTML = rows.map(p => {
     const dates = [p.born, p.died && '- '+p.died].filter(Boolean).join(' ');
-    const extra = [birthNameDiffers(p) && 'geb. '+p.birthName, p.occupation, p.location].filter(Boolean).join(' · ');
+    const extra = [birthNameDiffers(p) && 'geb. '+p.birthName, p.occupation, p.religion, p.location].filter(Boolean).join(' · ');
     return `
       <button type="button" class="searchRow" data-id="${esc(p.id)}">
         <span class="swatch" style="background:${esc(familyColor(familyKey(p)))}"></span>
@@ -2664,9 +3377,28 @@ function dataIssues(){
   const issues = [];
   const ids = new Set(data.people.map(p => p.id));
   const nameCount = new Map();
-  data.people.forEach(p => nameCount.set(fullName(p) || p.name, (nameCount.get(fullName(p) || p.name) || 0) + 1));
+  const activePeople = data.people.filter(p => !p.pool);
+  activePeople.forEach(p => nameCount.set(fullName(p) || p.name, (nameCount.get(fullName(p) || p.name) || 0) + 1));
 
-  for (const p of data.people) {
+  if (!rootIds.length && activePeople.length) {
+    issues.push({ id:activePeople[0].id, group:'root', text:'Noch keine Hauptwurzel festgelegt.' });
+  } else if (rootIds.length) {
+    const mainIds = new Set();
+    rootIds.forEach(rootId => connectedIds(rootId).forEach(id => mainIds.add(id)));
+    for (const component of relationComponents()) {
+      if (component.some(id => mainIds.has(id))) continue;
+      const representative = person(component[0]);
+      if (representative) {
+        issues.push({
+          id: representative.id,
+          group: 'branches',
+          text: `Nebenzweig ohne Verbindung zur Hauptwurzel: ${fullName(representative) || representative.name} (${component.length} Person(en)).`
+        });
+      }
+    }
+  }
+
+  for (const p of activePeople) {
     const name = fullName(p) || p.name;
     if (!p.lastName || p.lastName === '?') issues.push({ id:p.id, group:'name', text:`${name}: Nachname fehlt/unklar.` });
     if (!p.born) issues.push({ id:p.id, group:'dates', text:`${name}: Geburtsdatum fehlt.` });
@@ -2693,6 +3425,8 @@ function closeCheck(){
 function renderCheck(){
   const issues = dataIssues();
   const groups = [
+    ['root', 'Hauptwurzel'],
+    ['branches', 'Nicht verbundene Nebenzweige'],
     ['references', 'Fehlende Verknüpfungen'],
     ['relations', 'Unvollständige Beziehungen'],
     ['duplicates', 'Mögliche Dubletten'],
@@ -2762,7 +3496,8 @@ function renderNavigator(){
 function personSearchText(p){
   const parentNames = (p.parents||[]).map(id=>person(id)?.name||'').join(' ');
   const partnerName = partnerIds(p).map(id => person(id)?.name || '').join(' ');
-  return [p.name,p.birthName,p.born,p.died,p.occupation,p.location,p.link,p.note,confidenceText(p),parentNames,partnerName].join(' ').toLowerCase();
+  const mentions = cleanMentions(p.mentions).map(item => [item.title, item.date, item.link].join(' ')).join(' ');
+  return [p.name,p.birthName,p.born,p.died,p.occupation,p.religion,p.location,p.link,mentions,p.note,confidenceText(p),parentNames,partnerName].join(' ').toLowerCase();
 }
 function comparePeopleForList(a,b){
   if(listSortMode === 'name'){
@@ -2782,6 +3517,7 @@ function comparePeopleForList(a,b){
 function renderListEditor(){
   const q = ($('listSearch')?.value || '').trim().toLowerCase();
   const rows = [...data.people]
+    .filter(p => listViewMode === 'pool' ? p.pool : !p.pool)
     .filter(p => !q || personSearchText(p).includes(q))
     .sort(comparePeopleForList);
 
@@ -2791,9 +3527,9 @@ function renderListEditor(){
     const birth = birthNameDiffers(p) ? ` · geb. ${esc(p.birthName)}` : '';
     const dates = [p.born, p.died && '– '+p.died].filter(Boolean).join(' ');
     const confidence = confidenceText(p);
-    const extra = [p.occupation, p.location].filter(Boolean).join(' · ');
+    const extra = [p.occupation, p.religion, p.location].filter(Boolean).join(' · ');
     return `
-      <div class="listRow" tabindex="0" data-id="${esc(p.id)}">
+      <div class="listRow${p.pool ? ' poolRow' : ''}" tabindex="0" data-id="${esc(p.id)}">
         <div>
           <div class="listName">${esc(p.name)}</div>
           <div class="listMeta">${esc([dates, birth.trim(), confidence].filter(Boolean).join(' · ')) || 'Lebensdaten offen'}</div>
@@ -2802,6 +3538,7 @@ function renderListEditor(){
         </div>
         <div class="listActions">
           <button type="button" class="miniBtn" data-act="edit" data-id="${esc(p.id)}">Edit</button>
+          ${p.pool ? `<button type="button" class="miniBtn" data-act="activate" data-id="${esc(p.id)}">Zweig eingliedern</button>` : ''}
           <button type="button" class="miniBtn" data-act="child" data-id="${esc(p.id)}">+Kind</button>
           <button type="button" class="miniBtn" data-act="partner" data-id="${esc(p.id)}">+Partner</button>
         </div>
@@ -2812,9 +3549,7 @@ function renderListEditor(){
   $('listRows').querySelectorAll('.listRow').forEach(row => {
     row.addEventListener('click', e => {
       if(e.target.closest('button')) return;
-      const id = row.dataset.id;
-      closeListEditor();
-      openSheet(id);
+      openSheetFromList(row.dataset.id);
     });
     row.addEventListener('keydown', e => {
       if (e.key === 'Enter' || e.key === ' ') {
@@ -2828,10 +3563,22 @@ function renderListEditor(){
       e.stopPropagation();
       const id = btn.dataset.id;
       const act = btn.dataset.act;
+      if(act === 'edit') {
+        openSheetFromList(id);
+        return;
+      }
+      if(act === 'child' || act === 'partner') {
+        listReturnMode = listViewMode;
+        closeListEditor(true);
+        if(act === 'child') addChildFor(id);
+        else addPartnerFor(id);
+        return;
+      }
       closeListEditor();
-      if(act === 'edit') openSheet(id);
-      if(act === 'child') addChildFor(id);
-      if(act === 'partner') addPartnerFor(id);
+      if(act === 'activate') {
+        const p = person(id);
+        if (p) { setPoolBranch(p.id, false); save(); updatePoolButton(); render(); }
+      }
     });
   });
 }
@@ -2854,6 +3601,43 @@ $('clearImageBtn')?.addEventListener('click', () => {
   imageDraft = '';
   updateImagePreview();
 });
+$('addMentionBtn')?.addEventListener('click', () => {
+  if (!(editMode || !person(selected))) return;
+  mentionsDraft.push({ title: '', date: '', link: '' });
+  renderMentionEditor();
+  $('mentionRows').querySelector('input')?.focus();
+});
+$('mentionRows')?.addEventListener('input', e => {
+  const row = e.target.closest('[data-mention-index]');
+  const key = e.target.dataset.mentionKey;
+  if (!row || !key) return;
+  const index = Number(row.dataset.mentionIndex);
+  if (mentionsDraft[index]) mentionsDraft[index][key] = e.target.value;
+});
+$('mentionRows')?.addEventListener('click', e => {
+  const button = e.target.closest('[data-remove-mention]');
+  if (!button || !(editMode || !person(selected))) return;
+  mentionsDraft.splice(Number(button.dataset.removeMention), 1);
+  renderMentionEditor();
+});
+$('currentPartners')?.addEventListener('click', e => {
+  const button = e.target.closest('[data-remove-partner]');
+  if (!button || !editMode || !selected) return;
+  removedPartnerDraft.add(button.dataset.removePartner);
+  const parent1 = $('parent1').value;
+  const parent2 = $('parent2').value;
+  fillSelects(selected, parent1, parent2);
+  renderCurrentPartners(person(selected));
+});
+$('currentPartners')?.addEventListener('input', e => {
+  const partnerId = e.target.dataset.marriagePartner;
+  if (!partnerId || !editMode) return;
+  marriageDraft[partnerId] = e.target.value;
+});
+$('partner')?.addEventListener('change', () => {
+  $('partnerMarriageDate').disabled = !(editMode || !person(selected)) || !$('partner').value;
+  if (!$('partner').value) $('partnerMarriageDate').value = '';
+});
 $('backdrop').addEventListener('click', () => {
   if($('sideNav').classList.contains('open')) closeNavigator();
   else if($('searchSheet').classList.contains('open')) closeSearch();
@@ -2866,6 +3650,8 @@ $('backdrop').addEventListener('click', () => {
 window.addEventListener('keydown', e => {
   const active = document.activeElement;
   const isTyping = active && ['INPUT','TEXTAREA','SELECT'].includes(active.tagName);
+  const dialogOpen = ['fileMenu','settingsMenu','sheet','sideNav','searchSheet','birthdaySheet','scrollSheet','checkSheet','listSheet']
+    .some(id => $(id)?.classList.contains('open'));
   if (e.key === 'Escape') {
     if ($('fileMenu')?.classList.contains('open')) { closeFileMenu(); e.preventDefault(); }
     else if ($('settingsMenu')?.classList.contains('open')) { closeSettingsMenu(); e.preventDefault(); }
@@ -2879,6 +3665,16 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (isTyping) return;
+  if (!dialogOpen && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.startsWith('Arrow')) {
+    const step = e.shiftKey ? 180 : 64;
+    if (e.key === 'ArrowLeft') view.x += step;
+    if (e.key === 'ArrowRight') view.x -= step;
+    if (e.key === 'ArrowUp') view.y += step;
+    if (e.key === 'ArrowDown') view.y -= step;
+    applyView();
+    e.preventDefault();
+    return;
+  }
   if (e.key === '+' || e.key === '=') { zoomTo(view.s * 1.18); e.preventDefault(); }
   if (e.key === '-') { zoomTo(view.s / 1.18); e.preventDefault(); }
   if (e.key === '0' || e.key === 'Home') { fit(); e.preventDefault(); }
@@ -2908,16 +3704,17 @@ $('deleteBtn').addEventListener('click', () => {
     focusId = null;
     updateFocusButton();
   }
-  if (rootId === selected) {
-    rootId = '';
-    localStorage.removeItem(storeKey + '-root');
+  if (isMainRoot(selected)) {
+    rootIds = rootIds.filter(id => id !== selected);
     updateRootButton();
   }
   data.people = data.people
     .filter(p => p.id !== selected)
     .map(p => {
       const partners = partnerIds(p).filter(id => id !== selected);
-      return { ...p, parents: (p.parents || []).filter(x => x !== selected), partner: partners[0] || '', partners };
+      const partnerDetails = { ...(p.partnerDetails || {}) };
+      delete partnerDetails[selected];
+      return { ...p, parents: (p.parents || []).filter(x => x !== selected), partner: partners[0] || '', partners, partnerDetails };
     });
   if (activeFamily && !data.people.some(p => matchesFamily(p, activeFamily))) activeFamily = '';
   save();
@@ -2963,17 +3760,20 @@ $('collapseAllBtn').addEventListener('click', () => {
   saveCollapsed(); autoLayout();
   closeSettingsMenu();
 });
+$('poolBtn')?.addEventListener('click', () => {
+  closeSettingsMenu();
+  openListEditor('pool');
+});
 
 $('resetBtn').addEventListener('click', async () => {
   if (confirm('Beispiel wirklich zurücksetzen?')) {
     localStorage.removeItem(storeKey);
     localStorage.removeItem(storeKey + '-collapsed');
-    localStorage.removeItem(storeKey + '-root');
     collapsed = new Set();
     focusMode = false;
     focusId = null;
     activeFamily = '';
-    rootId = '';
+    rootIds = [];
     selected = null;
     closeSheet(true);
     closeListEditor();
@@ -3012,8 +3812,16 @@ $('exportBtn').addEventListener('click', async () => {
   closeFileMenu();
   await exportTreeJson();
 });
+$('workingFileBtn')?.addEventListener('click', async () => {
+  closeFileMenu();
+  await openWorkingFile();
+});
+$('copyJsonBtn')?.addEventListener('click', async () => {
+  closeFileMenu();
+  await copyTreeJson();
+});
 
-$('listBtn').addEventListener('click', openListEditor);
+$('listBtn').addEventListener('click', () => openListEditor('tree'));
 $('searchBtn').addEventListener('click', openSearch);
 $('searchCloseBtn').addEventListener('click', closeSearch);
 $('personSearch').addEventListener('input', renderSearchResults);
@@ -3040,8 +3848,17 @@ $('compactBtn')?.addEventListener('click', () => {
 $('checkBtn').addEventListener('click', openCheck);
 $('checkCloseBtn').addEventListener('click', closeCheck);
 $('imageBtn').addEventListener('click', exportImageView);
-$('listCloseBtn').addEventListener('click', closeListEditor);
-$('listAddBtn').addEventListener('click', () => { closeListEditor(); selected = null; pendingNewPos = null; openSheet(null); });
+$('listCloseBtn').addEventListener('click', () => closeListEditor());
+$('listAddBtn').addEventListener('click', () => {
+  const returnMode = listViewMode;
+  const addToPool = returnMode === 'pool';
+  listReturnMode = returnMode;
+  closeListEditor(true);
+  selected = null;
+  pendingNewPos = null;
+  openSheet(null);
+  $('inPool').checked = addToPool;
+});
 $('listSearch').addEventListener('input', renderListEditor);
 $('listSortNameBtn').addEventListener('click', () => { listSortMode='name'; renderListEditor(); });
 $('listSortBirthBtn').addEventListener('click', () => { listSortMode='birth'; renderListEditor(); });
@@ -3070,14 +3887,15 @@ $('fileInput').addEventListener('change', e => {
   r.onload = () => {
     try {
       const imported = normalize(JSON.parse(r.result));
+      workingFileHandle = null;
       data = imported;
       focusMode = false;
       focusId = null;
       activeFamily = '';
-      rootId = '';
-      localStorage.removeItem(storeKey + '-root');
+      rootIds = [...(imported.rootIds || [])];
       updateFocusButton();
       updateRootButton();
+      updateWorkingFileButton();
       save();
       render();
       fit();
@@ -3112,6 +3930,8 @@ applyPersonFieldSettings();
 updateModeUI();
 updateNameModeButton();
 updateLayoutButton();
+updatePoolButton();
+updateWorkingFileButton();
 updateRootButton();
 updateFocusButton();
 loadDefaultDataIfAvailable();
