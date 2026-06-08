@@ -66,6 +66,9 @@ let workingFileWriteTimer = null;
 let workingFileWriteChain = Promise.resolve();
 let personById = new Map();
 let nonPoolPeople = [];
+let childrenByParentId = new Map();
+let activeChildrenByParentId = new Map();
+let pooledPeopleCount = 0;
 rebuildDataIndexes();
 
 const familyPalette = [
@@ -178,6 +181,15 @@ function load() {
 function rebuildDataIndexes() {
   personById = new Map(data.people.map(p => [p.id, p]));
   nonPoolPeople = data.people.filter(p => !p.pool);
+  pooledPeopleCount = data.people.length - nonPoolPeople.length;
+  childrenByParentId = new Map(data.people.map(p => [p.id, []]));
+  activeChildrenByParentId = new Map(data.people.map(p => [p.id, []]));
+  for (const p of data.people) {
+    for (const parentId of p.parents || []) {
+      if (childrenByParentId.has(parentId)) childrenByParentId.get(parentId).push(p);
+      if (!p.pool && activeChildrenByParentId.has(parentId)) activeChildrenByParentId.get(parentId).push(p);
+    }
+  }
 }
 async function loadDefaultDataIfAvailable() {
   if (localStorage.getItem(storeKey)) return;
@@ -288,6 +300,8 @@ async function copyTreeJson() {
   }
 }
 function person(id) { return personById.get(id); }
+function childrenOfPerson(id) { return childrenByParentId.get(id) || []; }
+function activeChildrenOfPerson(id) { return activeChildrenByParentId.get(id) || []; }
 function uniqueIds(ids) { return [...new Set((ids || []).map(String).filter(Boolean))]; }
 function setPartnerIds(p, ids) {
   if (!p) return;
@@ -832,7 +846,7 @@ function hiddenIds(){
   return hidden;
 }
 function hasChildren(id){
-  return data.people.some(p=>(p.parents||[]).includes(id));
+  return childrenOfPerson(id).length > 0;
 }
 function poolBranchIds(id) {
   const ids = new Set();
@@ -845,11 +859,9 @@ function poolBranchIds(id) {
     partnerIds(current).forEach(partnerId => {
       if (!ids.has(partnerId)) queue.push(partnerId);
     });
-    data.people
-      .filter(child => (child.parents || []).includes(currentId))
-      .forEach(child => {
-        if (!ids.has(child.id)) queue.push(child.id);
-      });
+    activeChildrenOfPerson(currentId).forEach(child => {
+      if (!ids.has(child.id)) queue.push(child.id);
+    });
   }
   return ids;
 }
@@ -936,9 +948,7 @@ function directLineIds(id) {
     if (!pid || descendantIds.has(pid)) return;
     descendantIds.add(pid);
     ids.add(pid);
-    data.people
-      .filter(p => (p.parents || []).includes(pid))
-      .forEach(child => walkDescendants(child.id));
+    childrenOfPerson(pid).forEach(child => walkDescendants(child.id));
   };
 
   walkAncestors(id);
@@ -964,9 +974,7 @@ function connectedIds(id) {
     const current = person(currentId);
     partnerIds(current).forEach(partnerId => { if (!ids.has(partnerId) && !person(partnerId)?.pool) queue.push(partnerId); });
     (current?.parents || []).forEach(parentId => { if (!ids.has(parentId) && !person(parentId)?.pool) queue.push(parentId); });
-    data.people
-      .filter(child => !child.pool && (child.parents || []).includes(currentId))
-      .forEach(child => { if (!ids.has(child.id)) queue.push(child.id); });
+    activeChildrenOfPerson(currentId).forEach(child => { if (!ids.has(child.id)) queue.push(child.id); });
   }
   return ids;
 }
@@ -1014,7 +1022,7 @@ function updateLayoutButton() {
 function updatePoolButton() {
   const btn = $('poolBtn');
   if (!btn) return;
-  const count = data.people.filter(p => p.pool).length;
+  const count = pooledPeopleCount;
   btn.dataset.count = String(count);
   btn.title = `Vorrat (${count})`;
   btn.setAttribute('aria-label', `Personenvorrat öffnen, ${count} Personen`);
@@ -3233,8 +3241,6 @@ function closeScrollView(){
 }
 function renderScrollView(){
   const ids = visibleIds();
-  const childrenOf = new Map(data.people.map(p => [p.id, []]));
-  for (const p of data.people) for (const pid of p.parents || []) childrenOf.get(pid)?.push(p);
   const byBirth = (a,b) => (birthSortValue(a) ?? Infinity) - (birthSortValue(b) ?? Infinity) || fullName(a).localeCompare(fullName(b));
   const shouldAttachPartner = p => {
     const q = mutualPartnerIds(p).map(person).find(partner => partner && ids.has(partner.id) && !(partner.parents || []).length);
@@ -3257,7 +3263,7 @@ function renderScrollView(){
     branchPath.add(p.id);
     if (attachedPartner) branchPath.add(attachedPartner.id);
     const allChildren = parentIds
-      .flatMap(id => childrenOf.get(id) || [])
+      .flatMap(id => childrenOfPerson(id))
       .filter((c, idx, arr) => ids.has(c.id) && arr.findIndex(x => x.id === c.id) === idx)
       .sort(byBirth);
     const children = allChildren;
@@ -3318,8 +3324,7 @@ function renderScrollView(){
 function birthdayRows() {
   const today = new Date();
   const todayKey = (today.getMonth() + 1) * 100 + today.getDate();
-  return data.people
-    .filter(p => !p.pool)
+  return nonPoolPeople
     .map(p => ({ p, b: birthdayInfo(p) }))
     .filter(item => item.b && (item.b.precision === 'day' || item.b.precision === 'birthday'))
     .map(item => {
@@ -3368,8 +3373,8 @@ function jumpToPerson(id) {
 }
 function renderSearchResults(){
   const q = ($('personSearch')?.value || '').trim().toLowerCase();
-  const rows = [...data.people]
-    .filter(p => !p.pool && (!q || personSearchText(p).includes(q)))
+  const rows = [...nonPoolPeople]
+    .filter(p => !q || personSearchText(p).includes(q))
     .sort((a,b) => fullName(a).localeCompare(fullName(b)))
     .slice(0, 80);
 
