@@ -3,3 +3,4 @@ test.pdf
 !Bodensteiner.json
 *.tmp
 *.log
+extract_yumpu_familybook.py

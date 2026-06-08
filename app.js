@@ -18,7 +18,6 @@ const sample = { people: [
 ]};
 
 let data = load();
-rebuildDataIndexes();
 let selected = null;
 let view = { x: 0, y: 0, s: 0.72 };
 let drag = null;
@@ -67,6 +66,7 @@ let workingFileWriteTimer = null;
 let workingFileWriteChain = Promise.resolve();
 let personById = new Map();
 let nonPoolPeople = [];
+rebuildDataIndexes();
 
 const familyPalette = [
   '#6b8f71', '#c9895e', '#6f88b6', '#b86b77', '#8f7ab8',
@@ -1851,7 +1851,7 @@ function estimatedGenerationYear(p, depth, siblingIndex){
 
 // -- Automatic layout algorithm ----------------------------------------
 function autoLayout(saveResult = true) {
-  const activePeople = data.people.filter(p => !p.pool);
+  const activePeople = nonPoolPeople;
   if (!activePeople.length) return;
 
   const byId = new Map(activePeople.map(p => [p.id, p]));
@@ -1874,9 +1874,14 @@ function autoLayout(saveResult = true) {
   const fallbackRowGap = 185;
   const memo = new Map();
   const depthMemo = new Map();
+  const childListMemo = new Map();
+  const reachableMemo = new Map();
+  const subtreeBranchMemo = new Map();
+  const localPartnerIds = new Map(activePeople.map(p => [p.id, partnerIds(p).filter(id => byId.has(id))]));
 
   const hasParents = p => (p.parents || []).length > 0;
-  const partnerOf = p => partnerIds(p).map(id => byId.get(id)).find(Boolean) || null;
+  const partnerIdsOf = p => localPartnerIds.get(p.id) || [];
+  const partnerOf = p => partnerIdsOf(p).map(id => byId.get(id)).find(Boolean) || null;
   const unitIds = p => {
     const q = partnerOf(p);
     return q ? [p.id, q.id] : [p.id];
@@ -1899,6 +1904,8 @@ function autoLayout(saveResult = true) {
   }
 
   function childList(ids) {
+    const key = [...ids].sort().join('|');
+    if (childListMemo.has(key)) return childListMemo.get(key);
     const out = [], seen = new Set();
     for (const id of ids) {
       for (const c of childrenOf.get(id) || []) {
@@ -1918,10 +1925,13 @@ function autoLayout(saveResult = true) {
       return (a.x - b.x) || String(a.name).localeCompare(String(b.name));
     });
 
+    childListMemo.set(key, out);
     return out;
   }
 
   function reachableIds(ids) {
+    const key = [...ids].sort().join('|');
+    if (reachableMemo.has(key)) return new Set(reachableMemo.get(key));
     const reached = new Set();
     const stack = [...ids];
     while (stack.length) {
@@ -1929,12 +1939,13 @@ function autoLayout(saveResult = true) {
       if (!id || reached.has(id)) continue;
       reached.add(id);
       const p = byId.get(id);
-      partnerIds(p).forEach(partnerId => { if (!reached.has(partnerId)) stack.push(partnerId); });
+      partnerIdsOf(p).forEach(partnerId => { if (!reached.has(partnerId)) stack.push(partnerId); });
       for (const child of childrenOf.get(id) || []) {
         if (!reached.has(child.id)) stack.push(child.id);
       }
     }
     ids.forEach(id => reached.delete(id));
+    reachableMemo.set(key, [...reached]);
     return reached;
   }
 
@@ -1973,7 +1984,7 @@ function autoLayout(saveResult = true) {
   for (const p of activePeople) {
     if (p.pool) continue;
     if (hasParents(p) || used.has(p.id)) continue;
-    if (partnerIds(p).some(pid => hasParents(byId.get(pid)))) {
+    if (partnerIdsOf(p).some(pid => hasParents(byId.get(pid)))) {
       used.add(p.id);
       continue;
     }
@@ -2034,7 +2045,7 @@ function autoLayout(saveResult = true) {
 
     for (const p of activePeople) {
       if (!hasParents(p)) continue;
-      for (const partnerId of partnerIds(p)) {
+      for (const partnerId of partnerIdsOf(p)) {
         const q = byId.get(partnerId);
         if (!q || !hasParents(q)) continue;
         const pairKey = [p.id, q.id].sort().join('|');
@@ -2353,7 +2364,7 @@ function autoLayout(saveResult = true) {
   function alignPartnerClusters() {
     const handled = new Set();
     for (const p of activePeople) {
-      const partners = partnerIds(p).map(id => byId.get(id)).filter(Boolean);
+      const partners = partnerIdsOf(p).map(id => byId.get(id)).filter(Boolean);
       if (partners.length < 2) continue;
 
       const clusterKey = [p.id, ...partners.map(q => q.id)].sort().join('|');
@@ -2382,7 +2393,7 @@ function autoLayout(saveResult = true) {
 
     const ancestorBranchIds = partner => {
       const ids = new Set([partner.id]);
-      const queue = [...(partner.parents || []), ...partnerIds(partner).filter(id => !directIds.has(id))];
+      const queue = [...(partner.parents || []), ...partnerIdsOf(partner).filter(id => !directIds.has(id))];
       while (queue.length) {
         const id = queue.shift();
         if (!id || ids.has(id) || directIds.has(id)) continue;
@@ -2390,47 +2401,47 @@ function autoLayout(saveResult = true) {
         if (!current) continue;
         ids.add(id);
         (current.parents || []).forEach(parentId => queue.push(parentId));
-        partnerIds(current).forEach(partnerId => {
+        partnerIdsOf(current).forEach(partnerId => {
           if (!directIds.has(partnerId)) queue.push(partnerId);
         });
       }
       const branchQueue = [...ids];
       while (branchQueue.length) {
         const id = branchQueue.shift();
-        data.people
-          .filter(child => !child.pool && (child.parents || []).includes(id))
-          .forEach(child => {
-            if (directIds.has(child.id) || ids.has(child.id) || !byId.has(child.id)) return;
-            ids.add(child.id);
-            branchQueue.push(child.id);
-            partnerIds(child).forEach(partnerId => {
-              if (directIds.has(partnerId) || ids.has(partnerId) || !byId.has(partnerId)) return;
-              ids.add(partnerId);
-              branchQueue.push(partnerId);
-            });
+        for (const child of childrenOf.get(id) || []) {
+          if (directIds.has(child.id) || ids.has(child.id) || !byId.has(child.id)) continue;
+          ids.add(child.id);
+          branchQueue.push(child.id);
+          partnerIdsOf(child).forEach(partnerId => {
+            if (directIds.has(partnerId) || ids.has(partnerId) || !byId.has(partnerId)) return;
+            ids.add(partnerId);
+            branchQueue.push(partnerId);
           });
+        }
       }
       return ids;
     };
     const sideDescendantIds = startId => {
+      if (subtreeBranchMemo.has(startId)) return new Set(subtreeBranchMemo.get(startId));
       const ids = new Set();
       const queue = [startId];
       while (queue.length) {
         const id = queue.shift();
         if (!id || ids.has(id) || directIds.has(id) || !byId.has(id)) continue;
         ids.add(id);
-        partnerIds(byId.get(id)).forEach(partnerId => {
+        partnerIdsOf(byId.get(id)).forEach(partnerId => {
           if (!directIds.has(partnerId)) queue.push(partnerId);
         });
         (childrenOf.get(id) || []).forEach(child => {
           if (!directIds.has(child.id)) queue.push(child.id);
         });
       }
+      subtreeBranchMemo.set(startId, [...ids]);
       return ids;
     };
 
     for (const mainPerson of activePeople.filter(p => directIds.has(p.id))) {
-      for (const partnerId of partnerIds(mainPerson)) {
+      for (const partnerId of partnerIdsOf(mainPerson)) {
         const partner = byId.get(partnerId);
         if (!partner || directIds.has(partner.id) || shifted.has(partner.id)) continue;
         const branchIds = ancestorBranchIds(partner);
@@ -2473,7 +2484,7 @@ function autoLayout(saveResult = true) {
     for (const p of activePeople) {
       if (p.pool) continue;
       if (usedInUnit.has(p.id)) continue;
-      const partner = partnerIds(p)
+      const partner = partnerIdsOf(p)
         .map(id => byId.get(id))
         .find(q => q && !usedInUnit.has(q.id) && sameRow(p, q));
       if (partner) {
