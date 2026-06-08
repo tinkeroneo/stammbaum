@@ -18,6 +18,7 @@ const sample = { people: [
 ]};
 
 let data = load();
+rebuildDataIndexes();
 let selected = null;
 let view = { x: 0, y: 0, s: 0.72 };
 let drag = null;
@@ -64,6 +65,8 @@ let checkCollapsed = new Set();
 let workingFileHandle = null;
 let workingFileWriteTimer = null;
 let workingFileWriteChain = Promise.resolve();
+let personById = new Map();
+let nonPoolPeople = [];
 
 const familyPalette = [
   '#6b8f71', '#c9895e', '#6f88b6', '#b86b77', '#8f7ab8',
@@ -172,6 +175,10 @@ function load() {
   } catch {}
   return normalize(structuredClone(sample));
 }
+function rebuildDataIndexes() {
+  personById = new Map(data.people.map(p => [p.id, p]));
+  nonPoolPeople = data.people.filter(p => !p.pool);
+}
 async function loadDefaultDataIfAvailable() {
   if (localStorage.getItem(storeKey)) return;
   await loadDefaultData({ saveResult: true, fitResult: true });
@@ -184,6 +191,7 @@ async function loadDefaultData({ saveResult = true, fitResult = true } = {}) {
   } catch {
     data = normalize(structuredClone(sample));
   }
+  rebuildDataIndexes();
   rootIds = [...(data.rootIds || [])];
   updateRootButton();
   if (saveResult) save();
@@ -194,6 +202,7 @@ async function loadDefaultData({ saveResult = true, fitResult = true } = {}) {
 }
 function save() {
   try {
+    rebuildDataIndexes();
     data.rootIds = rootIds.filter(id => person(id)).slice(0, 2);
     localStorage.setItem(storeKey, JSON.stringify(data, null, 2));
     scheduleWorkingFileWrite();
@@ -246,6 +255,7 @@ async function openWorkingFile() {
     const imported = normalize(JSON.parse(await file.text()));
     workingFileHandle = handle;
     data = imported;
+    rebuildDataIndexes();
     focusMode = false;
     focusId = null;
     activeFamily = '';
@@ -277,7 +287,7 @@ async function copyTreeJson() {
     alert(copied ? 'Aktuelle JSON-Daten wurden in die Zwischenablage kopiert.' : 'JSON konnte nicht kopiert werden.');
   }
 }
-function person(id) { return data.people.find(p => p.id === id); }
+function person(id) { return personById.get(id); }
 function uniqueIds(ids) { return [...new Set((ids || []).map(String).filter(Boolean))]; }
 function setPartnerIds(p, ids) {
   if (!p) return;
@@ -449,9 +459,8 @@ function withPreservedView(fn) {
 }
 function updateWorldBounds() {
   const margin = 600;
-  const visiblePeople = data.people.filter(p => !p.pool);
-  const maxX = Math.max(1600, ...visiblePeople.map(p => p.x)) + margin;
-  const maxY = Math.max(1100, ...visiblePeople.map(p => p.y)) + margin;
+  const maxX = Math.max(1600, ...nonPoolPeople.map(p => p.x)) + margin;
+  const maxY = Math.max(1100, ...nonPoolPeople.map(p => p.y)) + margin;
   world.style.width = maxX + 'px';
   world.style.height = maxY + 'px';
   lines.setAttribute('width', maxX);
@@ -459,10 +468,11 @@ function updateWorldBounds() {
   lines.setAttribute('viewBox', `0 0 ${maxX} ${maxY}`);
   updateMinimap(maxX, maxY);
 }
-function updateMinimap(maxX, maxY) {
+function updateMinimap(maxX, maxY, visiblePeople = null) {
   if (!minimap || !minimapInner || !minimapViewport || !minimapSvg) return;
   
-  const visible = visibleIds();
+  const visible = visiblePeople ? new Set(visiblePeople.map(p => p.id)) : visibleIds();
+  const sourcePeople = visiblePeople || data.people.filter(p => visible.has(p.id));
   const mapW = minimapInner.clientWidth || 150;
   const mapH = minimapInner.clientHeight || 90;
   const scale = Math.min(mapW / maxX, mapH / maxY);
@@ -473,8 +483,7 @@ function updateMinimap(maxX, maxY) {
   minimapSvg.innerHTML = '';
   minimapState = { maxX, maxY, mapW, mapH, scale, offsetX, offsetY };
   
-  for (const p of data.people) {
-    if (!visible.has(p.id)) continue;
+  for (const p of sourcePeople) {
     for (const partnerId of partnerIds(p)) {
       if (!(p.id < partnerId) || !visible.has(partnerId)) continue;
       const q = person(partnerId);
@@ -502,8 +511,7 @@ function updateMinimap(maxX, maxY) {
     }
   }
   
-  for (const p of data.people) {
-    if (!visible.has(p.id)) continue;
+  for (const p of sourcePeople) {
     const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     circle.setAttribute('cx', offsetX + p.x * scale);
     circle.setAttribute('cy', offsetY + p.y * scale);
@@ -590,12 +598,12 @@ function parentGroupPoint(parents, children) {
   const hubY = Math.min(parentY + 78, firstChildY - 72);
   return { x: parentX, y: Math.max(parentY + 34, hubY) };
 }
-function renderFamilyLines(visible) {
+function renderFamilyLines(visible, visiblePeople = null) {
   const groups = new Map();
   const singleParentGroups = new Map();
+  const sourcePeople = visiblePeople || data.people.filter(p => visible.has(p.id));
 
-  for (const child of data.people) {
-    if (!visible.has(child.id)) continue;
+  for (const child of sourcePeople) {
     const parents = (child.parents || []).map(person).filter(p => p && visible.has(p.id));
     if (!parents.length) continue;
 
@@ -1304,6 +1312,7 @@ function render() {
   updateWorldBounds();
   updateZoomClass();
   const visible = visibleIds();
+  const visiblePeople = nonPoolPeople.filter(p => visible.has(p.id));
   const directIds = mainLineIds();
   const affiliateIds = new Set();
   const affiliateQueue = [...directIds];
@@ -1322,8 +1331,7 @@ function render() {
   lines.innerHTML = '';
   if (generationBands) generationBands.innerHTML = '';
 
-  for (const p of data.people) {
-    if(!visible.has(p.id)) continue;
+  for (const p of visiblePeople) {
     if (!editMode) continue;
     for (const partnerId of partnerIds(p)) {
       if (!(p.id < partnerId) || !visible.has(partnerId)) continue;
@@ -1332,7 +1340,7 @@ function render() {
     }
   }
 
-  renderFamilyLines(visible);
+  renderFamilyLines(visible, visiblePeople);
 
   const renderedCoupleMembers = new Set();
   const partnerCluster = start => {
@@ -1352,8 +1360,7 @@ function render() {
     }
     return members;
   };
-  for (const p of data.people) {
-    if(!visible.has(p.id)) continue;
+  for (const p of visiblePeople) {
     if (renderedCoupleMembers.has(p.id)) continue;
     const cluster = !editMode ? partnerCluster(p) : [p];
     const isCouple = !editMode && cluster.length > 1;
@@ -1468,9 +1475,8 @@ function render() {
     nodes.appendChild(el);
   }
 }
-function renderGenerationBands(visible) {
-  const ys = data.people
-    .filter(p => visible.has(p.id))
+function renderGenerationBands(visiblePeople) {
+  const ys = visiblePeople
     .map(p => p.y)
     .sort((a,b) => a - b);
 
