@@ -3,6 +3,9 @@
 
 // -- Data / persistence ----------------------------------------------------
 const storeKey = 'mobile-family-tree-v5-clean';
+const persistenceDbName = storeKey + '-db';
+const persistenceStoreName = 'treeState';
+const persistenceRecordKey = 'current';
 const minZoom = 0.045;
 const maxZoom = 2.4;
 const minFitZoom = 0.42;
@@ -17,6 +20,7 @@ const sample = { people: [
   {id:'p6',name:'Kind 2',born:'1994',died:'',birthName:'',note:'',x:900,y:690,parents:['p3','p4'],partner:''}
 ]};
 
+let hasPersistedTreeData = false;
 let data = load();
 let selected = null;
 let view = { x: 0, y: 0, s: 0.72 };
@@ -68,7 +72,16 @@ let personById = new Map();
 let nonPoolPeople = [];
 let childrenByParentId = new Map();
 let activeChildrenByParentId = new Map();
+let partnerIdsByPersonId = new Map();
+let mutualPartnerIdsByPersonId = new Map();
+let birthSortValueByPersonId = new Map();
+let familyKeyByPersonId = new Map();
+let relationComponentIds = [];
 let pooledPeopleCount = 0;
+let persistenceMode = 'local';
+let persistenceNoticeShown = false;
+let persistenceDbPromise = null;
+let persistenceWriteChain = Promise.resolve();
 rebuildDataIndexes();
 
 const familyPalette = [
@@ -174,9 +187,75 @@ function normalize(d) {
 function load() {
   try {
     const raw = localStorage.getItem(storeKey);
-    if (raw) return normalize(JSON.parse(raw));
+    if (raw) {
+      hasPersistedTreeData = true;
+      return normalize(JSON.parse(raw));
+    }
   } catch {}
   return normalize(structuredClone(sample));
+}
+function openPersistenceDb() {
+  if (typeof indexedDB === 'undefined') return Promise.resolve(null);
+  if (persistenceDbPromise) return persistenceDbPromise;
+  persistenceDbPromise = new Promise(resolve => {
+    try {
+      const request = indexedDB.open(persistenceDbName, 1);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(persistenceStoreName)) {
+          db.createObjectStore(persistenceStoreName, { keyPath: 'key' });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+  return persistenceDbPromise;
+}
+async function readPersistedJson() {
+  const db = await openPersistenceDb();
+  if (!db) return '';
+  return await new Promise(resolve => {
+    try {
+      const tx = db.transaction(persistenceStoreName, 'readonly');
+      const store = tx.objectStore(persistenceStoreName);
+      const request = store.get(persistenceRecordKey);
+      request.onsuccess = () => resolve(String(request.result?.json || ''));
+      request.onerror = () => resolve('');
+    } catch {
+      resolve('');
+    }
+  });
+}
+async function writePersistedJson(json) {
+  const db = await openPersistenceDb();
+  if (!db) return false;
+  return await new Promise(resolve => {
+    try {
+      const tx = db.transaction(persistenceStoreName, 'readwrite');
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+      tx.objectStore(persistenceStoreName).put({ key: persistenceRecordKey, json });
+    } catch {
+      resolve(false);
+    }
+  });
+}
+async function clearPersistedJson() {
+  const db = await openPersistenceDb();
+  if (!db) return false;
+  return await new Promise(resolve => {
+    try {
+      const tx = db.transaction(persistenceStoreName, 'readwrite');
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+      tx.objectStore(persistenceStoreName).delete(persistenceRecordKey);
+    } catch {
+      resolve(false);
+    }
+  });
 }
 function rebuildDataIndexes() {
   personById = new Map(data.people.map(p => [p.id, p]));
@@ -184,15 +263,112 @@ function rebuildDataIndexes() {
   pooledPeopleCount = data.people.length - nonPoolPeople.length;
   childrenByParentId = new Map(data.people.map(p => [p.id, []]));
   activeChildrenByParentId = new Map(data.people.map(p => [p.id, []]));
+  partnerIdsByPersonId = new Map();
+  mutualPartnerIdsByPersonId = new Map();
+  birthSortValueByPersonId = new Map();
+  familyKeyByPersonId = new Map();
   for (const p of data.people) {
+    const partnerIds = uniqueIds([...(Array.isArray(p.partners) ? p.partners : []), p.partner])
+      .filter(id => id !== p.id && personById.has(id));
+    partnerIdsByPersonId.set(p.id, partnerIds);
+    birthSortValueByPersonId.set(p.id, parseBirthValue(p?.born)?.sort ?? null);
+    familyKeyByPersonId.set(p.id, familyLabel(p).toLowerCase());
     for (const parentId of p.parents || []) {
       if (childrenByParentId.has(parentId)) childrenByParentId.get(parentId).push(p);
       if (!p.pool && activeChildrenByParentId.has(parentId)) activeChildrenByParentId.get(parentId).push(p);
     }
   }
+  for (const p of data.people) {
+    mutualPartnerIdsByPersonId.set(
+      p.id,
+      (partnerIdsByPersonId.get(p.id) || []).filter(id => (partnerIdsByPersonId.get(id) || []).includes(p.id))
+    );
+  }
+  relationComponentIds = buildRelationComponentIds();
+}
+function buildRelationComponentIds() {
+  const ids = nonPoolPeople.map(p => p.id);
+  const activeIdSet = new Set(ids);
+  const links = new Map(ids.map(id => [id, new Set()]));
+  const link = (a, b) => {
+    if (!activeIdSet.has(a) || !activeIdSet.has(b)) return;
+    links.get(a).add(b);
+    links.get(b).add(a);
+  };
+
+  for (const p of nonPoolPeople) {
+    (partnerIdsByPersonId.get(p.id) || []).forEach(partnerId => link(p.id, partnerId));
+    for (const pid of p.parents || []) link(p.id, pid);
+  }
+
+  const seen = new Set();
+  const components = [];
+  for (const id of ids) {
+    if (seen.has(id)) continue;
+    const stack = [id];
+    const component = [];
+    seen.add(id);
+    while (stack.length) {
+      const current = stack.pop();
+      component.push(current);
+      for (const next of links.get(current) || []) {
+        if (seen.has(next)) continue;
+        seen.add(next);
+        stack.push(next);
+      }
+    }
+    components.push(component);
+  }
+  return components;
+}
+function notifyMemoryOnlyPersistence() {
+  if (persistenceNoticeShown) return;
+  persistenceNoticeShown = true;
+  alert('Der Stammbaum ist fuer diese Browsersitzung geladen, passt aber nicht mehr sicher in den Browser-Speicher.\n\nBitte arbeite ueber "Arbeitsdatei oeffnen" oder exportiere den JSON-Stand regelmaessig. Ohne Datei-Verknuepfung gehen die Daten nach einem Neuladen verloren.');
+}
+function applyLoadedData(imported, { fitResult = true } = {}) {
+  data = imported;
+  rebuildDataIndexes();
+  focusMode = false;
+  focusId = null;
+  activeFamily = '';
+  rootIds = [...(imported.rootIds || [])];
+  updateFocusButton();
+  updateRootButton();
+  render();
+  if (fitResult) fit();
+  if ($('sideNav')?.classList.contains('open')) renderNavigator();
+  if ($('scrollSheet')?.classList.contains('open')) renderScrollView();
+}
+function schedulePersistedJsonWrite(json) {
+  if (typeof indexedDB === 'undefined') return;
+  persistenceWriteChain = persistenceWriteChain
+    .then(async () => {
+      const ok = await writePersistedJson(json);
+      if (!ok && persistenceMode !== 'memory') persistenceMode = 'memory';
+    })
+    .catch(() => {
+      persistenceMode = 'memory';
+    });
+}
+async function loadPersistedDataIfAvailable() {
+  const persistedJson = await readPersistedJson();
+  if (persistedJson) {
+    try {
+      applyLoadedData(normalize(JSON.parse(persistedJson)));
+      hasPersistedTreeData = true;
+      persistenceMode = 'indexeddb';
+      return true;
+    } catch {}
+  }
+  if (hasPersistedTreeData) {
+    schedulePersistedJsonWrite(JSON.stringify(data, null, 2));
+    return true;
+  }
+  return false;
 }
 async function loadDefaultDataIfAvailable() {
-  if (localStorage.getItem(storeKey)) return;
+  if (await loadPersistedDataIfAvailable()) return;
   await loadDefaultData({ saveResult: true, fitResult: true });
 }
 async function loadDefaultData({ saveResult = true, fitResult = true } = {}) {
@@ -203,26 +379,30 @@ async function loadDefaultData({ saveResult = true, fitResult = true } = {}) {
   } catch {
     data = normalize(structuredClone(sample));
   }
-  rebuildDataIndexes();
-  rootIds = [...(data.rootIds || [])];
-  updateRootButton();
+  applyLoadedData(data, { fitResult: false });
   if (saveResult) save();
-  render();
   if (fitResult) fit();
-  if ($('sideNav')?.classList.contains('open')) renderNavigator();
-  if ($('scrollSheet')?.classList.contains('open')) renderScrollView();
 }
 function save() {
+  rebuildDataIndexes();
+  data.rootIds = rootIds.filter(id => person(id)).slice(0, 2);
+  const json = JSON.stringify(data, null, 2);
+  hasPersistedTreeData = true;
+  schedulePersistedJsonWrite(json);
   try {
-    rebuildDataIndexes();
-    data.rootIds = rootIds.filter(id => person(id)).slice(0, 2);
-    localStorage.setItem(storeKey, JSON.stringify(data, null, 2));
-    scheduleWorkingFileWrite();
-    return true;
+    localStorage.setItem(storeKey, json);
+    persistenceMode = 'local';
   } catch {
-    alert('Speichern fehlgeschlagen. Das Bild ist vermutlich zu groß für den Browser-Speicher. Bitte ein kleineres Bild wählen oder das Bild entfernen.');
-    return false;
+    try { localStorage.removeItem(storeKey); } catch {}
+    if (typeof indexedDB !== 'undefined') {
+      persistenceMode = 'indexeddb';
+    } else {
+      persistenceMode = 'memory';
+      notifyMemoryOnlyPersistence();
+    }
   }
+  scheduleWorkingFileWrite(json);
+  return true;
 }
 function updateWorkingFileButton() {
   const btn = $('workingFileBtn');
@@ -232,15 +412,15 @@ function updateWorkingFileButton() {
     ? 'Änderungen werden automatisch in diese Datei geschrieben'
     : 'JSON-Datei öffnen und künftig direkt aktualisieren';
 }
-function scheduleWorkingFileWrite() {
+function scheduleWorkingFileWrite(json = '') {
   if (!workingFileHandle) return;
   clearTimeout(workingFileWriteTimer);
   workingFileWriteTimer = setTimeout(() => {
-    const json = JSON.stringify(data, null, 2);
+    const payload = json || JSON.stringify(data, null, 2);
     workingFileWriteChain = workingFileWriteChain
       .then(async () => {
         const writable = await workingFileHandle.createWritable();
-        await writable.write(json);
+        await writable.write(payload);
         await writable.close();
       })
       .catch(() => {
@@ -266,17 +446,9 @@ async function openWorkingFile() {
     const file = await handle.getFile();
     const imported = normalize(JSON.parse(await file.text()));
     workingFileHandle = handle;
-    data = imported;
-    rebuildDataIndexes();
-    focusMode = false;
-    focusId = null;
-    activeFamily = '';
-    rootIds = [...(imported.rootIds || [])];
-    updateFocusButton();
-    updateRootButton();
+    applyLoadedData(imported, { fitResult: false });
     updateWorkingFileButton();
     save();
-    render();
     fit();
   } catch (err) {
     if (err?.name !== 'AbortError') alert('Arbeitsdatei konnte nicht geöffnet werden.');
@@ -310,12 +482,11 @@ function setPartnerIds(p, ids) {
 }
 function partnerIds(p) {
   if (!p) return [];
-  return uniqueIds([...(Array.isArray(p.partners) ? p.partners : []), p.partner])
-    .filter(id => id !== p.id && person(id));
+  return partnerIdsByPersonId.get(p.id) || [];
 }
 function primaryPartner(p) { return person(partnerIds(p)[0]); }
 function mutualPartnerIds(p) {
-  return partnerIds(p).filter(id => partnerIds(person(id)).includes(p.id));
+  return p ? (mutualPartnerIdsByPersonId.get(p.id) || []) : [];
 }
 function addPartnerLink(p, q, reciprocal = true) {
   if (!p || !q || p.id === q.id) return;
@@ -401,6 +572,7 @@ function familyLabel(p) {
   return String(p?.lastName || p?.birthName || surnameOf(p?.name) || 'Unbekannt').trim() || 'Unbekannt';
 }
 function familyKey(p) {
+  if (p?.id && familyKeyByPersonId.has(p.id)) return familyKeyByPersonId.get(p.id);
   return familyLabel(p).toLowerCase();
 }
 function familyColor(key) {
@@ -487,6 +659,7 @@ function updateMinimap(maxX, maxY, visiblePeople = null) {
   
   const visible = visiblePeople ? new Set(visiblePeople.map(p => p.id)) : visibleIds();
   const sourcePeople = visiblePeople || data.people.filter(p => visible.has(p.id));
+  const compactMinimap = sourcePeople.length > 1200;
   const mapW = minimapInner.clientWidth || 150;
   const mapH = minimapInner.clientHeight || 90;
   const scale = Math.min(mapW / maxX, mapH / maxY);
@@ -497,30 +670,32 @@ function updateMinimap(maxX, maxY, visiblePeople = null) {
   minimapSvg.innerHTML = '';
   minimapState = { maxX, maxY, mapW, mapH, scale, offsetX, offsetY };
   
-  for (const p of sourcePeople) {
-    for (const partnerId of partnerIds(p)) {
-      if (!(p.id < partnerId) || !visible.has(partnerId)) continue;
-      const q = person(partnerId);
-      if (q && visible.has(q.id)) {
-        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.setAttribute('x1', offsetX + p.x * scale);
-        line.setAttribute('y1', offsetY + p.y * scale);
-        line.setAttribute('x2', offsetX + q.x * scale);
-        line.setAttribute('y2', offsetY + q.y * scale);
-        line.setAttribute('class', 'line');
-        minimapSvg.appendChild(line);
+  if (!compactMinimap) {
+    for (const p of sourcePeople) {
+      for (const partnerId of partnerIds(p)) {
+        if (!(p.id < partnerId) || !visible.has(partnerId)) continue;
+        const q = person(partnerId);
+        if (q && visible.has(q.id)) {
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', offsetX + p.x * scale);
+          line.setAttribute('y1', offsetY + p.y * scale);
+          line.setAttribute('x2', offsetX + q.x * scale);
+          line.setAttribute('y2', offsetY + q.y * scale);
+          line.setAttribute('class', 'line');
+          minimapSvg.appendChild(line);
+        }
       }
-    }
-    for (const pid of p.parents || []) {
-      const q = person(pid);
-      if (q && visible.has(q.id)) {
-        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.setAttribute('x1', offsetX + q.x * scale);
-        line.setAttribute('y1', offsetY + q.y * scale);
-        line.setAttribute('x2', offsetX + p.x * scale);
-        line.setAttribute('y2', offsetY + p.y * scale);
-        line.setAttribute('class', 'line');
-        minimapSvg.appendChild(line);
+      for (const pid of p.parents || []) {
+        const q = person(pid);
+        if (q && visible.has(q.id)) {
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', offsetX + q.x * scale);
+          line.setAttribute('y1', offsetY + q.y * scale);
+          line.setAttribute('x2', offsetX + p.x * scale);
+          line.setAttribute('y2', offsetY + p.y * scale);
+          line.setAttribute('class', 'line');
+          minimapSvg.appendChild(line);
+        }
       }
     }
   }
@@ -529,7 +704,7 @@ function updateMinimap(maxX, maxY, visiblePeople = null) {
     const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     circle.setAttribute('cx', offsetX + p.x * scale);
     circle.setAttribute('cy', offsetY + p.y * scale);
-    circle.setAttribute('r', Math.max(1.5, 4 * scale));
+    circle.setAttribute('r', compactMinimap ? Math.max(1.1, 2.4 * scale) : Math.max(1.5, 4 * scale));
     circle.setAttribute('class', 'node');
     minimapSvg.appendChild(circle);
   }
@@ -1119,44 +1294,9 @@ function restoreClassicPositions() {
   }
 }
 function relationComponents() {
-  const activePeople = data.people.filter(p => !p.pool);
-  const ids = activePeople.map(p => p.id);
-  const byId = new Map(activePeople.map(p => [p.id, p]));
-  const links = new Map(ids.map(id => [id, new Set()]));
-
-  const link = (a, b) => {
-    if (!byId.has(a) || !byId.has(b)) return;
-    links.get(a).add(b);
-    links.get(b).add(a);
-  };
-
-  for (const p of activePeople) {
-    partnerIds(p).forEach(partnerId => link(p.id, partnerId));
-    for (const pid of p.parents || []) link(p.id, pid);
-  }
-
-  const seen = new Set();
-  const components = [];
-  for (const id of ids) {
-    if (seen.has(id)) continue;
-    const stack = [id];
-    const component = [];
-    seen.add(id);
-    while (stack.length) {
-      const current = stack.pop();
-      component.push(current);
-      for (const next of links.get(current) || []) {
-        if (seen.has(next)) continue;
-        seen.add(next);
-        stack.push(next);
-      }
-    }
-    components.push(component);
-  }
-
-  return components.sort((a,b) => {
-    const ax = Math.min(...a.map(id => byId.get(id)?.x ?? 0));
-    const bx = Math.min(...b.map(id => byId.get(id)?.x ?? 0));
+  return [...relationComponentIds].sort((a,b) => {
+    const ax = Math.min(...a.map(id => person(id)?.x ?? 0));
+    const bx = Math.min(...b.map(id => person(id)?.x ?? 0));
     return ax - bx;
   });
 }
@@ -1321,6 +1461,7 @@ function render() {
   updateZoomClass();
   const visible = visibleIds();
   const visiblePeople = nonPoolPeople.filter(p => visible.has(p.id));
+  const showGenerationBands = visiblePeople.length <= 600;
   const directIds = mainLineIds();
   const affiliateIds = new Set();
   const affiliateQueue = [...directIds];
@@ -1482,6 +1623,7 @@ function render() {
     }
     nodes.appendChild(el);
   }
+  if (generationBands && showGenerationBands) renderGenerationBands(visiblePeople);
 }
 function renderGenerationBands(visiblePeople) {
   const ys = visiblePeople
@@ -1817,6 +1959,7 @@ function parseBirthValue(value){
   return null;
 }
 function birthSortValue(p){
+  if (p?.id && birthSortValueByPersonId.has(p.id)) return birthSortValueByPersonId.get(p.id);
   const parsed = parseBirthValue(p?.born);
   return parsed ? parsed.sort : null;
 }
@@ -3791,6 +3934,8 @@ $('resetBtn').addEventListener('click', async () => {
   if (confirm('Beispiel wirklich zurücksetzen?')) {
     localStorage.removeItem(storeKey);
     localStorage.removeItem(storeKey + '-collapsed');
+    await clearPersistedJson();
+    hasPersistedTreeData = false;
     collapsed = new Set();
     focusMode = false;
     focusId = null;
@@ -3910,16 +4055,9 @@ $('fileInput').addEventListener('change', e => {
     try {
       const imported = normalize(JSON.parse(r.result));
       workingFileHandle = null;
-      data = imported;
-      focusMode = false;
-      focusId = null;
-      activeFamily = '';
-      rootIds = [...(imported.rootIds || [])];
-      updateFocusButton();
-      updateRootButton();
+      applyLoadedData(imported, { fitResult: false });
       updateWorkingFileButton();
       save();
-      render();
       fit();
     } catch {
       alert('Import nicht erkannt. Erwartet wird ein JSON-Export dieser App.');
