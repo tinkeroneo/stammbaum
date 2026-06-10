@@ -45,6 +45,13 @@
                         <div class="minimapViewport" id="minimapViewport"></div>
                     </div>
                 </div>
+                <div class="busyIndicator hidden" id="busyIndicator" aria-live="polite" aria-hidden="true">
+                    <div class="busySpinner" aria-hidden="true"></div>
+                    <div class="busyText">
+                        <strong>Bitte warten</strong>
+                        <span id="busyLabel">Verarbeitung läuft …</span>
+                    </div>
+                </div>
             </div>
             <div class="hint" id="hint">Tipp: Geburtsdatum: Jahr, TT.MM. oder TT.MM.JJJJ · Auto sortiert Geschwister
                 danach · −/+ klappt Unteräste.</div>
@@ -63,7 +70,8 @@
                     title="Scrollansicht">☰</button><button type="button" class="pill iconBtn" id="birthdayBtn"
                     aria-label="Geburtstagskalender öffnen" title="Geburtstage">📅</button><button type="button"
                     class="pill iconBtn" id="navBtn" aria-label="Familiennavigator öffnen"
-                    title="Zweige">⎇</button><button type="button" class="pill iconBtn editOnly" id="autoBtn"
+                    title="Zweige">⎇</button><button type="button" class="pill iconBtn" id="focusBtn"
+                    aria-label="Fokus 2/2 umschalten" title="Fokus 2/2">⊙</button><button type="button" class="pill iconBtn editOnly" id="autoBtn"
                     aria-label="Automatische Anordnung ausführen" title="Auto-Layout">◎</button><button type="button"
                     class="pill iconBtn editOnly" id="checkBtn" aria-label="Datenprüfung öffnen"
                     title="Daten prüfen">✓</button><button type="button" class="pill iconBtn editOnly" id="imageBtn"

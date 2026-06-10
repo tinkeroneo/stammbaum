@@ -82,6 +82,9 @@ let persistenceMode = 'local';
 let persistenceNoticeShown = false;
 let persistenceDbPromise = null;
 let persistenceWriteChain = Promise.resolve();
+let renderVirtualizationActive = false;
+let busyDepth = 0;
+let focusLayoutRestore = null;
 rebuildDataIndexes();
 
 const familyPalette = [
@@ -115,6 +118,27 @@ function applyPersonFieldSettings() {
     const visible = personFieldSettings[field.key] !== false;
     document.querySelectorAll(`[data-person-field="${field.key}"]`).forEach(el => el.classList.toggle('hidden', !visible));
     document.querySelectorAll(`[data-field-toggle="${field.key}"]`).forEach(el => { el.checked = visible; });
+  }
+}
+function normalizeImportedPositions(people) {
+  const positioned = people.filter(p => Number.isFinite(p.x) && Number.isFinite(p.y));
+  if (positioned.length < 20) return;
+  const xs = positioned.map(p => p.x);
+  const ys = positioned.map(p => p.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const spanX = Math.max(1, maxX - minX);
+  const spanY = Math.max(1, maxY - minY);
+  const looksFlattened = spanX > 30000 && spanX / spanY > 18;
+  if (!looksFlattened) return;
+
+  const targetWidth = Math.max(9000, Math.min(24000, Math.round(Math.sqrt(positioned.length) * 420)));
+  const targetHeight = Math.max(2200, Math.min(9000, Math.round(targetWidth * 0.42)));
+  for (const p of positioned) {
+    p.x = Math.round(220 + ((p.x - minX) / spanX) * targetWidth);
+    p.y = Math.round(180 + ((p.y - minY) / spanY) * targetHeight);
   }
 }
 
@@ -167,12 +191,13 @@ function normalize(d) {
       confidence,
       x: Number.isFinite(+p.x) ? +p.x : 200 + i * 40,
       y: Number.isFinite(+p.y) ? +p.y : 200 + i * 40,
-      parents: Array.isArray(p.parents) ? p.parents.map(String).filter(Boolean) : [],
+      parents: uniqueIds(Array.isArray(p.parents) ? p.parents.map(String).filter(Boolean) : []),
       partner: partners[0] || '',
       partners,
       partnerDetails
     };
   });
+  normalizeImportedPositions(d.people);
   const requestedRootIds = uniqueIds([
     ...(Array.isArray(d.rootIds) ? d.rootIds : []),
     d.rootId,
@@ -326,17 +351,49 @@ function notifyMemoryOnlyPersistence() {
   persistenceNoticeShown = true;
   alert('Der Stammbaum ist fuer diese Browsersitzung geladen, passt aber nicht mehr sicher in den Browser-Speicher.\n\nBitte arbeite ueber "Arbeitsdatei oeffnen" oder exportiere den JSON-Stand regelmaessig. Ohne Datei-Verknuepfung gehen die Daten nach einem Neuladen verloren.');
 }
+function setBusyState(active, label = 'Verarbeitung läuft …') {
+  const indicator = $('busyIndicator');
+  const busyLabel = $('busyLabel');
+  if (!indicator || !busyLabel) return;
+  if (active) {
+    busyLabel.textContent = label;
+    indicator.classList.remove('hidden');
+    indicator.setAttribute('aria-hidden', 'false');
+  } else {
+    indicator.classList.add('hidden');
+    indicator.setAttribute('aria-hidden', 'true');
+  }
+}
+function nextFrame() {
+  return new Promise(resolve => requestAnimationFrame(() => resolve()));
+}
+async function runBusy(label, task) {
+  busyDepth++;
+  setBusyState(true, label);
+  await nextFrame();
+  await new Promise(resolve => setTimeout(resolve, 20));
+  try {
+    return await task();
+  } finally {
+    busyDepth = Math.max(0, busyDepth - 1);
+    if (!busyDepth) setBusyState(false);
+  }
+}
 function applyLoadedData(imported, { fitResult = true } = {}) {
   data = imported;
   rebuildDataIndexes();
-  focusMode = false;
+  const preferFocus = nonPoolPeople.length > 1200;
+  focusMode = preferFocus;
   focusId = null;
   activeFamily = '';
   rootIds = [...(imported.rootIds || [])];
   updateFocusButton();
   updateRootButton();
-  render();
-  if (fitResult) fit();
+  if (fitResult) {
+    focusPreferredPerson({ preferFocus });
+  } else {
+    render();
+  }
   if ($('sideNav')?.classList.contains('open')) renderNavigator();
   if ($('scrollSheet')?.classList.contains('open')) renderScrollView();
 }
@@ -369,7 +426,7 @@ async function loadPersistedDataIfAvailable() {
 }
 async function loadDefaultDataIfAvailable() {
   if (await loadPersistedDataIfAvailable()) return;
-  await loadDefaultData({ saveResult: true, fitResult: true });
+  await runBusy('Beispieldaten werden geladen …', () => loadDefaultData({ saveResult: true, fitResult: true }));
 }
 async function loadDefaultData({ saveResult = true, fitResult = true } = {}) {
   try {
@@ -381,7 +438,7 @@ async function loadDefaultData({ saveResult = true, fitResult = true } = {}) {
   }
   applyLoadedData(data, { fitResult: false });
   if (saveResult) save();
-  if (fitResult) fit();
+  if (fitResult) focusPreferredPerson({ preferFocus: focusMode || nonPoolPeople.length > 1200 });
 }
 function save() {
   rebuildDataIndexes();
@@ -444,12 +501,12 @@ async function openWorkingFile() {
       }]
     });
     const file = await handle.getFile();
-    const imported = normalize(JSON.parse(await file.text()));
+    const imported = await runBusy('Arbeitsdatei wird geladen …', async () => normalize(JSON.parse(await file.text())));
     workingFileHandle = handle;
     applyLoadedData(imported, { fitResult: false });
     updateWorkingFileButton();
     save();
-    fit();
+    focusPreferredPerson({ preferFocus: focusMode || nonPoolPeople.length > 1200 });
   } catch (err) {
     if (err?.name !== 'AbortError') alert('Arbeitsdatei konnte nicht geöffnet werden.');
   }
@@ -635,6 +692,7 @@ function applyView() {
   world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.s})`;
   updateZoomClass();
   updateMinimapViewport();
+  if (renderVirtualizationActive) scheduleRender();
 }
 function withPreservedView(fn) {
   const previous = { ...view };
@@ -652,7 +710,7 @@ function updateWorldBounds() {
   lines.setAttribute('width', maxX);
   lines.setAttribute('height', maxY);
   lines.setAttribute('viewBox', `0 0 ${maxX} ${maxY}`);
-  updateMinimap(maxX, maxY);
+  return { maxX, maxY };
 }
 function updateMinimap(maxX, maxY, visiblePeople = null) {
   if (!minimap || !minimapInner || !minimapViewport || !minimapSvg) return;
@@ -862,6 +920,141 @@ function fitPeople(people, minScale = 0.58) {
   view.x = -((minX + maxX) / 2) * view.s;
   view.y = -((minY + maxY) / 2) * view.s;
   applyView();
+}
+function fitFocusNeighborhood(id) {
+  const ids = focusNeighborhood(id);
+  const people = nonPoolPeople.filter(p => ids.has(p.id));
+  if (!people.length) {
+    fit();
+    return;
+  }
+  fitPeople(people, nonPoolPeople.length > 1200 ? 0.82 : 0.72);
+}
+function restoreFocusLayoutPositions() {
+  if (!focusLayoutRestore) return;
+  for (const [id, pos] of focusLayoutRestore.entries()) {
+    const p = person(id);
+    if (p) {
+      p.x = pos.x;
+      p.y = pos.y;
+    }
+  }
+  focusLayoutRestore = null;
+}
+function applyFocusLayout(id) {
+  const ids = focusNeighborhood(id);
+  const people = nonPoolPeople.filter(p => ids.has(p.id));
+  if (!people.length) return;
+
+  restoreFocusLayoutPositions();
+  focusLayoutRestore = new Map(people.map(p => [p.id, { x: p.x, y: p.y }]));
+
+  const generation = new Map([[id, 0]]);
+  let frontier = [id];
+  for (let depth = 1; depth <= 2; depth++) {
+    const next = [];
+    for (const currentId of frontier) {
+      const current = person(currentId);
+      for (const parentId of current?.parents || []) {
+        if (!ids.has(parentId) || generation.has(parentId)) continue;
+        generation.set(parentId, -depth);
+        next.push(parentId);
+      }
+    }
+    frontier = next;
+  }
+
+  frontier = [id];
+  for (let depth = 1; depth <= 2; depth++) {
+    const next = [];
+    for (const currentId of frontier) {
+      for (const child of activeChildrenOfPerson(currentId)) {
+        if (!ids.has(child.id) || generation.has(child.id)) continue;
+        generation.set(child.id, depth);
+        next.push(child.id);
+      }
+    }
+    frontier = next;
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const p of people) {
+      const ownGen = generation.get(p.id);
+      if (ownGen === undefined) continue;
+      partnerIds(p).forEach(partnerId => {
+        if (ids.has(partnerId) && !generation.has(partnerId)) {
+          generation.set(partnerId, ownGen);
+          changed = true;
+        }
+      });
+      const parentSet = new Set(p.parents || []);
+      if (!parentSet.size) continue;
+      for (const other of people) {
+        if (other.id === p.id || generation.has(other.id)) continue;
+        if ((other.parents || []).some(parentId => parentSet.has(parentId))) {
+          generation.set(other.id, ownGen);
+          changed = true;
+        }
+      }
+    }
+  }
+
+  people.forEach(p => {
+    if (!generation.has(p.id)) generation.set(p.id, 0);
+  });
+
+  const rows = new Map();
+  for (const p of people) {
+    const gen = generation.get(p.id) || 0;
+    if (!rows.has(gen)) rows.set(gen, []);
+    rows.get(gen).push(p);
+  }
+
+  const rowGap = 230;
+  const centerY = 560;
+  const pairGap = 186;
+  const singleWidth = 210;
+  const coupleWidth = 352;
+  const gens = [...rows.keys()].sort((a,b) => a - b);
+  for (const gen of gens) {
+    const rowPeople = rows.get(gen)
+      .sort((a,b) => (birthSortValue(a) ?? Infinity) - (birthSortValue(b) ?? Infinity) || fullName(a).localeCompare(fullName(b)));
+    const units = [];
+    const used = new Set();
+    for (const p of rowPeople) {
+      if (used.has(p.id)) continue;
+      const primary = mutualPartnerIds(p)
+        .map(partnerId => person(partnerId))
+        .find(q => q && ids.has(q.id) && (generation.get(q.id) || 0) === gen && !used.has(q.id));
+      if (primary) {
+        used.add(p.id);
+        used.add(primary.id);
+        units.push({ members: [p, primary].sort((a,b) => fullName(a).localeCompare(fullName(b))), width: coupleWidth });
+      } else {
+        used.add(p.id);
+        units.push({ members: [p], width: singleWidth });
+      }
+    }
+    const gap = 28;
+    const totalWidth = units.reduce((sum, unit) => sum + unit.width, 0) + Math.max(0, units.length - 1) * gap;
+    let cursor = -totalWidth / 2;
+    const rowY = centerY + gen * rowGap;
+    for (const unit of units) {
+      const centerX = cursor + unit.width / 2;
+      if (unit.members.length > 1) {
+        unit.members[0].x = Math.round(centerX - pairGap / 2);
+        unit.members[1].x = Math.round(centerX + pairGap / 2);
+        unit.members[0].y = rowY;
+        unit.members[1].y = rowY;
+      } else {
+        unit.members[0].x = Math.round(centerX);
+        unit.members[0].y = rowY;
+      }
+      cursor += unit.width + gap;
+    }
+  }
 }
 
 function jumpToFamily(key) {
@@ -1074,26 +1267,60 @@ function depthMap(){
 function focusNeighborhood(id) {
   const base = person(id);
   if (!base) return new Set();
-
   const ids = new Set([id]);
-  const parents = new Set(base.parents || []);
-  const childIds = new Set();
-  parents.forEach(pid => ids.add(pid));
-  partnerIds(base).forEach(pid => ids.add(pid));
+  const ancestorCore = new Set([id]);
+  const descendantCore = new Set([id]);
+  const centerIds = new Set([id]);
 
-  for (const p of data.people) {
-    const pParents = p.parents || [];
-    const isSibling = p.id !== id && pParents.some(pid => parents.has(pid));
-    const isChild = pParents.includes(id) || partnerIds(base).some(pid => pParents.includes(pid));
-    if (isSibling || isChild) {
-      ids.add(p.id);
-      partnerIds(p).forEach(pid => ids.add(pid));
+  let frontier = [id];
+  for (let depth = 0; depth < 2; depth++) {
+    const next = [];
+    for (const currentId of frontier) {
+      const current = person(currentId);
+      for (const parentId of current?.parents || []) {
+        if (!person(parentId) || ancestorCore.has(parentId)) continue;
+        ancestorCore.add(parentId);
+        ids.add(parentId);
+        next.push(parentId);
+      }
     }
-    if (isChild) childIds.add(p.id);
+    frontier = next;
   }
 
-  for (const p of data.people) {
-    if ((p.parents || []).some(pid => childIds.has(pid))) ids.add(p.id);
+  frontier = [id];
+  for (let depth = 0; depth < 2; depth++) {
+    const next = [];
+    for (const currentId of frontier) {
+      for (const child of activeChildrenOfPerson(currentId)) {
+        if (descendantCore.has(child.id)) continue;
+        descendantCore.add(child.id);
+        ids.add(child.id);
+        next.push(child.id);
+      }
+    }
+    frontier = next;
+  }
+
+  for (const currentId of [...ancestorCore, ...descendantCore]) {
+    centerIds.add(currentId);
+    partnerIds(person(currentId)).forEach(partnerId => {
+      if (!person(partnerId)?.pool) ids.add(partnerId);
+    });
+  }
+
+  const siblingAnchorIds = new Set([id, ...ancestorCore, ...descendantCore]);
+  for (const anchorId of siblingAnchorIds) {
+    const anchor = person(anchorId);
+    const parentIds = new Set(anchor?.parents || []);
+    if (!parentIds.size) continue;
+    for (const other of nonPoolPeople) {
+      if (other.id === anchorId) continue;
+      if (!(other.parents || []).some(pid => parentIds.has(pid))) continue;
+      ids.add(other.id);
+      partnerIds(other).forEach(partnerId => {
+        if (!person(partnerId)?.pool) ids.add(partnerId);
+      });
+    }
   }
 
   return ids;
@@ -1271,15 +1498,45 @@ function updateZoomClass() {
 function updateFocusButton() {
   const btn = $('focusBtn');
   if (!btn) return;
-  btn.textContent = focusMode ? 'Alle' : 'Fokus';
+  btn.textContent = focusMode ? 'Alle' : 'Fokus 2/2';
   btn.classList.toggle('primary', focusMode);
 }
-function setFocusMode(enabled, id = selected || focusId) {
-  focusMode = !!enabled && !!id && !!person(id);
-  focusId = focusMode ? id : null;
-  updateFocusButton();
+function preferredLandingPersonId() {
+  const activePeople = nonPoolPeople;
+  if (!activePeople.length) return '';
+  if (focusId && person(focusId) && !person(focusId).pool) return focusId;
+  if (selected && person(selected) && !person(selected).pool) return selected;
+  const rooted = rootIds.map(id => person(id)).filter(p => p && !p.pool);
+  if (rooted.length) {
+    const withChildren = rooted.find(p => hasChildren(p.id));
+    if (withChildren) return withChildren.id;
+    return rooted[0].id;
+  }
+  const withChildren = activePeople.find(p => hasChildren(p.id));
+  return (withChildren || activePeople[0]).id;
+}
+function focusPreferredPerson({ preferFocus = false } = {}) {
+  const id = preferredLandingPersonId();
+  if (!id) return;
+  selected = id;
+  if (preferFocus) {
+    setFocusMode(true, id);
+    return;
+  }
   render();
   fit();
+  jumpToPerson(id);
+}
+function setFocusMode(enabled, id = selected || focusId) {
+  if (!enabled) restoreFocusLayoutPositions();
+  focusMode = !!enabled && !!id && !!person(id);
+  focusId = focusMode ? id : null;
+  if (focusMode) selected = focusId;
+  updateFocusButton();
+  if (focusMode) applyFocusLayout(focusId);
+  render();
+  if (focusMode) fitFocusNeighborhood(focusId);
+  else fit();
 }
 function captureClassicPositions() {
   if (!savedClassicPositions) {
@@ -1457,11 +1714,15 @@ function personTileContent(p, className = '') {
 // -- Rendering ---------------------------------------------------------
 function render() {
   updatePoolButton();
-  updateWorldBounds();
+  const worldBounds = updateWorldBounds();
   updateZoomClass();
   const visible = visibleIds();
   const visiblePeople = nonPoolPeople.filter(p => visible.has(p.id));
-  const showGenerationBands = visiblePeople.length <= 600;
+  renderVirtualizationActive = shouldVirtualizePeople(visiblePeople);
+  const renderedPeople = renderVirtualizationActive ? viewportPeopleSlice(visiblePeople) : visiblePeople;
+  const renderedIds = new Set(renderedPeople.map(p => p.id));
+  const showGenerationBands = !renderVirtualizationActive && visiblePeople.length <= 600;
+  updateMinimap(worldBounds.maxX, worldBounds.maxY, minimapSamplePeople(visiblePeople));
   const directIds = mainLineIds();
   const affiliateIds = new Set();
   const affiliateQueue = [...directIds];
@@ -1483,13 +1744,13 @@ function render() {
   for (const p of visiblePeople) {
     if (!editMode) continue;
     for (const partnerId of partnerIds(p)) {
-      if (!(p.id < partnerId) || !visible.has(partnerId)) continue;
+      if (!(p.id < partnerId) || !renderedIds.has(partnerId) || !renderedIds.has(p.id)) continue;
       const q = person(partnerId);
-      if (q && visible.has(q.id)) addLine(p.x, p.y, q.x, q.y, 'line partner');
+      if (q && renderedIds.has(q.id)) addLine(p.x, p.y, q.x, q.y, 'line partner');
     }
   }
 
-  renderFamilyLines(visible, visiblePeople);
+  renderFamilyLines(renderedIds, renderedPeople);
 
   const renderedCoupleMembers = new Set();
   const partnerCluster = start => {
@@ -1498,18 +1759,18 @@ function render() {
     const queue = [start.id];
     while (queue.length) {
       const id = queue.shift();
-      if (!id || seen.has(id) || !visible.has(id)) continue;
+      if (!id || seen.has(id) || !renderedIds.has(id)) continue;
       seen.add(id);
       const member = person(id);
       if (!member) continue;
       members.push(member);
       mutualPartnerIds(member).forEach(partnerId => {
-        if (!seen.has(partnerId) && visible.has(partnerId)) queue.push(partnerId);
+        if (!seen.has(partnerId) && renderedIds.has(partnerId)) queue.push(partnerId);
       });
     }
     return members;
   };
-  for (const p of visiblePeople) {
+  for (const p of renderedPeople) {
     if (renderedCoupleMembers.has(p.id)) continue;
     const cluster = !editMode ? partnerCluster(p) : [p];
     const isCouple = !editMode && cluster.length > 1;
@@ -1917,6 +2178,52 @@ function fit() {
   view.y = -((minY + maxY) / 2) * view.s;
   applyView();
 }
+function viewportWorldBounds(marginX = 380, marginY = 260) {
+  const rect = main.getBoundingClientRect();
+  const topLeft = screenToWorld(rect.left - marginX, rect.top - marginY);
+  const bottomRight = screenToWorld(rect.right + marginX, rect.bottom + marginY);
+  return {
+    minX: Math.min(topLeft.x, bottomRight.x),
+    maxX: Math.max(topLeft.x, bottomRight.x),
+    minY: Math.min(topLeft.y, bottomRight.y),
+    maxY: Math.max(topLeft.y, bottomRight.y)
+  };
+}
+function shouldVirtualizePeople(people) {
+  return people.length > 900 && view.s > 0.09;
+}
+function viewportPeopleSlice(people) {
+  const bounds = viewportWorldBounds();
+  const kept = people.filter(p =>
+    p.x >= bounds.minX &&
+    p.x <= bounds.maxX &&
+    p.y >= bounds.minY &&
+    p.y <= bounds.maxY
+  );
+  if (!kept.length) {
+    const centerX = (bounds.minX + bounds.maxX) / 2;
+    const centerY = (bounds.minY + bounds.maxY) / 2;
+    return [...people]
+      .sort((a, b) =>
+        (Math.abs(a.x - centerX) + Math.abs(a.y - centerY)) -
+        (Math.abs(b.x - centerX) + Math.abs(b.y - centerY))
+      )
+      .slice(0, Math.min(240, people.length));
+  }
+  const extraIds = new Set();
+  kept.forEach(p => {
+    extraIds.add(p.id);
+    mutualPartnerIds(p).forEach(id => extraIds.add(id));
+  });
+  const sliced = people.filter(p => extraIds.has(p.id));
+  if (sliced.length < Math.min(80, people.length)) return people;
+  return sliced;
+}
+function minimapSamplePeople(people) {
+  if (people.length <= 1200) return people;
+  const stride = Math.max(1, Math.ceil(people.length / 1200));
+  return people.filter((_, index) => index % stride === 0);
+}
 
 // -- Birthdate parsing and sorting -------------------------------------
 function parseBirthValue(value){
@@ -2004,25 +2311,27 @@ function estimatedGenerationYear(p, depth, siblingIndex){
 function autoLayout(saveResult = true) {
   const activePeople = nonPoolPeople;
   if (!activePeople.length) return;
+  const largeDataset = activePeople.length > 1200;
 
   const byId = new Map(activePeople.map(p => [p.id, p]));
+  const layoutParentsOf = p => uniqueIds(p?.parents || []).filter(id => byId.has(id)).slice(0, 2);
   const childrenOf = new Map(activePeople.map(p => [p.id, []]));
   for (const p of activePeople) {
-    for (const pid of p.parents || []) {
+    for (const pid of layoutParentsOf(p)) {
       if (childrenOf.has(pid)) childrenOf.get(pid).push(p);
     }
   }
 
   const pairGap = 186;
   const nodeGap = 36;
-  const parentGroupGap = 86;
+  const parentGroupGap = largeDataset ? 112 : 86;
   const rootY = 130;
   const startX = 110;
   const singleCardWidth = 196;
   const coupleCardWidth = 322;
   const minSingle = 196;
   const minPair = 352;
-  const fallbackRowGap = 185;
+  const fallbackRowGap = largeDataset ? 215 : 185;
   const memo = new Map();
   const depthMemo = new Map();
   const childListMemo = new Map();
@@ -2030,7 +2339,8 @@ function autoLayout(saveResult = true) {
   const subtreeBranchMemo = new Map();
   const localPartnerIds = new Map(activePeople.map(p => [p.id, partnerIds(p).filter(id => byId.has(id))]));
 
-  const hasParents = p => (p.parents || []).length > 0;
+  const hasParents = p => layoutParentsOf(p).length > 0;
+  const hasChildrenLocal = p => (childrenOf.get(p?.id) || []).length > 0;
   const partnerIdsOf = p => localPartnerIds.get(p.id) || [];
   const partnerOf = p => partnerIdsOf(p).map(id => byId.get(id)).find(Boolean) || null;
   const unitIds = p => {
@@ -2038,7 +2348,7 @@ function autoLayout(saveResult = true) {
     return q ? [p.id, q.id] : [p.id];
   };
   const belongsToUnit = (child, ids) => {
-    const parents = child.parents || [];
+    const parents = layoutParentsOf(child);
     if (!parents.some(pid => ids.includes(pid))) return false;
     if (ids.length === 1) return true;
     return parents.length <= 1 || parents.every(pid => ids.includes(pid));
@@ -2048,7 +2358,7 @@ function autoLayout(saveResult = true) {
     if(depthMemo.has(p.id)) return depthMemo.get(p.id);
     if(seen.has(p.id)) return 0;
     seen.add(p.id);
-    const parents = (p.parents || []).map(id => byId.get(id)).filter(Boolean);
+    const parents = layoutParentsOf(p).map(id => byId.get(id)).filter(Boolean);
     const d = parents.length ? Math.max(...parents.map(pp => depthOf(pp, new Set(seen)))) + 1 : 0;
     depthMemo.set(p.id, d);
     return d;
@@ -2119,7 +2429,7 @@ function autoLayout(saveResult = true) {
     const kids = childList(ids);
     const kidsW = kids.length
       ? kids.reduce((s,k,idx) => {
-          const extra = idx > 0 && parentGroupKey(k.parents || []) !== parentGroupKey(kids[idx - 1].parents || []) ? parentGroupGap : 0;
+          const extra = idx > 0 && parentGroupKey(layoutParentsOf(k)) !== parentGroupKey(layoutParentsOf(kids[idx - 1])) ? parentGroupGap : 0;
           return s + subtreeWidth(k.id, new Set(seen)) + (idx ? nodeGap + extra : 0);
         }, 0)
       : 0;
@@ -2135,12 +2445,13 @@ function autoLayout(saveResult = true) {
   for (const p of activePeople) {
     if (p.pool) continue;
     if (hasParents(p) || used.has(p.id)) continue;
-    if (partnerIdsOf(p).some(pid => hasParents(byId.get(pid)))) {
+    if (!hasChildrenLocal(p)) continue;
+    if (partnerIdsOf(p).some(pid => hasParents(byId.get(pid)) && hasChildrenLocal(byId.get(pid)))) {
       used.add(p.id);
       continue;
     }
     const q = partnerOf(p);
-    if (q && hasParents(q)) continue;
+    if (q && hasParents(q) && hasChildrenLocal(q)) continue;
 
     rootCandidates.push(p);
     used.add(p.id);
@@ -2347,14 +2658,14 @@ function autoLayout(saveResult = true) {
     const kids = childList(ids);
     const total = kids.length
       ? kids.reduce((s,k,idx) => {
-          const extra = idx > 0 && parentGroupKey(k.parents || []) !== parentGroupKey(kids[idx - 1].parents || []) ? parentGroupGap : 0;
+          const extra = idx > 0 && parentGroupKey(layoutParentsOf(k)) !== parentGroupKey(layoutParentsOf(kids[idx - 1])) ? parentGroupGap : 0;
           return s + subtreeWidth(k.id) + (idx ? nodeGap + extra : 0);
         }, 0)
       : 0;
 
     let x = left + (width - total) / 2;
     kids.forEach((k, idx) => {
-      if (idx > 0 && parentGroupKey(k.parents || []) !== parentGroupKey(kids[idx - 1].parents || [])) x += parentGroupGap;
+      if (idx > 0 && parentGroupKey(layoutParentsOf(k)) !== parentGroupKey(layoutParentsOf(kids[idx - 1]))) x += parentGroupGap;
       const cw = subtreeWidth(k.id);
       place(k.id, x, fallbackDepth + 1, idx);
       x += cw + nodeGap;
@@ -2364,7 +2675,7 @@ function autoLayout(saveResult = true) {
   function compactThinSiblingUnits() {
     const groups = new Map();
     for (const child of activePeople) {
-      const key = parentGroupKey(child.parents || []);
+      const key = parentGroupKey(layoutParentsOf(child));
       if (!key) continue;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(child);
@@ -2404,7 +2715,7 @@ function autoLayout(saveResult = true) {
       const anchors = siblings.filter(child => !thinIds.has(child.id));
       if (!thinUnits.length) continue;
 
-      const parentIds = siblings[0].parents || [];
+      const parentIds = layoutParentsOf(siblings[0]);
       const parentCenter = parentIds
         .map(id => byId.get(id))
         .filter(Boolean)
@@ -2445,7 +2756,7 @@ function autoLayout(saveResult = true) {
   function compactSiblingSubtrees() {
     const groups = new Map();
     for (const child of activePeople) {
-      const key = parentGroupKey(child.parents || []);
+      const key = parentGroupKey(layoutParentsOf(child));
       if (!key) continue;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(child);
@@ -2490,7 +2801,7 @@ function autoLayout(saveResult = true) {
           });
         if (units.length < 2) return;
 
-        const parents = (siblings[0].parents || [])
+        const parents = layoutParentsOf(siblings[0])
           .map(id => byId.get(id))
           .filter(Boolean);
         const parentCenter = parents.length
@@ -2544,14 +2855,14 @@ function autoLayout(saveResult = true) {
 
     const ancestorBranchIds = partner => {
       const ids = new Set([partner.id]);
-      const queue = [...(partner.parents || []), ...partnerIdsOf(partner).filter(id => !directIds.has(id))];
+      const queue = [...layoutParentsOf(partner), ...partnerIdsOf(partner).filter(id => !directIds.has(id))];
       while (queue.length) {
         const id = queue.shift();
         if (!id || ids.has(id) || directIds.has(id)) continue;
         const current = byId.get(id);
         if (!current) continue;
         ids.add(id);
-        (current.parents || []).forEach(parentId => queue.push(parentId));
+        layoutParentsOf(current).forEach(parentId => queue.push(parentId));
         partnerIdsOf(current).forEach(partnerId => {
           if (!directIds.has(partnerId)) queue.push(partnerId);
         });
@@ -2608,7 +2919,7 @@ function autoLayout(saveResult = true) {
         partner.y = mainPerson.y;
 
         const sideChildren = (childrenOf.get(partner.id) || [])
-          .filter(child => !directIds.has(child.id) && !(child.parents || []).some(parentId => directIds.has(parentId)))
+          .filter(child => !directIds.has(child.id) && !layoutParentsOf(child).some(parentId => directIds.has(parentId)))
           .sort((a,b) => (birthSortValue(a) ?? Infinity) - (birthSortValue(b) ?? Infinity) || a.x - b.x);
         const step = 224;
         const sideCenterX = Math.round(partner.x + direction * pairGap * .72);
@@ -2686,8 +2997,76 @@ function autoLayout(saveResult = true) {
     }
   }
 
+  function spreadCrowdedRows() {
+    if (!largeDataset) return;
+    const rowTolerance = 96;
+    const laneGap = 118;
+    const maxLaneWidth = 11800;
+    const usedInUnit = new Set();
+    const units = [];
+    const sameRow = (a, b) => Math.abs(a.y - b.y) <= 8;
+
+    for (const p of activePeople) {
+      if (usedInUnit.has(p.id)) continue;
+      const partner = partnerIdsOf(p)
+        .map(id => byId.get(id))
+        .find(q => q && !usedInUnit.has(q.id) && sameRow(p, q));
+      if (partner) {
+        const members = [p, partner].sort((a,b) => a.x - b.x || a.id.localeCompare(b.id));
+        members.forEach(member => usedInUnit.add(member.id));
+        const minX = Math.min(...members.map(member => member.x));
+        const maxX = Math.max(...members.map(member => member.x));
+        units.push({
+          members,
+          center: (minX + maxX) / 2,
+          y: Math.round(members.reduce((sum, member) => sum + member.y, 0) / members.length),
+          width: Math.max(coupleCardWidth, maxX - minX + singleCardWidth)
+        });
+      } else {
+        usedInUnit.add(p.id);
+        units.push({ members: [p], center: p.x, y: p.y, width: singleCardWidth });
+      }
+    }
+
+    const rows = [];
+    for (const unit of units.sort((a,b) => a.y - b.y || a.center - b.center)) {
+      const row = rows.find(item => Math.abs(item.y - unit.y) <= rowTolerance);
+      if (row) {
+        row.units.push(unit);
+        row.y = row.units.reduce((sum, item) => sum + item.y, 0) / row.units.length;
+      } else {
+        rows.push({ y: unit.y, units: [unit] });
+      }
+    }
+
+    for (const row of rows) {
+      const rowUnits = row.units.sort((a,b) => a.center - b.center);
+      const totalWidth = rowUnits.reduce((sum, unit) => sum + unit.width, 0) + Math.max(0, rowUnits.length - 1) * 22;
+      if (rowUnits.length < 9 || totalWidth <= maxLaneWidth) continue;
+
+      const laneCount = Math.min(4, Math.max(2, Math.ceil(totalWidth / maxLaneWidth)));
+      const lanes = Array.from({ length: laneCount }, () => ({ width: 0, units: [] }));
+      rowUnits.forEach(unit => {
+        const lane = lanes.reduce((best, current) => current.width < best.width ? current : best, lanes[0]);
+        lane.units.push(unit);
+        lane.width += unit.width + 22;
+      });
+
+      const sortedLanes = lanes.filter(lane => lane.units.length).sort((a,b) => a.width - b.width);
+      const laneOffsets = sortedLanes.map((_, index, arr) => (index - (arr.length - 1) / 2) * laneGap);
+      sortedLanes.forEach((lane, laneIndex) => {
+        const offsetY = laneOffsets[laneIndex];
+        lane.units.forEach(unit => {
+          unit.members.forEach(member => {
+            member.y = Math.round(row.y + offsetY);
+          });
+        });
+      });
+    }
+  }
+
   function packRelationComponents() {
-    const componentGap = 96;
+    const componentGap = largeDataset ? 168 : 96;
     let nextLeft = startX;
 
     const boxes = relationComponents()
@@ -2737,20 +3116,46 @@ function autoLayout(saveResult = true) {
   });
 
   function packRootBranches() {
-    const branchGap = 96;
-    let cursor = startX;
+    const branchGap = largeDataset ? 168 : 96;
+    const rowGap = largeDataset ? 280 : 180;
+    const maxRowWidth = largeDataset
+      ? (rootBranchIds.length > 220 ? 22000 : rootBranchIds.length > 120 ? 18000 : 15000)
+      : rootBranchIds.length > 160
+        ? 14000
+        : rootBranchIds.length > 72
+          ? 11000
+          : 8200;
+    const minBranchWidth = largeDataset ? 480 : 0;
+    let cursorX = startX;
+    let cursorY = rootY;
+    let rowHeight = 0;
     for (const ids of rootBranchIds) {
       const people = [...ids].map(id => byId.get(id)).filter(Boolean);
       if (!people.length) continue;
       const minX = Math.min(...people.map(person => person.x - singleCardWidth / 2));
       const maxX = Math.max(...people.map(person => person.x + singleCardWidth / 2));
-      const delta = Math.round(cursor - minX);
-      people.forEach(person => { person.x = Math.round(person.x + delta); });
-      cursor += maxX - minX + branchGap;
+      const minY = Math.min(...people.map(person => person.y - 82));
+      const maxY = Math.max(...people.map(person => person.y + 82));
+      const width = Math.max(minBranchWidth, maxX - minX);
+      const height = maxY - minY;
+      if (cursorX > startX && cursorX + width > startX + maxRowWidth) {
+        cursorX = startX;
+        cursorY += rowHeight + rowGap;
+        rowHeight = 0;
+      }
+      const deltaX = Math.round(cursorX - minX);
+      const deltaY = Math.round(cursorY - minY);
+      people.forEach(person => {
+        person.x = Math.round(person.x + deltaX);
+        person.y = Math.round(person.y + deltaY);
+      });
+      cursorX += width + branchGap;
+      rowHeight = Math.max(rowHeight, height);
     }
   }
 
   function compressEmptyHorizontalSpace() {
+    if (largeDataset) return;
     const maxEmptyGap = 620;
     const columns = new Map();
     for (const person of activePeople) {
@@ -2773,6 +3178,7 @@ function autoLayout(saveResult = true) {
   }
 
   function interlockRootBranches() {
+    if (largeDataset) return;
     const cardGap = singleCardWidth + 28;
     const rowTolerance = 96;
     const branches = rootBranchIds
@@ -2802,9 +3208,12 @@ function autoLayout(saveResult = true) {
   }
 
   resolveRowOverlaps();
+  spreadCrowdedRows();
   packRelationComponents();
-  compactSiblingSubtrees();
-  compactThinSiblingUnits();
+  if (!largeDataset) {
+    compactSiblingSubtrees();
+    compactThinSiblingUnits();
+  }
   packRootBranches();
   alignPartnerClusters();
   anchorInLawAncestorBranches();
@@ -3086,6 +3495,7 @@ function openSheet(id) {
   const p = person(id);
   $('sheetTitle').textContent = p ? (editMode ? 'Person bearbeiten' : 'Person ansehen') : 'Neue Person';
   $('quickFocus').style.display = p ? '' : 'none';
+  $('quickFocus').textContent = 'Fokus 2/2';
   $('quickChild').style.display = p && editMode ? '' : 'none';
   $('quickPartner').style.display = p && editMode ? '' : 'none';
   $('quickParents').style.display = p && editMode ? '' : 'none';
@@ -3508,6 +3918,14 @@ function jumpToPerson(id) {
   const p = person(id);
   if (!p) return;
   selected = id;
+  if (focusMode && focusId !== id) {
+    focusId = id;
+    applyFocusLayout(id);
+    render();
+    fitFocusNeighborhood(id);
+    showSpotlight(id);
+    return;
+  }
   view.s = Math.max(view.s, 0.72);
   view.x = -p.x * view.s;
   view.y = -p.y * view.s;
@@ -3856,6 +4274,14 @@ $('modeBtn').addEventListener('click', () => {
   }
 });
 $('addBtn').addEventListener('click', () => { selected = null; pendingNewPos = null; openSheet(null); });
+$('focusBtn')?.addEventListener('click', () => {
+  if (focusMode) {
+    setFocusMode(false);
+    return;
+  }
+  const id = selected || preferredLandingPersonId();
+  if (id) setFocusMode(true, id);
+});
 $('quickFocus').addEventListener('click', () => selected && setFocusMode(true, selected));
 $('quickChild').addEventListener('click', () => selected && addChildFor(selected));
 $('quickPartner').addEventListener('click', () => selected && addPartnerFor(selected));
@@ -3917,7 +4343,11 @@ $('fitBtn').addEventListener('click', () => {
   fit();
   closeSettingsMenu();
 });
-$('autoBtn').addEventListener('click', () => { if (confirm('Automatische kompakte Anordnung anwenden? Aktuelle Positionen werden überschrieben.')) autoLayout(); });
+$('autoBtn').addEventListener('click', async () => {
+  if (confirm('Automatische kompakte Anordnung anwenden? Aktuelle Positionen werden überschrieben.')) {
+    await runBusy('Auto-Anordnung läuft …', async () => { autoLayout(); });
+  }
+});
 $('collapseAllBtn').addEventListener('click', () => {
   const anyOpen = data.people.some(p=>hasChildren(p.id) && !collapsed.has(p.id));
   if(anyOpen){ data.people.forEach(p=>{ if(hasChildren(p.id)) collapsed.add(p.id); }); $('collapseAllBtn').textContent='Alle ausklappen'; }
@@ -3932,26 +4362,28 @@ $('poolBtn')?.addEventListener('click', () => {
 
 $('resetBtn').addEventListener('click', async () => {
   if (confirm('Beispiel wirklich zurücksetzen?')) {
-    localStorage.removeItem(storeKey);
-    localStorage.removeItem(storeKey + '-collapsed');
-    await clearPersistedJson();
-    hasPersistedTreeData = false;
-    collapsed = new Set();
-    focusMode = false;
-    focusId = null;
-    activeFamily = '';
-    rootIds = [];
-    selected = null;
-    closeSheet(true);
-    closeListEditor();
-    closeNavigator();
-    closeSearch();
-    closeBirthdays();
-    closeCheck();
-    closeScrollView();
-    updateFocusButton();
-    updateRootButton();
-    await loadDefaultData({ saveResult: true, fitResult: true });
+    await runBusy('Beispiel wird zurückgesetzt …', async () => {
+      localStorage.removeItem(storeKey);
+      localStorage.removeItem(storeKey + '-collapsed');
+      await clearPersistedJson();
+      hasPersistedTreeData = false;
+      collapsed = new Set();
+      focusMode = false;
+      focusId = null;
+      activeFamily = '';
+      rootIds = [];
+      selected = null;
+      closeSheet(true);
+      closeListEditor();
+      closeNavigator();
+      closeSearch();
+      closeBirthdays();
+      closeCheck();
+      closeScrollView();
+      updateFocusButton();
+      updateRootButton();
+      await loadDefaultData({ saveResult: true, fitResult: true });
+    });
   }
 });
 
@@ -4051,14 +4483,14 @@ $('fileInput').addEventListener('change', e => {
   const f = e.target.files[0];
   if (!f) return;
   const r = new FileReader();
-  r.onload = () => {
+  r.onload = async () => {
     try {
-      const imported = normalize(JSON.parse(r.result));
+      const imported = await runBusy('JSON wird importiert …', async () => normalize(JSON.parse(r.result)));
       workingFileHandle = null;
       applyLoadedData(imported, { fitResult: false });
       updateWorkingFileButton();
       save();
-      fit();
+      focusPreferredPerson({ preferFocus: focusMode || nonPoolPeople.length > 1200 });
     } catch {
       alert('Import nicht erkannt. Erwartet wird ein JSON-Export dieser App.');
     }

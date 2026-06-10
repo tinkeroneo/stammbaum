@@ -106,6 +106,12 @@ svg.lines{position:absolute;inset:0;width:100%;height:100%;overflow:visible;poin
 .minimapSvg .line{stroke:rgba(157,124,82,.5);stroke-width:1;fill:none;}
 .minimapSvg .node{fill:rgba(255,250,240);stroke:rgba(78,54,30,.3);stroke-width:0.5;}
 .minimapViewport{position:absolute;border:2px solid rgba(107,143,113,.8);background:rgba(107,143,113,.1);pointer-events:auto;cursor:pointer;}
+.busyIndicator{position:absolute;right:12px;bottom:214px;display:flex;align-items:center;gap:10px;min-width:190px;max-width:min(280px,calc(100vw - 24px));padding:10px 12px;border-radius:16px;background:rgba(255,250,240,.96);border:1px solid rgba(78,54,30,.14);box-shadow:0 12px 30px rgba(0,0,0,.14);z-index:13;pointer-events:none}
+.busySpinner{width:22px;height:22px;border-radius:50%;border:3px solid rgba(107,143,113,.22);border-top-color:var(--accent);animation:busySpin .85s linear infinite;flex:0 0 auto}
+.busyText{display:grid;gap:2px;min-width:0}
+.busyText strong{font-size:12px;line-height:1.1}
+.busyText span{font-size:12px;line-height:1.25;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@keyframes busySpin{to{transform:rotate(360deg)}}
 .person.compact{width:140px;padding:10px;border-radius:16px;font-size:13px;}
 .couplePerson.compact{width:230px;min-height:72px}
 .person.compact .avatar{width:32px;height:32px;font-size:14px;margin-right:8px}
@@ -248,6 +254,7 @@ body.viewMode .sheet .grid,body.viewMode .sheet .small{display:none}
   .scrollSheet,.sideNav,.searchSheet,.checkSheet,.birthdaySheet{left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));top:max(8px,env(safe-area-inset-top));bottom:max(8px,env(safe-area-inset-bottom));width:auto;border-radius:18px;max-height:none;padding:12px}
   .sideTop{position:sticky;top:-12px;z-index:2;margin:-12px -12px 0;padding:12px;background:var(--panel);border-radius:18px 18px 0 0;box-shadow:0 1px 0 rgba(78,54,30,.08)}
   .minimap{display:none}
+  .busyIndicator{right:10px;left:10px;bottom:86px;max-width:none;min-width:0}
 }
 .listSheet{position:absolute;left:0;right:0;bottom:0;z-index:32;background:var(--panel);border-radius:24px 24px 0 0;box-shadow:0 -16px 50px rgba(0,0,0,.28);padding:14px max(14px,env(safe-area-inset-left)) max(14px,env(safe-area-inset-bottom));transform:translateY(110%);transition:.22s ease;max-height:88%;overflow:hidden;display:grid;grid-template-rows:auto auto 1fr auto;gap:10px}
 .listSheet.open{transform:translateY(0)}
