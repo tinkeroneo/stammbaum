@@ -11,7 +11,7 @@
 
 <body>
     <div class="app" data-testid="app-shell">
-        <header>
+        <header aria-label="Anwendungsleiste">
             <div class="brand">
                 <h1 id="app-title">Stammbaum</h1>
                 <p id="app-storage-status" aria-live="polite" aria-atomic="true">Lade Daten…</p>
@@ -44,7 +44,7 @@
             <button type="button" class="pill iconBtn primary" id="addBtn" aria-label="Neue Person hinzufügen"
                 title="Person hinzufügen">+</button>
         </header>
-    <main id="main" data-testid="app-main">
+    <main id="main" data-testid="app-main" aria-label="Stammbaum-Arbeitsbereich">
             <section class="welcomeSurface hidden" id="welcomeSurface" data-testid="welcome-surface" role="dialog" aria-modal="true"
                 aria-hidden="true" aria-labelledby="welcomeTitle" aria-describedby="welcomeDescription welcomePrivacy">
                 <article class="welcomeCard">
@@ -80,10 +80,11 @@
                     <p id="welcomePrivacy" class="welcomePrivacy">Die Daten bleiben standardmäßig auf diesem Gerät.</p>
                 </article>
             </section>
-            <div class="stage">
+            <section class="stage" aria-labelledby="treeCanvasTitle">
+                <h2 class="srOnly" id="treeCanvasTitle">Interaktiver Stammbaum</h2>
                 <div class="world" id="world">
                     <div class="generationBands" id="generationBands"></div><svg class="lines" id="lines"></svg>
-                    <div id="nodes"></div>
+                    <div id="nodes" role="group" aria-label="Sichtbare Personen im Stammbaum"></div>
                 </div>
                 <div id="selectionRect" class="selectionRect hidden"></div>
                 <div class="minimap" id="minimap" aria-hidden="true">
@@ -98,7 +99,7 @@
                         <span id="busyLabel">Verarbeitung läuft …</span>
                     </div>
                 </div>
-            </div>
+            </section>
             <section class="helpHint hidden" id="helpHint" role="region" aria-live="polite" aria-atomic="true"
                 aria-labelledby="helpHintTitle" data-testid="app-inline-hint">
                 <div class="helpHintTop">
@@ -118,7 +119,7 @@
                     title="Überblick öffnen">▦</button></div>
             <div class="offscreenIndicators" id="offscreenIndicators" data-testid="offscreen-indicators"
                 aria-live="polite" aria-label="Beziehungen außerhalb des sichtbaren Bereichs"></div>
-            <nav class="toolbar" role="navigation" aria-label="Hauptnavigation" data-testid="app-main-nav">
+            <nav class="toolbar" aria-label="Hauptnavigation" data-testid="app-main-nav">
                 <button type="button" class="mainNavBtn" id="startNavBtn" aria-label="Startansicht öffnen" aria-current="page">
                     <svg class="navIcon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"></path></svg>
                     <span class="mainNavLabel">Start</span>
@@ -363,7 +364,8 @@
                             <label for="relationshipSearch">Person suchen</label>
                             <input id="relationshipSearch" data-testid="relationship-search"
                                 placeholder="Name, Jahr oder Ort" autocomplete="off" />
-                            <div class="relationshipResults" id="relationshipResults"
+                            <div class="relationshipResults" id="relationshipResults" role="region"
+                                aria-label="Treffer für die Beziehungsauswahl"
                                 data-testid="relationship-results"></div>
                         </div>
                         <div class="relationshipNewFields hidden" id="relationshipNewFields">
@@ -462,24 +464,28 @@
                     <div class="minimapViewport overviewViewport" id="overviewViewport" aria-hidden="true"></div>
                 </div>
             </aside>
-            <aside class="sideNav" id="sideNav" data-testid="app-navigation" aria-hidden="true">
+            <aside class="sideNav" id="sideNav" data-testid="app-navigation" aria-hidden="true"
+                aria-labelledby="familyNavigationTitle">
                 <div class="sideTop">
-                    <h2>Zweige</h2>
+                    <h2 id="familyNavigationTitle">Familienzweige</h2>
                     <button type="button" class="pill" id="navClearBtn">Alle</button>
                     <button type="button" class="pill" id="navCloseBtn">Schließen</button>
                 </div>
                 <input class="navSearch" id="navSearch" placeholder="Familie suchen …"
                     aria-label="Familienzweige durchsuchen" />
-                <div class="familyRows" id="familyRows"></div>
+                <div class="familyRows" id="familyRows" role="region"
+                    aria-label="Gefundene Familienzweige"></div>
             </aside>
-            <aside class="searchSheet" id="searchSheet" data-testid="person-search-sheet" aria-hidden="true">
+            <aside class="searchSheet" id="searchSheet" data-testid="person-search-sheet" aria-hidden="true"
+                aria-labelledby="personSearchTitle">
                 <div class="sideTop">
-                    <h2>Suche</h2>
+                    <h2 id="personSearchTitle">Person suchen</h2>
                     <button type="button" class="pill" id="searchCloseBtn" data-testid="person-search-close">Schließen</button>
                 </div>
                 <input class="navSearch" id="personSearch" data-testid="person-search" placeholder="Name, Jahr, Ort oder Familienname suchen." aria-label="Person suchen" />
                 <div class="searchSummary" id="searchSummary" data-testid="person-search-summary" aria-live="polite" aria-atomic="true"></div>
-                <div class="searchRows" id="searchRows" data-testid="person-search-results"></div>
+                <div class="searchRows" id="searchRows" role="region" aria-label="Suchergebnisse"
+                    aria-describedby="searchSummary" data-testid="person-search-results"></div>
                 <p class="searchEmptyState hidden" id="searchEmptyState" data-testid="person-search-empty">
                     <span>Keine Treffer. Passe deine Suche an oder öffne die komplette Personenliste.</span>
                     <button type="button" class="pill primary searchStateAction" id="searchOpenListBtn" data-testid="search-open-list">Personenliste öffnen</button>
@@ -499,28 +505,34 @@
                     <input class="navSearch" id="rootSelectionSearch" data-testid="root-selection-search"
                         placeholder="Startperson suchen …" aria-label="Startperson suchen" />
                 </div>
-                <div class="searchRows" id="rootSelectionRows" data-testid="root-selection-results"></div>
+                <div class="searchRows" id="rootSelectionRows" role="region"
+                    aria-label="Treffer für die Startperson" data-testid="root-selection-results"></div>
             </aside>
-            <aside class="checkSheet" id="checkSheet" aria-hidden="true">
+            <aside class="checkSheet" id="checkSheet" aria-hidden="true" aria-labelledby="dataCheckTitle">
                 <div class="sideTop">
-                    <h2>Daten prüfen</h2>
+                    <h2 id="dataCheckTitle">Daten prüfen</h2>
                     <button type="button" class="pill" id="checkCloseBtn">Schließen</button>
                 </div>
-                <div class="checkRows" id="checkRows"></div>
+                <div class="checkRows" id="checkRows" role="region"
+                    aria-label="Ergebnisse der Datenprüfung"></div>
             </aside>
-            <aside class="birthdaySheet" id="birthdaySheet" aria-hidden="true">
+            <aside class="birthdaySheet" id="birthdaySheet" aria-hidden="true"
+                aria-labelledby="birthdayTitle">
                 <div class="sideTop">
-                    <h2>Geburtstage</h2>
+                    <h2 id="birthdayTitle">Geburtstage</h2>
                     <button type="button" class="pill" id="birthdayCloseBtn">Schließen</button>
                 </div>
-                <div class="birthdayRows" id="birthdayRows"></div>
+                <div class="birthdayRows" id="birthdayRows" role="region"
+                    aria-label="Geburtstagsliste"></div>
             </aside>
-            <aside class="scrollSheet" id="scrollSheet" aria-hidden="true">
+            <aside class="scrollSheet" id="scrollSheet" aria-hidden="true"
+                aria-labelledby="scrollViewTitle">
                 <div class="sideTop">
-                    <h2>Scrollansicht</h2>
+                    <h2 id="scrollViewTitle">Scrollansicht des Stammbaums</h2>
                     <button type="button" class="pill" id="scrollCloseBtn">Schließen</button>
                 </div>
-                <div class="scrollRows" id="scrollRows"></div>
+                <div class="scrollRows" id="scrollRows" role="region"
+                    aria-label="Personen in der Scrollansicht"></div>
             </aside>
             <section class="sheet" id="sheet" data-testid="person-dialog" role="dialog" aria-modal="true"
                 aria-hidden="true" aria-labelledby="sheetTitle">
@@ -533,7 +545,8 @@
                 </div>
 
                 <section class="personDetailView" id="personDetailView" data-testid="person-detail-view">
-                    <div class="personDetails" id="personDetails" data-testid="person-details"></div>
+                    <div class="personDetails" id="personDetails" role="region"
+                        aria-label="Personendetails" data-testid="person-details"></div>
                     <aside class="dataQualityHint hidden" id="dataQualityHint" role="status"
                         aria-labelledby="dataQualityTitle" data-testid="data-quality-hint">
                         <h3 id="dataQualityTitle">Angaben bei Gelegenheit ergänzen</h3>
@@ -716,7 +729,8 @@
                             aria-pressed="true">Familie</button>
                     </div>
                 </div>
-                <div class="listRows" id="listRows" data-testid="directory-rows"></div>
+                <div class="listRows" id="listRows" role="region" aria-label="Personen im Verzeichnis"
+                    aria-describedby="listSummary" data-testid="directory-rows"></div>
             </section>
 
         </main>
