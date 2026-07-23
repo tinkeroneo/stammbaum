@@ -12,6 +12,24 @@ const startupStateSignals = {
 };
 let startupState = 'first-visit';
 const storeKey = 'mobile-family-tree-v5-clean';
+const helpSeenKey = storeKey + '-help-seen-v1';
+const helpTips = [
+  {
+    id: 'pan-zoom',
+    title: 'Baum bewegen und zoomen',
+    text: 'Ziehe eine freie Fläche, um den Baum zu verschieben. Zoome mit zwei Fingern, dem Mausrad oder den Plus-/Minus-Tasten.'
+  },
+  {
+    id: 'search',
+    title: 'Person schnell finden',
+    text: 'Öffne „Suchen“ in der Hauptnavigation. Ein Treffer wird ausgewählt, lesbar zentriert und mit seinen Details geöffnet.'
+  },
+  {
+    id: 'edit',
+    title: 'Ansehen und Bearbeiten',
+    text: 'Wechsle oben bewusst von „Ansehen“ zu „Bearbeiten“, bevor du Personen oder Beziehungen änderst.'
+  }
+];
 const startupStateMetaKey = storeKey + '-meta';
 const persistenceDbName = storeKey + '-db';
 const persistenceStoreName = 'treeState';
@@ -110,6 +128,9 @@ let renderVirtualizationActive = false;
 let busyDepth = 0;
 let focusLayoutRestore = null;
 let mainNavFocusReturnTarget = null;
+let helpQueue = [];
+let helpFocusReturnTarget = null;
+let helpWasExplicitlyOpened = false;
 rebuildDataIndexes();
 
 const familyPalette = [
@@ -983,6 +1004,71 @@ function hideWelcomeSurface() {
   welcomeSurface.classList.add('hidden');
   welcomeSurface.setAttribute('aria-hidden', 'true');
   setTimeout(maybeOpenRequiredRootSelection, 0);
+  setTimeout(() => showHelpHints(), 120);
+}
+
+function readSeenHelpHints() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(helpSeenKey) || '[]');
+    return new Set(Array.isArray(stored) ? stored.filter(id => helpTips.some(tip => tip.id === id)) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeSeenHelpHints(seen) {
+  try {
+    localStorage.setItem(helpSeenKey, JSON.stringify([...seen]));
+  } catch {
+    // Die Hilfe bleibt nutzbar, auch wenn der Browser lokale Speicherung blockiert.
+  }
+}
+
+function hideHelpHints({ returnFocus = false } = {}) {
+  const hint = $('helpHint');
+  if (!hint) return;
+  hint.classList.add('hidden');
+  hint.removeAttribute('data-help-tip');
+  helpQueue = [];
+  if (returnFocus) helpFocusReturnTarget?.focus({ preventScroll: true });
+  helpFocusReturnTarget = null;
+  helpWasExplicitlyOpened = false;
+}
+
+function renderCurrentHelpHint({ focusClose = false } = {}) {
+  const hint = $('helpHint');
+  const tip = helpQueue[0];
+  if (!hint || !tip) {
+    hideHelpHints({ returnFocus: helpWasExplicitlyOpened });
+    return;
+  }
+  const tipIndex = helpTips.findIndex(item => item.id === tip.id);
+  $('helpHintCount').textContent = `Hinweis ${tipIndex + 1} von ${helpTips.length}`;
+  $('helpHintTitle').textContent = tip.title;
+  $('helpHintText').textContent = tip.text;
+  $('helpHintClose').setAttribute('aria-label', `Hinweis „${tip.title}“ schließen`);
+  hint.dataset.helpTip = tip.id;
+  hint.classList.remove('hidden');
+  if (focusClose) setTimeout(() => $('helpHintClose')?.focus(), 0);
+}
+
+function showHelpHints({ force = false, trigger = null } = {}) {
+  if (!force && helpWasExplicitlyOpened) return;
+  const seen = readSeenHelpHints();
+  helpQueue = helpTips.filter(tip => force || !seen.has(tip.id));
+  helpWasExplicitlyOpened = force;
+  helpFocusReturnTarget = force && trigger instanceof HTMLElement ? trigger : null;
+  renderCurrentHelpHint({ focusClose: force });
+}
+
+function dismissCurrentHelpHint() {
+  const tip = helpQueue[0];
+  if (!tip) return;
+  const seen = readSeenHelpHints();
+  seen.add(tip.id);
+  writeSeenHelpHints(seen);
+  helpQueue.shift();
+  renderCurrentHelpHint({ focusClose: true });
 }
 function initializeEmptyTreeModel() {
   data = normalize({ people: [] });
@@ -5446,6 +5532,11 @@ $('poolBtn')?.addEventListener('click', () => {
   closeSettingsMenu();
   openListEditor('pool');
 });
+$('helpBtn')?.addEventListener('click', event => {
+  closeSettingsMenu();
+  showHelpHints({ force: true, trigger: $('settingsBtn') || event.currentTarget });
+});
+$('helpHintClose')?.addEventListener('click', dismissCurrentHelpHint);
 
 $('resetBtn').addEventListener('click', async () => {
   closeSettingsMenu();
@@ -5703,6 +5794,4 @@ if (startupState === 'first-visit') {
       showWelcomeSurface();
     });
 }
-setTimeout(() => $('hint').classList.add('hidden'), 8000);
-
 })();

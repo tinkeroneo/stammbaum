@@ -93,8 +93,16 @@
                     </div>
                 </div>
             </div>
-            <div class="hint" id="hint" data-testid="app-inline-hint">Tipp: Geburtsdatum: Jahr, TT.MM. oder TT.MM.JJJJ · Auto sortiert Geschwister
-                danach · −/+ klappt Unteräste.</div>
+            <section class="helpHint hidden" id="helpHint" role="region" aria-live="polite" aria-atomic="true"
+                aria-labelledby="helpHintTitle" data-testid="app-inline-hint">
+                <div class="helpHintTop">
+                    <span class="helpHintCount" id="helpHintCount"></span>
+                    <button type="button" class="helpHintClose" id="helpHintClose"
+                        data-testid="help-hint-dismiss">Verstanden</button>
+                </div>
+                <h2 id="helpHintTitle"></h2>
+                <p id="helpHintText"></p>
+            </section>
             <div class="zoom" role="group" aria-label="Zoom-Steuerung"><button type="button" id="zin"
                     aria-label="Heranzoomen">+</button><button type="button" id="zout"
                     aria-label="Rauszoomen">−</button><button type="button" id="home"
@@ -244,6 +252,16 @@
                     </section>
                     <section class="settingsSection">
                         <h2 class="settingsSectionTitle">Hilfe</h2>
+                        <button type="button" class="settingsItem" id="helpBtn" data-testid="help-open"
+                            aria-label="Bedienhinweise erneut anzeigen">
+                            <span class="settingsItemIcon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.8 9a2.4 2.4 0 114.1 1.7c-1.2 1-1.9 1.4-1.9 3"/><path d="M12 17h.01"/></svg>
+                            </span>
+                            <span class="settingsItemContent">
+                                <span class="settingsItemTitle">Bedienhinweise</span>
+                                <span class="settingsItemDescription">Tipps zu Navigation, Suche und Bearbeiten erneut anzeigen.</span>
+                            </span>
+                        </button>
                         <button type="button" class="settingsItem editOnly" id="autoBtn" aria-label="Automatische Anordnung ausführen">
                             <span class="settingsItemIcon" aria-hidden="true">
                                 <svg viewBox="0 0 24 24"><path d="M6 7h11"/><path d="M6 12h11"/><path d="M6 17h7"/><path d="M20 4l-6 16"/><path d="M18 17l2 1"/><path d="M18 17l2-1"/></svg>

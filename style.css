@@ -243,7 +243,15 @@ textarea{min-height:70px;resize:vertical}
 .small{font-size:12px;color:var(--muted);line-height:1.35}
 .backdrop{position:absolute;inset:0;background:rgba(0,0,0,.2);z-index:25;display:none}
 .backdrop.show{display:block}
-.hint{position:absolute;left:12px;top:12px;right:70px;background:rgba(255,250,240,.9);border:1px solid rgba(0,0,0,.08);border-radius:18px;padding:10px 12px;font-size:12px;color:var(--muted);box-shadow:var(--shadow);z-index:8}
+.helpHint{position:absolute;left:50%;top:12px;width:min(520px,calc(100vw - 100px));transform:translateX(-50%);padding:11px 12px 12px;border:1px solid rgba(78,54,30,.14);border-radius:18px;background:rgba(255,250,240,.96);box-shadow:var(--shadow);z-index:8}
+.helpHintTop{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.helpHintCount{color:var(--muted);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.02em}
+.helpHintClose{min-width:44px;min-height:44px;padding:7px 10px;border-radius:12px;background:rgba(71,106,80,.1);color:var(--primary);font-size:12px;font-weight:900}
+.helpHint h2{margin:-2px 0 3px;font-size:15px;line-height:1.2}
+.helpHint p{margin:0;color:var(--muted);font-size:12px;line-height:1.4}
+@media (max-width:480px){
+  .helpHint{left:max(10px,env(safe-area-inset-left));right:70px;top:10px;width:auto;transform:none}
+}
 .welcomeSurface{
   position:absolute;
   inset:0;
