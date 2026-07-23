@@ -191,6 +191,11 @@ svg.lines{position:absolute;inset:0;width:100%;height:100%;overflow:visible;poin
 .personDetailView,.personEditView{min-width:0}
 .personEditView{display:grid;gap:10px}
 .editQuickActions{margin-top:0}
+.formErrorSummary{padding:11px 12px;border:1px solid color-mix(in srgb,var(--danger) 48%,transparent);border-radius:14px;background:color-mix(in srgb,var(--danger) 8%,#fff);color:var(--ink);font-size:13px;line-height:1.35}
+.formErrorSummary strong{display:block}
+.formErrorSummary ul{margin:6px 0 0;padding-left:20px}
+.fieldError{grid-column:1/-1;margin:0;color:var(--danger);font-size:12px;line-height:1.35;font-weight:700}
+input[aria-invalid="true"],select[aria-invalid="true"],textarea[aria-invalid="true"]{border-color:var(--danger);box-shadow:0 0 0 2px color-mix(in srgb,var(--danger) 18%,transparent)}
 .formSection{min-width:0;border:1px solid rgba(78,54,30,.13);border-radius:16px;background:rgba(255,247,234,.72);overflow:hidden}
 .formSectionToggle{width:100%;min-height:46px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:transparent;color:var(--ink);box-shadow:none;text-align:left;font-size:14px;font-weight:900}
 .formSectionToggle[aria-expanded="true"]{background:rgba(71,106,80,.08)}

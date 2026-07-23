@@ -4086,35 +4086,97 @@ function validatePersonForm(currentId, parents, partnerId, born, died) {
   const descendants = currentId ? descendantsOf(currentId) : new Set();
 
   if (parents.length !== new Set(parents).size) {
-    errors.push('Bitte zwei unterschiedliche Elternteile auswählen.');
+    errors.push({ fields: ['parent1', 'parent2'], message: 'Bitte zwei unterschiedliche Elternteile auswählen.' });
   }
   if (currentId && parents.includes(currentId)) {
-    errors.push('Eine Person kann nicht ihr eigener Elternteil sein.');
+    errors.push({ fields: ['parent1', 'parent2'], message: 'Eine Person kann nicht ihr eigener Elternteil sein.' });
   }
   if (currentId && partnerId === currentId) {
-    errors.push('Eine Person kann nicht ihr eigener Partner sein.');
+    errors.push({ fields: ['partner'], message: 'Eine Person kann nicht ihr eigener Partner sein.' });
   }
   if (partnerId && parents.includes(partnerId)) {
-    errors.push('Partner/in und Elternteil dürfen nicht dieselbe Person sein.');
+    errors.push({ fields: ['partner', 'parent1', 'parent2'], message: 'Partner/in und Elternteil dürfen nicht dieselbe Person sein.' });
   }
   if (currentId && partnerId && descendants.has(partnerId)) {
-    errors.push('Nachkommen können nicht als Partner/in eingetragen werden.');
+    errors.push({ fields: ['partner'], message: 'Nachkommen können nicht als Partner/in eingetragen werden.' });
   }
   if (currentId && parents.some(id => descendants.has(id))) {
-    errors.push('Nachkommen können nicht als Elternteil eingetragen werden.');
+    errors.push({ fields: ['parent1', 'parent2'], message: 'Nachkommen können nicht als Elternteil eingetragen werden.' });
   }
   if (!isValidDateInput(born)) {
-    errors.push('Geburtsdatum bitte als Jahr, MM.JJJJ, TT.MM. oder TT.MM.JJJJ eingeben.');
+    errors.push({ fields: ['born'], message: 'Geburtsdatum bitte als Jahr, MM.JJJJ, TT.MM. oder TT.MM.JJJJ eingeben.' });
   }
   if (!isValidDateInput(died)) {
-    errors.push('Sterbedatum bitte als Jahr, MM.JJJJ oder TT.MM.JJJJ eingeben.');
+    errors.push({ fields: ['died'], message: 'Sterbedatum bitte als Jahr, MM.JJJJ oder TT.MM.JJJJ eingeben.' });
   }
+  return errors;
+}
 
-  if (errors.length) {
-    alert(errors.join('\n'));
-    return false;
+function clearFormValidationErrors() {
+  const form = $('personEditView');
+  if (!form) return;
+  form.querySelectorAll('[data-form-error]').forEach(error => error.remove());
+  form.querySelectorAll('[aria-invalid="true"]').forEach(element => element.removeAttribute('aria-invalid'));
+  form.querySelectorAll('[aria-describedby]').forEach(element => {
+    const remaining = element.getAttribute('aria-describedby')
+      .split(/\s+/)
+      .filter(id => id && !id.startsWith('form-error-'));
+    if (remaining.length) element.setAttribute('aria-describedby', remaining.join(' '));
+    else element.removeAttribute('aria-describedby');
+  });
+  $('formErrorList').innerHTML = '';
+  $('formErrorSummary').classList.add('hidden');
+}
+
+function revealFormSectionFor(element) {
+  const body = element?.closest('.formSectionBody');
+  if (!body?.hidden) return;
+  body.hidden = false;
+  const toggle = document.querySelector(`.formSectionToggle[aria-controls="${body.id}"]`);
+  toggle?.setAttribute('aria-expanded', 'true');
+}
+
+function showFormValidationErrors(errors) {
+  clearFormValidationErrors();
+  if (!errors.length) return true;
+  const summary = $('formErrorSummary');
+  const list = $('formErrorList');
+  let firstInvalid = null;
+  errors.forEach((error, errorIndex) => {
+    const item = document.createElement('li');
+    item.textContent = error.message;
+    list.appendChild(item);
+    const elements = [
+      ...(error.fields || []).map(id => $(id)),
+      ...(error.elements || [])
+    ].filter((element, index, all) => element && all.indexOf(element) === index);
+    elements.forEach((element, elementIndex) => {
+      revealFormSectionFor(element);
+      element.setAttribute('aria-invalid', 'true');
+      const key = String(element.id || element.dataset.marriagePartner || `${errorIndex}-${elementIndex}`)
+        .replace(/[^a-zA-Z0-9_-]/g, '-');
+      const errorId = `form-error-${key}-${errorIndex}`;
+      const message = document.createElement('p');
+      message.className = 'fieldError';
+      message.id = errorId;
+      message.dataset.formError = 'true';
+      message.textContent = error.message;
+      const host = element.closest('.field, .partnerChip') || element.parentElement;
+      host?.appendChild(message);
+      const describedBy = new Set((element.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean));
+      describedBy.add(errorId);
+      element.setAttribute('aria-describedby', [...describedBy].join(' '));
+      if (!firstInvalid) firstInvalid = element;
+    });
+  });
+  summary.classList.remove('hidden');
+  if (firstInvalid) {
+    firstInvalid.scrollIntoView({ block: 'center', behavior: 'auto' });
+    firstInvalid.focus({ preventScroll: true });
+  } else {
+    summary.focus({ preventScroll: true });
   }
-  return true;
+  return false;
 }
 
 function unlinkPartner(id) {
@@ -4305,6 +4367,7 @@ function clearPersonSheetDraft() {
 }
 
 function populatePersonForm(p, id) {
+  clearFormValidationErrors();
   $('firstName').value = p?.firstName || '';
   $('lastName').value = p?.lastName || '';
   $('nickname').value = p?.nickname || '';
@@ -4470,20 +4533,35 @@ function saveSheet() {
   const keepBranchInPool = $('inPool').checked;
   const makeMainRoot = $('mainRoot').checked;
 
-  if (!validatePersonForm(selected, parents, newPartner, born, died)) return false;
+  const validationErrors = validatePersonForm(selected, parents, newPartner, born, died);
   if (makeMainRoot && keepBranchInPool) {
-    alert('Die Hauptwurzel kann nicht gleichzeitig im Vorrat liegen.');
-    return false;
+    validationErrors.push({
+      fields: ['inPool', 'mainRoot'],
+      message: 'Die Hauptwurzel kann nicht gleichzeitig im Vorrat liegen.'
+    });
   }
   if (makeMainRoot && !isMainRoot(selected) && rootIds.length >= 2) {
-    alert('Es können höchstens zwei Hauptwurzeln festgelegt werden.');
-    return false;
+    validationErrors.push({
+      fields: ['mainRoot'],
+      message: 'Es können höchstens zwei Hauptwurzeln festgelegt werden.'
+    });
   }
-  const invalidMarriageDate = [...Object.values(marriageDraft), newPartner ? newMarriageDate : ''].find(value => !isValidDateInput(value));
-  if (invalidMarriageDate) {
-    alert('Heiratsdatum bitte als Jahr, MM.JJJJ oder TT.MM.JJJJ eingeben.');
-    return false;
+  Object.entries(marriageDraft).forEach(([partnerId, value]) => {
+    if (isValidDateInput(value)) return;
+    const marriageInput = [...document.querySelectorAll('[data-marriage-partner]')]
+      .find(input => input.dataset.marriagePartner === partnerId);
+    validationErrors.push({
+      elements: [marriageInput].filter(Boolean),
+      message: 'Heiratsdatum bitte als Jahr, MM.JJJJ oder TT.MM.JJJJ eingeben.'
+    });
+  });
+  if (newPartner && !isValidDateInput(newMarriageDate)) {
+    validationErrors.push({
+      fields: ['partnerMarriageDate'],
+      message: 'Heiratsdatum bitte als Jahr, MM.JJJJ oder TT.MM.JJJJ eingeben.'
+    });
   }
+  if (!showFormValidationErrors(validationErrors)) return false;
   if (p && keepBranchInPool && !p.pool) {
     const branchSize = poolBranchIds(p.id).size;
     if (!confirm(`${branchSize} Person(en) dieses Zweigs in den Vorrat verschieben?\n\nDie Verknüpfungen bleiben erhalten, der Zweig verschwindet aber aus der normalen Anzeige.`)) return false;

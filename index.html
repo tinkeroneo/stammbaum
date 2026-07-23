@@ -403,6 +403,11 @@
                 </section>
 
                 <form class="personEditView" id="personEditView" data-testid="person-edit-form" hidden novalidate>
+                    <div class="formErrorSummary hidden" id="formErrorSummary" role="alert" aria-live="assertive"
+                        tabindex="-1" data-testid="form-error-summary">
+                        <strong>Bitte prüfe die markierten Angaben.</strong>
+                        <ul id="formErrorList"></ul>
+                    </div>
                     <section class="formSection" data-form-section="basis">
                         <button type="button" class="formSectionToggle" aria-expanded="true"
                             aria-controls="formSectionBasis" data-testid="form-section-basis">
