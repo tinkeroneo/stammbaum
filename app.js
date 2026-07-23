@@ -56,8 +56,15 @@ const minimap = $('minimap');
 const minimapInner = minimap ? minimap.querySelector('.minimapInner') : null;
 const minimapViewport = $('minimapViewport');
 const minimapSvg = $('minimapSvg');
+const overviewButton = $('overviewBtn');
+const overviewSheet = $('overviewSheet');
+const overviewMap = $('overviewMap');
+const overviewViewport = $('overviewViewport');
+const overviewSvg = $('overviewSvg');
 let compactMode = false;
 let minimapState = null;
+let overviewState = null;
+let overviewFocusReturnTarget = null;
 let renderFrame = null;
 let focusMode = false;
 let focusId = null;
@@ -275,7 +282,7 @@ function updateHeaderMeta() {
   if (titleEl) titleEl.textContent = guessTreeName();
   if (statusEl) statusEl.textContent = getPersistenceStatusLabel();
 }
-const surfaceStateKeys = ['sheet','sideNav','searchSheet','rootSelectionSheet','birthdaySheet','scrollSheet','checkSheet','listSheet','fileMenu','settingsMenu'];
+const surfaceStateKeys = ['sheet','sideNav','searchSheet','rootSelectionSheet','overviewSheet','birthdaySheet','scrollSheet','checkSheet','listSheet','fileMenu','settingsMenu'];
 
 const uiState = {
   get data() {
@@ -1194,21 +1201,58 @@ function updateWorldBounds() {
   return { maxX, maxY };
 }
 function updateMinimap(maxX, maxY, visiblePeople = null) {
-  if (!minimap || !minimapInner || !minimapViewport || !minimapSvg) return;
-  
+  if ((!minimapInner || !minimapSvg) && (!overviewMap || !overviewSvg)) return;
   const visible = visiblePeople ? new Set(visiblePeople.map(p => p.id)) : visibleIds();
   const sourcePeople = visiblePeople || data.people.filter(p => visible.has(p.id));
   const compactMinimap = sourcePeople.length > 1200;
-  const mapW = minimapInner.clientWidth || 150;
-  const mapH = minimapInner.clientHeight || 90;
+
+  if (minimapInner && minimapSvg) {
+    minimapState = renderMinimapSurface({
+      inner: minimapInner,
+      svg: minimapSvg,
+      maxX,
+      maxY,
+      visible,
+      sourcePeople,
+      compactMinimap,
+      fallbackWidth: 150,
+      fallbackHeight: 90
+    });
+  }
+  if (overviewMap && overviewSvg) {
+    overviewState = renderMinimapSurface({
+      inner: overviewMap,
+      svg: overviewSvg,
+      maxX,
+      maxY,
+      visible,
+      sourcePeople,
+      compactMinimap,
+      fallbackWidth: 340,
+      fallbackHeight: 260
+    });
+  }
+  updateMinimapViewport();
+}
+function renderMinimapSurface({
+  inner,
+  svg,
+  maxX,
+  maxY,
+  visible,
+  sourcePeople,
+  compactMinimap,
+  fallbackWidth,
+  fallbackHeight
+}) {
+  const mapW = inner.clientWidth || fallbackWidth;
+  const mapH = inner.clientHeight || fallbackHeight;
   const scale = Math.min(mapW / maxX, mapH / maxY);
   const offsetX = (mapW - maxX * scale) / 2;
   const offsetY = (mapH - maxY * scale) / 2;
-  
-  minimapSvg.setAttribute('viewBox', `0 0 ${mapW} ${mapH}`);
-  minimapSvg.innerHTML = '';
-  minimapState = { maxX, maxY, mapW, mapH, scale, offsetX, offsetY };
-  
+
+  svg.setAttribute('viewBox', `0 0 ${mapW} ${mapH}`);
+  svg.innerHTML = '';
   if (!compactMinimap) {
     for (const p of sourcePeople) {
       for (const partnerId of partnerIds(p)) {
@@ -1221,7 +1265,7 @@ function updateMinimap(maxX, maxY, visiblePeople = null) {
           line.setAttribute('x2', offsetX + q.x * scale);
           line.setAttribute('y2', offsetY + q.y * scale);
           line.setAttribute('class', 'line');
-          minimapSvg.appendChild(line);
+          svg.appendChild(line);
         }
       }
       for (const pid of p.parents || []) {
@@ -1233,7 +1277,7 @@ function updateMinimap(maxX, maxY, visiblePeople = null) {
           line.setAttribute('x2', offsetX + p.x * scale);
           line.setAttribute('y2', offsetY + p.y * scale);
           line.setAttribute('class', 'line');
-          minimapSvg.appendChild(line);
+          svg.appendChild(line);
         }
       }
     }
@@ -1245,15 +1289,18 @@ function updateMinimap(maxX, maxY, visiblePeople = null) {
     circle.setAttribute('cy', offsetY + p.y * scale);
     circle.setAttribute('r', compactMinimap ? Math.max(1.1, 2.4 * scale) : Math.max(1.5, 4 * scale));
     circle.setAttribute('class', 'node');
-    minimapSvg.appendChild(circle);
+    svg.appendChild(circle);
   }
-  
-  updateMinimapViewport();
+
+  return { maxX, maxY, mapW, mapH, scale, offsetX, offsetY };
 }
 function updateMinimapViewport() {
-  if (!minimapState || !minimapViewport) return;
-
-  const { maxX, maxY, scale, offsetX, offsetY } = minimapState;
+  positionMinimapViewport(minimapState, minimapViewport);
+  positionMinimapViewport(overviewState, overviewViewport);
+}
+function positionMinimapViewport(state, viewport) {
+  if (!state || !viewport) return;
+  const { maxX, maxY, scale, offsetX, offsetY } = state;
   const rect = main.getBoundingClientRect();
   const topLeft = screenToWorld(rect.left, rect.top);
   const bottomRight = screenToWorld(rect.right, rect.bottom);
@@ -1266,10 +1313,10 @@ function updateMinimapViewport() {
   const top = offsetY + viewY * scale;
   const width = Math.max(6, viewW * scale);
   const height = Math.max(6, viewH * scale);
-  minimapViewport.style.left = `${left}px`;
-  minimapViewport.style.top = `${top}px`;
-  minimapViewport.style.width = `${width}px`;
-  minimapViewport.style.height = `${height}px`;
+  viewport.style.left = `${left}px`;
+  viewport.style.top = `${top}px`;
+  viewport.style.width = `${width}px`;
+  viewport.style.height = `${height}px`;
 }
 function scheduleRender() {
   if (renderFrame) return;
@@ -4392,6 +4439,39 @@ function showBackdrop(visible){
   back.classList.toggle('show', visible);
   back.setAttribute('aria-hidden', visible ? 'false' : 'true');
 }
+function openOverview(trigger = overviewButton) {
+  if (!overviewSheet || !overviewMap) return false;
+  overviewFocusReturnTarget = trigger instanceof HTMLElement ? trigger : overviewButton;
+  setDialogVisibility(overviewSheet, true);
+  overviewButton?.setAttribute('aria-expanded', 'true');
+  showBackdrop(true);
+  setTimeout(() => {
+    render();
+    $('overviewCloseBtn')?.focus();
+  }, 0);
+  return true;
+}
+function closeOverview({ returnFocus = true } = {}) {
+  if (!overviewSheet?.classList.contains('open')) return false;
+  setDialogVisibility(overviewSheet, false);
+  overviewButton?.setAttribute('aria-expanded', 'false');
+  showBackdrop(false);
+  if (returnFocus) overviewFocusReturnTarget?.focus({ preventScroll: true });
+  overviewFocusReturnTarget = null;
+  return true;
+}
+function panFromMinimapEvent(event, inner, state) {
+  if (!inner || !state) return false;
+  const rect = inner.getBoundingClientRect();
+  const mapX = Math.max(0, Math.min(state.mapW, event.clientX - rect.left));
+  const mapY = Math.max(0, Math.min(state.mapH, event.clientY - rect.top));
+  const x = Math.max(0, Math.min(state.maxX, (mapX - state.offsetX) / state.scale));
+  const y = Math.max(0, Math.min(state.maxY, (mapY - state.offsetY) / state.scale));
+  view.x = -x * view.s;
+  view.y = -y * view.s;
+  applyView();
+  return true;
+}
 function technicalRootCandidateId() {
   const activePeople = nonPoolPeople.filter(p => p && !p.pool);
   if (!activePeople.length) return '';
@@ -5079,8 +5159,15 @@ $('partner')?.addEventListener('change', () => {
   $('partnerMarriageDate').disabled = !(editMode || !person(selected)) || !$('partner').value;
   if (!$('partner').value) $('partnerMarriageDate').value = '';
 });
+overviewButton?.addEventListener('click', () => openOverview(overviewButton));
+$('overviewCloseBtn')?.addEventListener('click', () => closeOverview());
+overviewSheet?.addEventListener('pointerdown', event => event.stopPropagation());
+overviewMap?.addEventListener('click', event => {
+  panFromMinimapEvent(event, overviewMap, overviewState);
+});
 $('backdrop').addEventListener('click', () => {
-  if($('rootSelectionSheet')?.classList.contains('open')) dismissRootSelection();
+  if($('overviewSheet')?.classList.contains('open')) closeOverview();
+  else if($('rootSelectionSheet')?.classList.contains('open')) dismissRootSelection();
   else if($('sideNav').classList.contains('open')) closeNavigator();
   else if($('searchSheet').classList.contains('open')) closeSearch();
   else if($('birthdaySheet').classList.contains('open')) closeBirthdays();
@@ -5092,11 +5179,12 @@ $('backdrop').addEventListener('click', () => {
 window.addEventListener('keydown', e => {
   const active = document.activeElement;
   const isTyping = active && ['INPUT','TEXTAREA','SELECT'].includes(active.tagName);
-  const dialogOpen = ['fileMenu','settingsMenu','sheet','sideNav','searchSheet','rootSelectionSheet','birthdaySheet','scrollSheet','checkSheet','listSheet']
+  const dialogOpen = ['fileMenu','settingsMenu','sheet','sideNav','searchSheet','rootSelectionSheet','overviewSheet','birthdaySheet','scrollSheet','checkSheet','listSheet']
     .some(id => $(id)?.classList.contains('open'));
   if (e.key === 'Escape') {
     if ($('fileMenu')?.classList.contains('open')) { closeFileMenu(); e.preventDefault(); }
     else if ($('settingsMenu')?.classList.contains('open')) { closeSettingsMenu(); e.preventDefault(); }
+    else if ($('overviewSheet')?.classList.contains('open')) { closeOverview(); e.preventDefault(); }
     else if ($('rootSelectionSheet')?.classList.contains('open')) { dismissRootSelection(); e.preventDefault(); }
     else if ($('sheet').classList.contains('open')) { closeSheet(); e.preventDefault(); }
     else if ($('sideNav').classList.contains('open')) { closeNavigator(); e.preventDefault(); }
@@ -5376,15 +5464,7 @@ document.querySelector('[data-testid=\"welcome-continue\"]')?.addEventListener('
 });
 if (minimap) {
   minimap.addEventListener('click', e => {
-    if (!minimapState) return;
-    const rect = minimapInner.getBoundingClientRect();
-    const mapX = Math.max(0, Math.min(minimapState.mapW, e.clientX - rect.left));
-    const mapY = Math.max(0, Math.min(minimapState.mapH, e.clientY - rect.top));
-    const x = Math.max(0, Math.min(minimapState.maxX, (mapX - minimapState.offsetX) / minimapState.scale));
-    const y = Math.max(0, Math.min(minimapState.maxY, (mapY - minimapState.offsetY) / minimapState.scale));
-    view.x = -x * view.s;
-    view.y = -y * view.s;
-    applyView();
+    panFromMinimapEvent(e, minimapInner, minimapState);
   });
 }
 $('fileInput').addEventListener('change', e => {

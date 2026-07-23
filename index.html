@@ -95,10 +95,13 @@
             </div>
             <div class="hint" id="hint" data-testid="app-inline-hint">Tipp: Geburtsdatum: Jahr, TT.MM. oder TT.MM.JJJJ · Auto sortiert Geschwister
                 danach · −/+ klappt Unteräste.</div>
-                <div class="zoom" role="group" aria-label="Zoom-Steuerung"><button type="button" id="zin"
+            <div class="zoom" role="group" aria-label="Zoom-Steuerung"><button type="button" id="zin"
                     aria-label="Heranzoomen">+</button><button type="button" id="zout"
                     aria-label="Rauszoomen">−</button><button type="button" id="home"
-                    data-testid="fit-readable" aria-label="Lesbar zentrieren" title="Lesbar zentrieren">⌂</button></div>
+                    data-testid="fit-readable" aria-label="Lesbar zentrieren" title="Lesbar zentrieren">⌂</button><button
+                    type="button" class="overviewBtn" id="overviewBtn" data-testid="overview-open"
+                    aria-label="Überblick öffnen" aria-expanded="false" aria-controls="overviewSheet"
+                    title="Überblick öffnen">▦</button></div>
             <nav class="toolbar" role="navigation" aria-label="Hauptnavigation" data-testid="app-main-nav">
                 <button type="button" class="mainNavBtn" id="startNavBtn" aria-label="Startansicht öffnen" aria-current="page">
                     <svg class="navIcon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"></path></svg>
@@ -288,6 +291,22 @@
                 </div>
             </div>
             <div class="backdrop" id="backdrop" aria-hidden="true"></div>
+            <aside class="overviewSheet" id="overviewSheet" data-testid="overview-sheet" role="dialog"
+                aria-modal="true" aria-hidden="true" aria-labelledby="overviewTitle">
+                <div class="overviewTop">
+                    <div>
+                        <h2 id="overviewTitle">Überblick</h2>
+                        <p>Tippe auf einen Bereich, um den sichtbaren Ausschnitt dorthin zu verschieben.</p>
+                    </div>
+                    <button type="button" class="pill" id="overviewCloseBtn" data-testid="overview-close"
+                        aria-label="Überblick schließen">Schließen</button>
+                </div>
+                <div class="overviewMap" id="overviewMap" data-testid="overview-map"
+                    aria-label="Touch-Übersicht des Stammbaums">
+                    <svg class="minimapSvg overviewSvg" id="overviewSvg" aria-hidden="true"></svg>
+                    <div class="minimapViewport overviewViewport" id="overviewViewport" aria-hidden="true"></div>
+                </div>
+            </aside>
             <aside class="sideNav" id="sideNav" data-testid="app-navigation" aria-hidden="true">
                 <div class="sideTop">
                     <h2>Zweige</h2>
