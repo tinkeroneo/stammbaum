@@ -22,7 +22,7 @@
 html,body{height:100%;height:100dvh;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--ink);background:var(--canvas);overflow:hidden}
 button,input,textarea,select{font:inherit}
 button{border:0;cursor:pointer;-webkit-user-select:none;user-select:none}
-button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,.listRow:focus-visible,.person:focus-visible{outline:3px solid var(--focus);outline-offset:3px}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,.listRow:focus-visible,.person:focus-visible,.stage:focus-visible,.person [data-member-id]:focus-visible{outline:3px solid var(--focus);outline-offset:3px}
 main,.stage,.world,.person{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .app{height:100%;height:100dvh;display:grid;grid-template-rows:auto minmax(0,1fr);background:radial-gradient(circle at top left,#fff6d9,transparent 38%),var(--bg)}
 header{display:flex;gap:10px;align-items:center;padding:12px max(12px,env(safe-area-inset-left)) 10px;box-shadow:0 1px 0 rgba(0,0,0,.08);z-index:20;background:color-mix(in srgb, var(--surface-1) 90%, transparent);backdrop-filter:blur(12px)}

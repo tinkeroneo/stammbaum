@@ -65,6 +65,7 @@ let pendingNewPos = null;
 // -- DOM selector helpers -------------------------------------------------
 const $ = id => document.getElementById(id);
 const main = $('main');
+const canvasSurface = $('treeCanvas');
 const world = $('world');
 const nodes = $('nodes');
 const lines = $('lines');
@@ -147,6 +148,8 @@ let relationshipFocusReturnTarget = null;
 let pendingDataQualityHints = [];
 let dialogStack = [];
 let dialogIsolationState = [];
+let canvasFocusId = '';
+let canvasFocusRestoreRequested = false;
 rebuildDataIndexes();
 
 const familyPalette = [
@@ -3071,11 +3074,15 @@ function personTileContent(p, className = '') {
   const display = visibleName(p);
   const title = fullName(p) !== display ? ` title="${esc(fullName(p))}"` : '';
   const cls = className ? ` class="${className}"` : '';
-  return `<div${cls} tabindex="-1" data-member-id="${esc(p.id)}" data-testid="person-card-${esc(p.id)}"><div class="avatar">${avatarHtml(p, display)}</div><h3${title}>${esc(display)}</h3>${meta}${tags}</div>`;
+  return `<div${cls} role="button" tabindex="-1" aria-label="${esc(selectPersonLabel(p))}"
+    data-member-id="${esc(p.id)}" data-testid="person-card-${esc(p.id)}"><div class="avatar">${avatarHtml(p, display)}</div><h3${title}>${esc(display)}</h3>${meta}${tags}</div>`;
 }
 
 // -- Rendering ---------------------------------------------------------
 function render() {
+  const activeCanvasCard = document.activeElement?.closest?.('[data-member-id]');
+  const hadCanvasFocus = !!activeCanvasCard || canvasFocusRestoreRequested;
+  const previousCanvasFocusId = activeCanvasCard?.dataset.memberId || canvasFocusId;
   updatePoolButton();
   const worldBounds = updateWorldBounds();
   updateZoomClass();
@@ -3188,6 +3195,7 @@ function render() {
           suppressOpenUntil = Date.now() + 500;
           if(collapsed.has(collapseId)) collapsed.delete(collapseId); else collapsed.add(collapseId);
           saveCollapsed();
+          requestCanvasFocusAfterRender(collapseId);
           render();
           fit();
         };
@@ -3238,6 +3246,7 @@ function render() {
         suppressOpenUntil = Date.now() + 500;
         if(collapsed.has(p.id)) collapsed.delete(p.id); else collapsed.add(p.id);
         saveCollapsed();
+        requestCanvasFocusAfterRender(p.id);
         render();
         fit();
       };
@@ -3248,7 +3257,84 @@ function render() {
     nodes.appendChild(el);
   }
   if (generationBands && showGenerationBands) renderGenerationBands(visiblePeople);
+  configureCanvasCards(renderedPeople, {
+    previousId: previousCanvasFocusId,
+    restoreFocus: hadCanvasFocus
+  });
+  canvasFocusRestoreRequested = false;
   updateOffscreenIndicators();
+}
+function nearestRenderedPerson(source, renderedPeople) {
+  if (!renderedPeople.length) return null;
+  if (!source) return renderedPeople[0];
+  return [...renderedPeople].sort((a, b) =>
+    Math.hypot(a.x - source.x, a.y - source.y) - Math.hypot(b.x - source.x, b.y - source.y)
+  )[0];
+}
+function configureCanvasCards(renderedPeople, { previousId = '', restoreFocus = false } = {}) {
+  const cards = [...nodes.querySelectorAll('[data-member-id]')];
+  if (!cards.length) {
+    canvasFocusId = '';
+    if (restoreFocus) canvasSurface?.focus({ preventScroll: true });
+    return;
+  }
+  const renderedIds = new Set(cards.map(card => card.dataset.memberId));
+  let nextId = previousId && renderedIds.has(previousId) ? previousId : '';
+  if (!nextId && selected && renderedIds.has(selected)) nextId = selected;
+  if (!nextId && canvasFocusId && renderedIds.has(canvasFocusId)) nextId = canvasFocusId;
+  if (!nextId) {
+    const preferredRoot = rootIds.find(id => renderedIds.has(id));
+    nextId = preferredRoot
+      || nearestRenderedPerson(person(previousId), renderedPeople)?.id
+      || cards[0].dataset.memberId;
+  }
+  canvasFocusId = nextId;
+  cards.forEach(card => {
+    const active = card.dataset.memberId === nextId;
+    card.tabIndex = active ? 0 : -1;
+    card.setAttribute('aria-current', selected === card.dataset.memberId ? 'true' : 'false');
+  });
+  if (restoreFocus) {
+    cards.find(card => card.dataset.memberId === nextId)?.focus({ preventScroll: true });
+  }
+}
+function requestCanvasFocusAfterRender(id) {
+  canvasFocusId = id;
+  canvasFocusRestoreRequested = true;
+}
+function canvasDirectionCandidate(sourceId, key) {
+  const source = person(sourceId);
+  if (!source) return null;
+  const candidates = [...nodes.querySelectorAll('[data-member-id]')]
+    .map(card => ({ card, target: person(card.dataset.memberId) }))
+    .filter(entry => entry.target && entry.target.id !== source.id)
+    .map(entry => {
+      const dx = entry.target.x - source.x;
+      const dy = entry.target.y - source.y;
+      const forward = key === 'ArrowRight' ? dx
+        : key === 'ArrowLeft' ? -dx
+          : key === 'ArrowDown' ? dy
+            : -dy;
+      const cross = key === 'ArrowRight' || key === 'ArrowLeft' ? Math.abs(dy) : Math.abs(dx);
+      return { ...entry, forward, cross, distance: Math.hypot(dx, dy) };
+    })
+    .filter(entry => entry.forward > 1)
+    .sort((a, b) =>
+      (a.cross / Math.max(1, a.forward)) - (b.cross / Math.max(1, b.forward))
+      || a.distance - b.distance
+      || a.target.id.localeCompare(b.target.id)
+    );
+  return candidates[0] || null;
+}
+function focusCanvasCard(id) {
+  const card = nodes.querySelector(`[data-member-id="${CSS.escape(id)}"]`);
+  if (!(card instanceof HTMLElement)) return false;
+  canvasFocusId = id;
+  nodes.querySelectorAll('[data-member-id]').forEach(item => {
+    item.tabIndex = item === card ? 0 : -1;
+  });
+  card.focus({ preventScroll: true });
+  return true;
 }
 function renderGenerationBands(visiblePeople) {
   const ys = visiblePeople
@@ -3274,6 +3360,33 @@ function renderGenerationBands(visiblePeople) {
 }
 
 // -- Interaction / drag & pan ------------------------------------------
+nodes.addEventListener('focusin', event => {
+  const card = event.target.closest?.('[data-member-id]');
+  if (!card) return;
+  canvasFocusId = card.dataset.memberId;
+  nodes.querySelectorAll('[data-member-id]').forEach(item => {
+    item.tabIndex = item === card ? 0 : -1;
+  });
+});
+nodes.addEventListener('keydown', event => {
+  const card = event.target.closest?.('[data-member-id]');
+  if (!card || event.target.closest('.collapseBtn')) return;
+  const id = card.dataset.memberId;
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    event.stopPropagation();
+    selected = id;
+    openSheet(id);
+    return;
+  }
+  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+  const candidate = canvasDirectionCandidate(id, event.key);
+  if (!candidate) return;
+  event.preventDefault();
+  event.stopPropagation();
+  focusCanvasCard(candidate.target.id);
+});
+
 function onNodePointerDown(e) {
   e.stopPropagation();
   if (!editMode) return;
@@ -3589,6 +3702,7 @@ function viewportPeopleSlice(people) {
     extraIds.add(p.id);
     mutualPartnerIds(p).forEach(id => extraIds.add(id));
   });
+  if (canvasFocusId && people.some(p => p.id === canvasFocusId)) extraIds.add(canvasFocusId);
   const sliced = people.filter(p => extraIds.has(p.id));
   if (sliced.length < Math.min(80, people.length)) return people;
   return sliced;
@@ -6519,7 +6633,8 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (isTyping) return;
-  if (!dialogOpen && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.startsWith('Arrow')) {
+  if (!dialogOpen && active === canvasSurface
+    && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.startsWith('Arrow')) {
     const step = e.shiftKey ? 180 : 64;
     if (e.key === 'ArrowLeft') view.x += step;
     if (e.key === 'ArrowRight') view.x -= step;
@@ -6901,6 +7016,23 @@ if (window.location?.search?.includes('ux-debug=1')) {
     },
     getSelectedPersonId: () => selected,
     getDialogStack: () => dialogStack.map(entry => entry.id),
+    getCanvasKeyboardState: () => ({
+      focusId: canvasFocusId,
+      virtualizationActive: renderVirtualizationActive,
+      renderedIds: [...nodes.querySelectorAll('[data-member-id]')].map(card => card.dataset.memberId)
+    }),
+    setViewForTest: nextView => {
+      if (!nextView || typeof nextView !== 'object') return { ...view };
+      view = {
+        x: Number.isFinite(nextView.x) ? nextView.x : view.x,
+        y: Number.isFinite(nextView.y) ? nextView.y : view.y,
+        s: Number.isFinite(nextView.s) ? nextView.s : view.s
+      };
+      applyView();
+      render();
+      return { ...view };
+    },
+    renderForTest: () => render(),
     getPersistenceState: () => ({
       ...uiState.persistence,
       statusLabel: getPersistenceStatusLabel()
