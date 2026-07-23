@@ -263,6 +263,24 @@ textarea{min-height:70px;resize:vertical}
 .decisionDialog p{margin:8px 0 0;color:var(--muted);font-size:14px;line-height:1.5;white-space:pre-line}
 .decisionActions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:18px}
 .decisionActions button{min-height:44px}
+.exportLayer{position:absolute;inset:0;z-index:69;display:grid;place-items:center;padding:16px;background:rgba(39,35,30,.42)}
+.exportDialog{width:min(620px,100%);max-height:calc(100dvh - 32px);overflow:auto;padding:18px;border:1px solid rgba(78,54,30,.16);border-radius:20px;background:var(--panel);box-shadow:0 24px 70px rgba(0,0,0,.32);display:grid;gap:14px}
+.exportTop{display:flex;align-items:flex-start;gap:12px}
+.exportTop > div{min-width:0;flex:1}
+.exportTop h2{margin:0;font-size:20px;line-height:1.2}
+.exportTop p{margin:4px 0 0;color:var(--muted);font-size:13px;line-height:1.4}
+.exportChoice{margin:0;padding:10px 12px;border:1px solid rgba(78,54,30,.13);border-radius:14px;display:flex;gap:14px;flex-wrap:wrap}
+.exportChoice legend{padding:0 5px;color:var(--muted);font-size:12px;font-weight:800}
+.exportChoice label,.exportCheck{display:flex;align-items:center;gap:7px;color:var(--ink);font-size:13px}
+.exportChoice input,.exportCheck input{width:auto}
+.exportOptions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.exportOptions > label:not(.exportCheck),.exportFilename{display:grid;gap:5px}
+.exportCheck{grid-column:1/-1;min-height:44px;padding:9px 10px;border-radius:12px;background:#fff7ea;border:1px solid rgba(78,54,30,.12)}
+.exportSummary{margin:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
+.exportSummary > div{min-width:0;padding:9px 10px;border-radius:12px;background:#fff7ea;border:1px solid rgba(78,54,30,.1)}
+.exportSummary dt{color:var(--muted);font-size:11px;line-height:1.2}
+.exportSummary dd{margin:4px 0 0;font-size:14px;font-weight:900;overflow-wrap:anywhere}
+.exportSubmit{justify-self:end;min-width:150px;min-height:44px}
 .helpHint{position:absolute;left:50%;top:12px;width:min(520px,calc(100vw - 100px));transform:translateX(-50%);padding:11px 12px 12px;border:1px solid rgba(78,54,30,.14);border-radius:18px;background:rgba(255,250,240,.96);box-shadow:var(--shadow);z-index:8}
 .helpHintTop{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .helpHintCount{color:var(--muted);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.02em}
@@ -273,6 +291,11 @@ textarea{min-height:70px;resize:vertical}
   .helpHint{left:max(10px,env(safe-area-inset-left));right:70px;top:10px;width:auto;transform:none}
   .decisionActions{display:grid}
   .decisionActions button{width:100%}
+  .exportLayer{padding:8px}
+  .exportDialog{max-height:calc(100dvh - 16px);padding:14px}
+  .exportOptions,.exportSummary{grid-template-columns:1fr}
+  .exportCheck{grid-column:auto}
+  .exportSubmit{justify-self:stretch;width:100%}
 }
 .welcomeSurface{
   position:absolute;

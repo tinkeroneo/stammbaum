@@ -133,6 +133,8 @@ let helpFocusReturnTarget = null;
 let helpWasExplicitlyOpened = false;
 let decisionResolver = null;
 let decisionFocusReturnTarget = null;
+let exportFocusReturnTarget = null;
+let exportFilenameTouched = false;
 rebuildDataIndexes();
 
 const familyPalette = [
@@ -1784,7 +1786,7 @@ function jumpToFamily(key) {
   }
   renderNavigator();
 }
-function buildExportSvg() {
+function buildExportSvg({ includeImages = true } = {}) {
   const ids = visibleIds();
   const people = data.people.filter(p => ids.has(p.id));
   if (!people.length) return null;
@@ -1793,10 +1795,13 @@ function buildExportSvg() {
   const minX = Math.min(...xs) - 260, minY = Math.min(...ys) - 220;
   const maxX = Math.max(...xs) + 260, maxY = Math.max(...ys) + 220;
   const w = maxX - minX, h = maxY - minY;
-  const node = p => {
+  const node = (p, index) => {
     const x = p.x - minX, y = p.y - minY;
     const color = familyColor(familyKey(p));
-    return `<g transform="translate(${x-85},${y-42})"><rect width="170" height="84" rx="18" fill="#fffaf0" stroke="${color}" stroke-width="2"/><circle cx="27" cy="28" r="17" fill="${color}"/><text x="27" y="33" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">${esc(initials(fullName(p)||p.name))}</text><text x="52" y="28" font-size="14" font-weight="700" fill="#2f2a24">${esc(visibleName(p)).slice(0,24)}</text><text x="52" y="46" font-size="11" fill="#7b7166">${esc(p.born || '')}</text></g>`;
+    const avatar = includeImages && p.image
+      ? `<defs><clipPath id="export-avatar-${index}"><circle cx="27" cy="28" r="17"/></clipPath></defs><circle cx="27" cy="28" r="17" fill="${color}"/><image x="10" y="11" width="34" height="34" preserveAspectRatio="xMidYMid slice" clip-path="url(#export-avatar-${index})" href="${esc(p.image)}"/>`
+      : `<circle cx="27" cy="28" r="17" fill="${color}"/><text x="27" y="33" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">${esc(initials(fullName(p)||p.name))}</text>`;
+    return `<g transform="translate(${x-85},${y-42})"><rect width="170" height="84" rx="18" fill="#fffaf0" stroke="${color}" stroke-width="2"/>${avatar}<text x="52" y="28" font-size="14" font-weight="700" fill="#2f2a24">${esc(visibleName(p)).slice(0,24)}</text><text x="52" y="46" font-size="11" fill="#7b7166">${esc(p.born || '')}</text></g>`;
   };
   const line = (a,b,cls='') => `<line x1="${a.x-minX}" y1="${a.y-minY}" x2="${b.x-minX}" y2="${b.y-minY}" stroke="#9d7c52" stroke-width="${cls==='partner'?2:3}" opacity="${cls==='partner'?0.45:0.62}" stroke-dasharray="${cls==='partner'?'8 8':''}"/>`;
   let svgLines = '';
@@ -1838,54 +1843,50 @@ async function saveBlobAs(blob, filename, types = []) {
   downloadBlob(blob, filename);
   return true;
 }
-function exportSvgView() {
-  const output = buildExportSvg();
-  if (!output) return;
-  saveBlobAs(new Blob([output.svg], { type:'image/svg+xml' }), 'stammbaum-ansicht.svg', [{
+async function exportSvgView({ filename = 'stammbaum-ansicht.svg', includeImages = true } = {}) {
+  const output = buildExportSvg({ includeImages });
+  if (!output) return false;
+  return saveBlobAs(new Blob([output.svg], { type:'image/svg+xml' }), filename, [{
     description: 'SVG-Bild',
     accept: { 'image/svg+xml': ['.svg'] }
   }]);
 }
-function exportPngView(scaleChoice = '') {
-  const output = buildExportSvg();
-  if (!output) return;
+function exportPngView(scaleChoice = '', { filename = 'stammbaum-ansicht.png', includeImages = true } = {}) {
+  const output = buildExportSvg({ includeImages });
+  if (!output) return Promise.resolve(false);
   const blob = new Blob([output.svg], { type:'image/svg+xml;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const img = new Image();
-  img.onload = () => {
-    const requestedScale = Number.parseFloat(String(scaleChoice).replace(',', '.'));
-    const baseScale = Number.isFinite(requestedScale) && requestedScale > 0 ? requestedScale : 3;
-    const maxEdgeScale = 8192 / Math.max(output.w, output.h);
-    const maxPixelScale = Math.sqrt(36000000 / Math.max(1, output.w * output.h));
-    const scale = Math.max(0.5, Math.min(baseScale, maxEdgeScale, maxPixelScale));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(output.w * scale);
-    canvas.height = Math.round(output.h * scale);
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    URL.revokeObjectURL(url);
-    canvas.toBlob(png => {
-      if (png) saveBlobAs(png, 'stammbaum-ansicht.png', [{
-        description: 'PNG-Bild',
-        accept: { 'image/png': ['.png'] }
-      }]);
-    }, 'image/png');
-  };
-  img.onerror = () => {
-    URL.revokeObjectURL(url);
-    alert('PNG-Export konnte nicht erstellt werden. SVG-Export bleibt verfügbar.');
-  };
-  img.src = url;
+  return new Promise(resolve => {
+    img.onload = () => {
+      const scale = boundedExportScale(output, scaleChoice);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(output.w * scale);
+      canvas.height = Math.round(output.h * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(async png => {
+        if (!png) {
+          resolve(false);
+          return;
+        }
+        resolve(await saveBlobAs(png, filename, [{
+          description: 'PNG-Bild',
+          accept: { 'image/png': ['.png'] }
+        }]));
+      }, 'image/png');
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      alert('PNG-Export konnte nicht erstellt werden. SVG-Export bleibt verfügbar.');
+      resolve(false);
+    };
+    img.src = url;
+  });
 }
 function exportImageView() {
-  const format = prompt('Bildformat: png oder svg', 'png');
-  if (!format) return;
-  if (format.trim().toLowerCase().startsWith('s')) exportSvgView();
-  else {
-    const scale = prompt('PNG-Qualität: 2, 3 oder 4', '3');
-    if (scale === null) return;
-    exportPngView(scale);
-  }
+  openExportDialog('image', $('settingsBtn'));
 }
 
 function saveCollapsed(){ localStorage.setItem(storeKey + '-collapsed', JSON.stringify([...collapsed])); }
@@ -4759,6 +4760,107 @@ function openDecisionDialog({
     decisionResolver = resolve;
   });
 }
+function formatExportSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return 'unter 1 KB';
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+}
+function boundedExportScale(output, scaleChoice) {
+  const requestedScale = Number.parseFloat(String(scaleChoice).replace(',', '.'));
+  const baseScale = Number.isFinite(requestedScale) && requestedScale > 0 ? requestedScale : 3;
+  const maxEdgeScale = 8192 / Math.max(output.w, output.h);
+  const maxPixelScale = Math.sqrt(36000000 / Math.max(1, output.w * output.h));
+  return Math.max(0.5, Math.min(baseScale, maxEdgeScale, maxPixelScale));
+}
+function selectedExportKind() {
+  return document.querySelector('input[name="exportKind"]:checked')?.value || 'json';
+}
+function selectedExportExtension() {
+  if (selectedExportKind() === 'json') return 'json';
+  return $('exportImageFormat').value === 'svg' ? 'svg' : 'png';
+}
+function normalizeExportFilename(value, extension) {
+  const clean = String(value || '').trim().replace(/[<>:"/\\|?*\u0000-\u001F]/g, '-');
+  const base = clean.replace(/\.(json|png|svg)$/i, '') || (extension === 'json' ? 'stammbaum' : 'stammbaum-ansicht');
+  return `${base}.${extension}`;
+}
+function updateExportDialog() {
+  const kind = selectedExportKind();
+  const format = $('exportImageFormat').value;
+  const includeImagesControl = kind === 'json' ? $('exportIncludeImages') : $('exportImageIncludeImages');
+  const imageCount = data.people.filter(p => p.image).length;
+  const noteCount = data.people.filter(p => String(p.note || '').trim()).length;
+  const sourceCount = data.people.reduce((sum, p) => sum + cleanMentions(p.mentions).length, 0);
+  const includeImages = imageCount > 0 && includeImagesControl.checked;
+  $('exportIncludeImages').disabled = imageCount === 0;
+  $('exportImageIncludeImages').disabled = imageCount === 0;
+  $('exportJsonOptions').classList.toggle('hidden', kind !== 'json');
+  $('exportImageOptions').classList.toggle('hidden', kind !== 'image');
+  $('exportScaleField').classList.toggle('hidden', kind !== 'image' || format !== 'png');
+  $('exportPersonCount').textContent = String(data.people.length);
+  $('exportImageCount').textContent = imageCount ? `${imageCount}${includeImages ? ' enthalten' : ' ausgelassen'}` : 'keine';
+  $('exportContentCount').textContent = `${noteCount} / ${sourceCount}`;
+  const extension = selectedExportExtension();
+  if (!exportFilenameTouched) {
+    $('exportFilename').value = extension === 'json' ? 'stammbaum.json' : `stammbaum-ansicht.${extension}`;
+  } else {
+    $('exportFilename').value = normalizeExportFilename($('exportFilename').value, extension);
+  }
+  let estimatedBytes = 0;
+  if (kind === 'json') {
+    estimatedBytes = new Blob([JSON.stringify(exportData(includeImages), null, 2)]).size;
+  } else {
+    const output = buildExportSvg({ includeImages });
+    if (format === 'svg') estimatedBytes = output ? new Blob([output.svg]).size : 0;
+    else if (output) {
+      const scale = boundedExportScale(output, $('exportImageScale').value);
+      estimatedBytes = output.w * output.h * scale * scale * 0.45;
+    }
+  }
+  $('exportEstimatedSize').textContent = formatExportSize(estimatedBytes);
+}
+function openExportDialog(kind = 'json', trigger = document.activeElement) {
+  exportFocusReturnTarget = trigger instanceof HTMLElement ? trigger : null;
+  exportFilenameTouched = false;
+  const radio = document.querySelector(`input[name="exportKind"][value="${kind === 'image' ? 'image' : 'json'}"]`);
+  if (radio) radio.checked = true;
+  $('exportLayer').classList.remove('hidden');
+  $('exportDialog').setAttribute('aria-hidden', 'false');
+  updateExportDialog();
+  setTimeout(() => $('exportTitle')?.focus(), 0);
+}
+function closeExportDialog({ returnFocus = true } = {}) {
+  $('exportLayer').classList.add('hidden');
+  $('exportDialog').setAttribute('aria-hidden', 'true');
+  if (returnFocus) exportFocusReturnTarget?.focus({ preventScroll: true });
+  exportFocusReturnTarget = null;
+}
+async function submitExportDialog() {
+  const button = $('exportSubmit');
+  const kind = selectedExportKind();
+  const format = $('exportImageFormat').value;
+  const extension = selectedExportExtension();
+  const filename = normalizeExportFilename($('exportFilename').value, extension);
+  const includeImages = kind === 'json'
+    ? $('exportIncludeImages').checked && !$('exportIncludeImages').disabled
+    : $('exportImageIncludeImages').checked && !$('exportImageIncludeImages').disabled;
+  button.disabled = true;
+  button.textContent = 'Export wird erstellt …';
+  try {
+    let saved = false;
+    if (kind === 'json') {
+      saved = await exportTreeJson({ includeImages, filename });
+    } else if (format === 'svg') {
+      saved = await exportSvgView({ includeImages, filename });
+    } else {
+      saved = await exportPngView($('exportImageScale').value, { includeImages, filename });
+    }
+    if (saved) closeExportDialog();
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Exportieren';
+  }
+}
 function openOverview(trigger = overviewButton) {
   if (!overviewSheet || !overviewMap) return false;
   overviewFocusReturnTarget = trigger instanceof HTMLElement ? trigger : overviewButton;
@@ -5442,6 +5544,22 @@ $('decisionLayer')?.addEventListener('keydown', event => {
   event.stopPropagation();
   settleDecisionDialog('cancel');
 });
+$('exportDialogClose')?.addEventListener('click', () => closeExportDialog());
+$('exportSubmit')?.addEventListener('click', () => { submitExportDialog(); });
+$('exportLayer')?.addEventListener('click', event => {
+  event.stopPropagation();
+  if (event.target === $('exportLayer')) closeExportDialog();
+});
+$('exportLayer')?.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return;
+  event.preventDefault();
+  event.stopPropagation();
+  closeExportDialog();
+});
+$('exportDialog')?.addEventListener('change', updateExportDialog);
+$('exportFilename')?.addEventListener('input', () => {
+  exportFilenameTouched = true;
+});
 document.querySelectorAll('.formSectionToggle').forEach(button => {
   const body = $(button.getAttribute('aria-controls'));
   if (!body) return;
@@ -5751,22 +5869,17 @@ function exportData(includeImages = true) {
     people: data.people.map(p => ({ ...p, image: '' }))
   };
 }
-async function exportTreeJson() {
-  const hasImages = data.people.some(p => p.image);
-  const includeImages = hasImages
-    ? confirm('Bilder in den JSON-Export aufnehmen?\n\nOK = Export inklusive Bilder\nAbbrechen = Export ohne Bilder')
-    : false;
-  const filename = includeImages ? 'stammbaum-mit-bildern.json' : 'stammbaum.json';
+async function exportTreeJson({ includeImages = false, filename = 'stammbaum.json' } = {}) {
   const blob = new Blob([JSON.stringify(exportData(includeImages), null, 2)], { type: 'application/json' });
-  await saveBlobAs(blob, filename, [{
+  return saveBlobAs(blob, filename, [{
     description: 'Stammbaum JSON',
     accept: { 'application/json': ['.json'] }
   }]);
 }
 
-$('exportBtn').addEventListener('click', async () => {
+$('exportBtn').addEventListener('click', () => {
   closeFileMenu();
-  await exportTreeJson();
+  openExportDialog('json', $('fileBtn'));
 });
 $('workingFileBtn')?.addEventListener('click', async () => {
   closeFileMenu();

@@ -271,13 +271,13 @@
                                 <span class="settingsItemDescription">Automatisch Layout neu verteilen.</span>
                             </span>
                         </button>
-                        <button type="button" class="settingsItem editOnly" id="imageBtn" aria-label="Ansicht als SVG exportieren">
+                        <button type="button" class="settingsItem editOnly" id="imageBtn" aria-label="Bildexport öffnen">
                             <span class="settingsItemIcon" aria-hidden="true">
                                 <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 16l-4.35-4.35a1.2 1.2 0 0 0-1.7 0L11 15.6l-1.95-1.95a1.2 1.2 0 0 0-1.7 0L3 18"/></svg>
                             </span>
                             <span class="settingsItemContent">
-                                <span class="settingsItemTitle">Aktuelle Ansicht als SVG</span>
-                                <span class="settingsItemDescription">Aktuelle Visualisierung als Bild exportieren.</span>
+                                <span class="settingsItemTitle">Ansicht exportieren</span>
+                                <span class="settingsItemDescription">Aktuelle Visualisierung als PNG oder SVG speichern.</span>
                             </span>
                         </button>
                         <button type="button" class="settingsItem" id="resetBtn" aria-label="Demo auf Standard zurücksetzen">
@@ -316,6 +316,56 @@
                         <button type="button" class="pill" id="decisionConfirm"
                             data-testid="decision-confirm"></button>
                     </div>
+                </section>
+            </div>
+            <div class="exportLayer hidden" id="exportLayer" data-testid="export-layer">
+                <section class="exportDialog" id="exportDialog" role="dialog" aria-modal="true"
+                    aria-hidden="true" aria-labelledby="exportTitle" data-testid="export-dialog">
+                    <div class="exportTop">
+                        <div>
+                            <h2 id="exportTitle" tabindex="-1">Stammbaum exportieren</h2>
+                            <p>Wähle Inhalt und Dateiformat vor dem Speichern.</p>
+                        </div>
+                        <button type="button" class="pill" id="exportDialogClose"
+                            data-testid="export-cancel">Abbrechen</button>
+                    </div>
+                    <fieldset class="exportChoice">
+                        <legend>Exportart</legend>
+                        <label><input type="radio" name="exportKind" value="json" checked /> JSON-Daten</label>
+                        <label><input type="radio" name="exportKind" value="image" /> Bildansicht</label>
+                    </fieldset>
+                    <div class="exportOptions" id="exportJsonOptions">
+                        <label class="exportCheck"><input type="checkbox" id="exportIncludeImages" checked />
+                            Personenbilder einschließen</label>
+                    </div>
+                    <div class="exportOptions hidden" id="exportImageOptions">
+                        <label for="exportImageFormat">Bildformat
+                            <select id="exportImageFormat">
+                                <option value="png">PNG</option>
+                                <option value="svg">SVG</option>
+                            </select>
+                        </label>
+                        <label id="exportScaleField" for="exportImageScale">PNG-Qualität
+                            <select id="exportImageScale">
+                                <option value="2">2×</option>
+                                <option value="3" selected>3×</option>
+                                <option value="4">4×</option>
+                            </select>
+                        </label>
+                        <label class="exportCheck"><input type="checkbox" id="exportImageIncludeImages" checked />
+                            Personenbilder einschließen</label>
+                    </div>
+                    <dl class="exportSummary" data-testid="export-summary">
+                        <div><dt>Personen</dt><dd id="exportPersonCount"></dd></div>
+                        <div><dt>Bilder</dt><dd id="exportImageCount"></dd></div>
+                        <div><dt>Notizen / Quellen</dt><dd id="exportContentCount"></dd></div>
+                        <div><dt>Geschätzte Größe</dt><dd id="exportEstimatedSize"></dd></div>
+                    </dl>
+                    <label class="exportFilename" for="exportFilename">Dateiname
+                        <input id="exportFilename" data-testid="export-filename" />
+                    </label>
+                    <button type="button" class="pill primary exportSubmit" id="exportSubmit"
+                        data-testid="export-submit">Exportieren</button>
                 </section>
             </div>
             <aside class="overviewSheet" id="overviewSheet" data-testid="overview-sheet" role="dialog"
