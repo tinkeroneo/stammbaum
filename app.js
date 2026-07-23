@@ -2205,6 +2205,48 @@ function setPoolBranch(id, pooled) {
   });
   return ids;
 }
+function analyzeDeletionImpact(dataset, targetId, roots = []) {
+  const people = Array.isArray(dataset?.people) ? dataset.people : [];
+  const target = people.find(entry => String(entry?.id) === String(targetId));
+  if (!target) {
+    return {
+      targetId: String(targetId || ''),
+      partnerIds: [],
+      parentIds: [],
+      childIds: [],
+      rootLinks: 0,
+      relationshipCount: 0
+    };
+  }
+  const validIds = new Set(people.map(entry => String(entry.id)));
+  const partnerIds = new Set([
+    ...(Array.isArray(target.partners) ? target.partners : []),
+    target.partner
+  ].map(String).filter(id => id && id !== String(targetId) && validIds.has(id)));
+  people.forEach(entry => {
+    const references = [
+      ...(Array.isArray(entry.partners) ? entry.partners : []),
+      entry.partner
+    ].map(String);
+    if (references.includes(String(targetId)) && String(entry.id) !== String(targetId)) {
+      partnerIds.add(String(entry.id));
+    }
+  });
+  const parentIds = [...new Set((target.parents || []).map(String))]
+    .filter(id => id !== String(targetId) && validIds.has(id));
+  const childIds = people
+    .filter(entry => (entry.parents || []).map(String).includes(String(targetId)))
+    .map(entry => String(entry.id));
+  const rootLinks = roots.map(String).includes(String(targetId)) ? 1 : 0;
+  return {
+    targetId: String(targetId),
+    partnerIds: [...partnerIds],
+    parentIds,
+    childIds,
+    rootLinks,
+    relationshipCount: partnerIds.size + parentIds.length + childIds.length + rootLinks
+  };
+}
 function depthMap(){
   const byId = new Map(data.people.map(p => [p.id, p]));
   const memo = new Map();
@@ -5008,6 +5050,60 @@ function deletePersonWithCommand(id) {
   commitDataCommand('Person löschen', commandBefore);
   return true;
 }
+function movePersonToPoolWithCommand(id) {
+  const target = person(id);
+  if (!target || target.pool) return false;
+  const commandBefore = captureCommandState();
+  const movedIds = setPoolBranch(id, true);
+  rootIds = rootIds.filter(rootId => !movedIds.has(rootId));
+  commitDataCommand('In Vorrat verschieben', commandBefore);
+  updatePoolButton();
+  updateRootButton();
+  return true;
+}
+function deletionImpactMessage(target, impact) {
+  const relationshipSummary = [
+    `${impact.partnerIds.length} Partner-Verknüpfung(en)`,
+    `${impact.parentIds.length} Eltern-Verknüpfung(en)`,
+    `${impact.childIds.length} Kind-Verknüpfung(en)`,
+    `${impact.rootLinks} Startwurzel-Verknüpfung(en)`
+  ].join(', ');
+  const rootHint = impact.rootLinks
+    ? ' Nach dem Löschen muss eine neue Startperson festgelegt werden.'
+    : '';
+  const poolHint = target.pool
+    ? ''
+    : ` Als sichere Alternative kann der verbundene Zweig mit ${poolBranchIds(target.id).size} Person(en) in den Vorrat verschoben werden; Beziehungen bleiben dabei erhalten.`;
+  return `„${fullName(target) || target.name || 'Diese Person'}“ wirklich löschen? Betroffen: ${relationshipSummary}. Keine weitere Person wird gelöscht.${rootHint}${poolHint}`;
+}
+async function requestDeletePerson(id, trigger = document.activeElement) {
+  const target = person(id);
+  if (!target) return false;
+  const impact = analyzeDeletionImpact(data, id, rootIds);
+  const decision = await openDecisionDialog({
+    title: 'Person und Verknüpfungen löschen?',
+    message: deletionImpactMessage(target, impact),
+    confirmLabel: 'Person löschen',
+    cancelLabel: 'Person behalten',
+    secondaryLabel: target.pool ? '' : 'In Vorrat verschieben',
+    confirmClass: 'danger',
+    trigger
+  });
+  if (decision === 'secondary') {
+    if (!movePersonToPoolWithCommand(id)) return false;
+    if ($('sideNav')?.classList.contains('open')) renderNavigator();
+    await closeSheet(true);
+    render();
+    setTimeout(maybeOpenRequiredRootSelection, 0);
+    return 'pool';
+  }
+  if (decision !== 'confirm') return false;
+  if (!deletePersonWithCommand(id)) return false;
+  if ($('sideNav')?.classList.contains('open')) renderNavigator();
+  await closeSheet(true);
+  setTimeout(maybeOpenRequiredRootSelection, 0);
+  return 'deleted';
+}
 
 let listSortMode = 'family';
 let listViewMode = 'tree';
@@ -6059,12 +6155,10 @@ $('quickChild').addEventListener('click', () => selected && addChildFor(selected
 $('quickPartner').addEventListener('click', () => selected && addPartnerFor(selected));
 $('quickParents').addEventListener('click', () => selected && addParentsFor(selected));
 
-$('deleteBtn').addEventListener('click', () => {
+$('deleteBtn').addEventListener('click', event => {
   if (!editMode) return;
   if (!selected) return;
-  deletePersonWithCommand(selected);
-  if($('sideNav')?.classList.contains('open')) renderNavigator();
-  closeSheet(true);
+  requestDeletePerson(selected, event.currentTarget);
 });
 
 $('zin').addEventListener('click', () => zoomTo(view.s * 1.18));
@@ -6410,6 +6504,8 @@ if (window.location?.search?.includes('ux-debug=1')) {
     undoCommand,
     redoCommand,
     clearCommandHistory,
+    analyzeDeletionImpact: (targetId, dataset = data, roots = rootIds) =>
+      analyzeDeletionImpact(dataset, targetId, roots),
     getDataSnapshot: () => cloneCommandValue({
       people: data.people,
       rootIds,
