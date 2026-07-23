@@ -129,6 +129,14 @@ svg.lines{position:absolute;inset:0;width:100%;height:100%;overflow:visible;poin
 .poolCheck input{width:auto;min-width:0}
 .zoom{position:absolute;right:10px;top:12px;display:grid;gap:8px;z-index:10}
 .overviewBtn{display:none}
+.offscreenIndicators{position:absolute;inset:0;z-index:14;pointer-events:none}
+.offscreenIndicator{position:absolute;min-width:44px;min-height:44px;max-width:min(190px,48vw);padding:8px 11px;border:1px solid rgba(78,54,30,.18);border-radius:999px;background:rgba(255,250,240,.96);color:var(--ink);box-shadow:0 8px 24px rgba(0,0,0,.16);display:flex;align-items:center;justify-content:center;gap:6px;font-size:12px;font-weight:800;line-height:1.15;pointer-events:auto}
+.offscreenIndicator[data-direction="top"]{top:10px;left:50%;transform:translateX(-50%)}
+.offscreenIndicator[data-direction="right"]{right:64px;top:50%;transform:translateY(-50%)}
+.offscreenIndicator[data-direction="bottom"]{bottom:76px;left:50%;transform:translateX(-50%)}
+.offscreenIndicator[data-direction="left"]{left:10px;top:50%;transform:translateY(-50%)}
+.offscreenIndicator:focus-visible{outline:3px solid var(--focus);outline-offset:3px}
+.offscreenArrow{font-size:16px;line-height:1}
 .selectionRect{position:absolute;border:2px dashed rgba(107,143,113,.9);background:rgba(107,143,113,.12);pointer-events:none;z-index:15;}
 .minimap{position:absolute;right:12px;bottom:96px;width:168px;height:108px;border:1px solid rgba(0,0,0,.12);border-radius:14px;background:rgba(255,250,240,.92);box-shadow:0 12px 30px rgba(0,0,0,.12);padding:6px;z-index:12;pointer-events:auto;}
 .minimap::before{content:'Übersicht';position:absolute;top:6px;left:8px;font-size:11px;color:var(--muted);}
@@ -376,6 +384,10 @@ textarea{min-height:70px;resize:vertical}
   .overviewBtn{display:grid}
   .overviewSheet{left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));top:50%;width:auto;max-height:calc(100dvh - 16px);padding:14px;transform:translateY(-46%) scale(.98)}
   .overviewSheet.open{transform:translateY(-50%) scale(1)}
+  .offscreenIndicator[data-direction="top"]{top:8px}
+  .offscreenIndicator[data-direction="right"]{right:62px}
+  .offscreenIndicator[data-direction="bottom"]{bottom:72px}
+  .offscreenIndicator[data-direction="left"]{left:8px}
   .busyIndicator{right:10px;left:10px;bottom:86px;max-width:none;min-width:0}
 }
 @media (max-height:500px) and (max-width:980px) and (orientation:landscape){

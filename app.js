@@ -61,6 +61,7 @@ const overviewSheet = $('overviewSheet');
 const overviewMap = $('overviewMap');
 const overviewViewport = $('overviewViewport');
 const overviewSvg = $('overviewSvg');
+const offscreenIndicators = $('offscreenIndicators');
 let compactMode = false;
 let minimapState = null;
 let overviewState = null;
@@ -1180,7 +1181,81 @@ function applyView() {
   world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.s})`;
   updateZoomClass();
   updateMinimapViewport();
+  updateOffscreenIndicators();
   if (renderVirtualizationActive) scheduleRender();
+}
+function personScreenPoint(p, rect = main.getBoundingClientRect()) {
+  return {
+    x: rect.left + rect.width / 2 + view.x + p.x * view.s,
+    y: rect.top + rect.height / 2 + view.y + p.y * view.s
+  };
+}
+function directRelationCandidates(id) {
+  const source = person(id);
+  if (!source) return [];
+  const visible = visibleIds();
+  const candidates = [];
+  for (const parentId of source.parents || []) {
+    if (visible.has(parentId) && person(parentId)) candidates.push({ id: parentId, kind: 'parents' });
+  }
+  for (const partnerId of partnerIds(source)) {
+    if (visible.has(partnerId) && person(partnerId)) candidates.push({ id: partnerId, kind: 'partners' });
+  }
+  for (const child of activeChildrenOfPerson(id)) {
+    if (visible.has(child.id)) candidates.push({ id: child.id, kind: 'children' });
+  }
+  return [...new Map(candidates.map(candidate => [candidate.id, candidate])).values()];
+}
+function offscreenDirection(point, bounds) {
+  const overflows = [
+    { direction: 'left', amount: bounds.left - point.x },
+    { direction: 'right', amount: point.x - bounds.right },
+    { direction: 'top', amount: bounds.top - point.y },
+    { direction: 'bottom', amount: point.y - bounds.bottom }
+  ].filter(entry => entry.amount > 0);
+  if (!overflows.length) return '';
+  return overflows.sort((a, b) => b.amount - a.amount)[0].direction;
+}
+function offscreenIndicatorLabel(group) {
+  const directionLabels = { top: 'oben', right: 'rechts', bottom: 'unten', left: 'links' };
+  const kindLabels = { parents: 'Eltern', partners: 'Partner', children: 'Kinder' };
+  const kinds = new Set(group.map(entry => entry.kind));
+  const subject = kinds.size === 1 ? kindLabels[[...kinds][0]] : 'Beziehungen';
+  return `${group.length} ${subject} ${directionLabels[group[0].direction]}`;
+}
+function updateOffscreenIndicators() {
+  if (!offscreenIndicators) return;
+  if (!selected || !person(selected) || !main.clientWidth || !main.clientHeight) {
+    offscreenIndicators.innerHTML = '';
+    return;
+  }
+  const rect = main.getBoundingClientRect();
+  const bounds = {
+    left: rect.left + 34,
+    right: rect.right - 78,
+    top: rect.top + 30,
+    bottom: rect.bottom - 96
+  };
+  const center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  const grouped = new Map();
+  for (const candidate of directRelationCandidates(selected)) {
+    const target = person(candidate.id);
+    const point = personScreenPoint(target, rect);
+    const direction = offscreenDirection(point, bounds);
+    if (!direction) continue;
+    const distance = Math.hypot(point.x - center.x, point.y - center.y);
+    if (!grouped.has(direction)) grouped.set(direction, []);
+    grouped.get(direction).push({ ...candidate, direction, distance });
+  }
+  const arrows = { top: '↑', right: '→', bottom: '↓', left: '←' };
+  const order = ['top', 'right', 'bottom', 'left'];
+  offscreenIndicators.innerHTML = order
+    .filter(direction => grouped.has(direction))
+    .map(direction => {
+      const group = grouped.get(direction).sort((a, b) => a.distance - b.distance);
+      const label = offscreenIndicatorLabel(group);
+      return `<button type="button" class="offscreenIndicator" data-direction="${direction}" data-target-id="${esc(group[0].id)}" data-testid="offscreen-${direction}" aria-label="${esc(label)}"><span class="offscreenArrow" aria-hidden="true">${arrows[direction]}</span><span>${esc(label)}</span></button>`;
+    }).join('');
 }
 function withPreservedView(fn) {
   const previous = { ...view };
@@ -2499,6 +2574,7 @@ function render() {
     nodes.appendChild(el);
   }
   if (generationBands && showGenerationBands) renderGenerationBands(visiblePeople);
+  updateOffscreenIndicators();
 }
 function renderGenerationBands(visiblePeople) {
   const ys = visiblePeople
@@ -5164,6 +5240,13 @@ $('overviewCloseBtn')?.addEventListener('click', () => closeOverview());
 overviewSheet?.addEventListener('pointerdown', event => event.stopPropagation());
 overviewMap?.addEventListener('click', event => {
   panFromMinimapEvent(event, overviewMap, overviewState);
+});
+offscreenIndicators?.addEventListener('pointerdown', event => event.stopPropagation());
+offscreenIndicators?.addEventListener('click', event => {
+  const button = event.target.closest('[data-target-id]');
+  if (!button) return;
+  event.stopPropagation();
+  jumpToPerson(button.dataset.targetId);
 });
 $('backdrop').addEventListener('click', () => {
   if($('overviewSheet')?.classList.contains('open')) closeOverview();
