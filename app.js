@@ -481,9 +481,37 @@ function getCommandHistoryState() {
 }
 function notifyCommandHistoryChanged(action = '') {
   commandHistoryAction = action;
+  updateCommandHistoryUI(action);
   window.dispatchEvent(new CustomEvent('commandhistorychange', {
     detail: getCommandHistoryState()
   }));
+}
+function updateCommandHistoryUI(announcement = '') {
+  const state = getCommandHistoryState();
+  const undoButtons = [$('undoBtn'), $('undoMobileBtn')].filter(Boolean);
+  const redoButtons = [$('redoBtn'), $('redoMobileBtn')].filter(Boolean);
+  undoButtons.forEach(button => {
+    button.disabled = !state.canUndo;
+    button.title = state.canUndo ? `${state.undoLabel} rückgängig machen` : 'Kein Schritt zum Rückgängigmachen';
+    button.setAttribute('aria-label', button.title);
+  });
+  redoButtons.forEach(button => {
+    button.disabled = !state.canRedo;
+    button.title = state.canRedo ? `${state.redoLabel} wiederholen` : 'Kein Schritt zum Wiederholen';
+    button.setAttribute('aria-label', button.title);
+  });
+  if ($('undoMobileBtn')) {
+    $('undoMobileBtn').textContent = state.canUndo ? `Rückgängig: ${state.undoLabel}` : 'Rückgängig';
+  }
+  if ($('redoMobileBtn')) {
+    $('redoMobileBtn').textContent = state.canRedo ? `Wiederholen: ${state.redoLabel}` : 'Wiederholen';
+  }
+  if (announcement && $('commandAnnouncement')) {
+    $('commandAnnouncement').textContent = '';
+    requestAnimationFrame(() => {
+      if ($('commandAnnouncement')) $('commandAnnouncement').textContent = announcement;
+    });
+  }
 }
 function clearCommandHistory() {
   commandHistory = [];
@@ -581,6 +609,11 @@ function redoCommand() {
   commandHistoryIndex += 1;
   notifyCommandHistoryChanged(`Wiederholt: ${command.label}`);
   return command.label;
+}
+async function performCommandHistoryAction(direction, trigger = document.activeElement) {
+  if (!editMode) return false;
+  if (hasUnsavedSheetChanges() && !(await confirmDiscardSheetChanges(trigger))) return false;
+  return direction === 'redo' ? redoCommand() : undoCommand();
 }
 
 function loadPersonFieldSettings() {
@@ -5814,6 +5847,16 @@ function renderListEditor(){
   });
 }
 // -- UI event wiring ----------------------------------------------------
+[$('undoBtn'), $('undoMobileBtn')].filter(Boolean).forEach(button => {
+  button.addEventListener('click', event => {
+    performCommandHistoryAction('undo', event.currentTarget);
+  });
+});
+[$('redoBtn'), $('redoMobileBtn')].filter(Boolean).forEach(button => {
+  button.addEventListener('click', event => {
+    performCommandHistoryAction('redo', event.currentTarget);
+  });
+});
 $('decisionCancel')?.addEventListener('click', () => settleDecisionDialog('cancel'));
 $('decisionSecondary')?.addEventListener('click', () => settleDecisionDialog('secondary'));
 $('decisionConfirm')?.addEventListener('click', () => settleDecisionDialog('confirm'));
@@ -5940,9 +5983,21 @@ $('backdrop').addEventListener('click', () => {
 });
 window.addEventListener('keydown', e => {
   const active = document.activeElement;
-  const isTyping = active && ['INPUT','TEXTAREA','SELECT'].includes(active.tagName);
+  const isTyping = active && (
+    ['INPUT','TEXTAREA','SELECT'].includes(active.tagName)
+    || active.isContentEditable
+  );
   const dialogOpen = ['fileMenu','settingsMenu','sheet','sideNav','searchSheet','rootSelectionSheet','overviewSheet','birthdaySheet','scrollSheet','checkSheet','listSheet']
     .some(id => $(id)?.classList.contains('open'));
+  const commandShortcut = editMode
+    && (e.ctrlKey || e.metaKey)
+    && !e.altKey
+    && e.key.toLowerCase() === 'z';
+  if (commandShortcut && !isTyping) {
+    e.preventDefault();
+    performCommandHistoryAction(e.shiftKey ? 'redo' : 'undo', active);
+    return;
+  }
   if (e.key === 'Escape') {
     if ($('fileMenu')?.classList.contains('open')) { closeFileMenu(); e.preventDefault(); }
     else if ($('settingsMenu')?.classList.contains('open')) { closeSettingsMenu(); e.preventDefault(); }
@@ -6304,6 +6359,7 @@ updatePoolButton();
 updateWorkingFileButton();
 updateRootButton();
 updateFocusButton();
+updateCommandHistoryUI();
 if (window.location?.search?.includes('ux-debug=1')) {
   window.__uxStartupDebug = {
     computeStartupStateFromSignals,

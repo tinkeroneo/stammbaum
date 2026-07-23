@@ -16,6 +16,12 @@
                 <h1 id="app-title">Stammbaum</h1>
                 <p id="app-storage-status" aria-live="polite" aria-atomic="true">Lade Daten…</p>
             </div>
+            <div class="commandBar editOnly" aria-label="Bearbeitungsschritte">
+                <button type="button" class="pill commandButton" id="undoBtn" data-testid="undo"
+                    disabled>Rückgängig</button>
+                <button type="button" class="pill commandButton" id="redoBtn" data-testid="redo"
+                    disabled>Wiederholen</button>
+            </div>
             <button type="button" class="pill modeToggle primary" id="modeBtn" data-testid="app-mode-toggle"
                 aria-label="Modus umschalten. Aktueller Modus: Ansehen." aria-pressed="false"
                 title="Modus umschalten">
@@ -590,11 +596,18 @@
                     </section>
 
                     <div class="actions formActions">
+                        <div class="mobileCommandActions" aria-label="Bearbeitungsschritte">
+                            <button type="button" class="pill commandButton" id="undoMobileBtn"
+                                data-testid="undo-mobile" disabled>Rückgängig</button>
+                            <button type="button" class="pill commandButton" id="redoMobileBtn"
+                                data-testid="redo-mobile" disabled>Wiederholen</button>
+                        </div>
                         <button type="button" class="pill primary" id="saveBtn"
                             data-testid="person-save">Speichern</button>
                     </div>
                 </form>
             </section>
+            <p class="srOnly" id="commandAnnouncement" role="status" aria-live="polite" aria-atomic="true"></p>
 
             <section class="listSheet" id="listSheet" role="dialog" aria-modal="true" aria-hidden="true"
                 aria-labelledby="listTitle" data-testid="people-directory">
