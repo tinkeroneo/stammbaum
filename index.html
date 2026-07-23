@@ -241,13 +241,14 @@
                                 <span class="settingsItemDescription">Familien nach Namen durchsuchen.</span>
                             </span>
                         </button>
-                        <button type="button" class="settingsItem" id="focusBtn" aria-label="Nahbereich anzeigen/ausblenden">
+                        <button type="button" class="settingsItem" id="focusBtn" data-testid="focus-mode-toggle"
+                            aria-label="Nahbereich zeigen" aria-pressed="false">
                             <span class="settingsItemIcon" aria-hidden="true">
                                 <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5"/><path d="M12 2v4"/><path d="M12 18v4"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M5 5l2.5 2.5"/><path d="M16.5 16.5L19 19"/><path d="M5 19l2.5-2.5"/><path d="M16.5 7.5L19 5"/></svg>
                             </span>
                             <span class="settingsItemContent">
-                                <span class="settingsItemTitle">Fokus</span>
-                                <span class="settingsItemDescription">Umgebung fokussieren oder Gesamtansicht zeigen.</span>
+                                <span class="settingsItemTitle">Nahbereich zeigen</span>
+                                <span class="settingsItemDescription">Zeigt zwei Generationen davor und danach.</span>
                             </span>
                         </button>
                     </section>
@@ -382,8 +383,12 @@
                 <section class="personDetailView" id="personDetailView" data-testid="person-detail-view">
                     <div class="personDetails" id="personDetails" data-testid="person-details"></div>
                     <div class="actions personDetailActions">
+                        <span class="personFocusAction">
                         <button type="button" class="pill textAction" id="quickFocus"
-                            aria-label="Fokusansicht für diese Person">Fokus</button>
+                            data-testid="person-focus-toggle" aria-label="Nahbereich für diese Person zeigen"
+                            aria-describedby="personFocusHint" aria-pressed="false">Nahbereich zeigen</button>
+                        <small class="personActionHint" id="personFocusHint">Zeigt zwei Generationen davor und danach.</small>
+                        </span>
                         <button type="button" class="pill primary" id="personEditBtn"
                             data-testid="person-edit-open">Bearbeiten</button>
                     </div>

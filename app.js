@@ -2175,12 +2175,28 @@ function updateZoomClass() {
 }
 function updateFocusButton() {
   const btn = $('focusBtn');
-  if (!btn) return;
-  const title = btn.querySelector('.settingsItemTitle');
-  const text = focusMode ? 'Gesamter Baum' : 'Fokusbereich';
-  if (title) title.textContent = text;
-  else btn.textContent = text;
-  btn.classList.toggle('primary', focusMode);
+  const quickBtn = $('quickFocus');
+  const text = focusMode ? 'Gesamten Baum zeigen' : 'Nahbereich zeigen';
+  if (btn) {
+    const title = btn.querySelector('.settingsItemTitle');
+    const description = btn.querySelector('.settingsItemDescription');
+    if (title) title.textContent = text;
+    else btn.textContent = text;
+    if (description) {
+      description.textContent = focusMode
+        ? 'Kehrt zur vollständigen Baumansicht zurück.'
+        : 'Zeigt zwei Generationen davor und danach.';
+    }
+    btn.classList.toggle('primary', focusMode);
+    btn.setAttribute('aria-label', text);
+    btn.setAttribute('aria-pressed', String(focusMode));
+  }
+  if (quickBtn) {
+    quickBtn.textContent = text;
+    quickBtn.classList.toggle('primary', focusMode);
+    quickBtn.setAttribute('aria-label', focusMode ? text : 'Nahbereich für diese Person zeigen');
+    quickBtn.setAttribute('aria-pressed', String(focusMode));
+  }
 }
 function preferredLandingPersonId() {
   const activePeople = nonPoolPeople;
@@ -4243,7 +4259,7 @@ function setPersonSheetView(mode, p) {
     ? 'Person ansehen'
     : (mode === 'edit' ? 'Person bearbeiten' : 'Neue Person');
   $('quickFocus').style.display = p ? '' : 'none';
-  $('quickFocus').textContent = 'Fokus';
+  updateFocusButton();
   $('personEditBtn').style.display = p ? '' : 'none';
   $('quickChild').style.display = p && mode === 'edit' ? '' : 'none';
   $('quickPartner').style.display = p && mode === 'edit' ? '' : 'none';
@@ -5317,7 +5333,10 @@ $('focusBtn')?.addEventListener('click', () => {
   const id = selected || preferredLandingPersonId();
   if (id) setFocusMode(true, id);
 });
-$('quickFocus').addEventListener('click', () => selected && setFocusMode(true, selected));
+$('quickFocus').addEventListener('click', () => {
+  if (focusMode) setFocusMode(false);
+  else if (selected) setFocusMode(true, selected);
+});
 $('quickChild').addEventListener('click', () => selected && addChildFor(selected));
 $('quickPartner').addEventListener('click', () => selected && addPartnerFor(selected));
 $('quickParents').addEventListener('click', () => selected && addParentsFor(selected));
