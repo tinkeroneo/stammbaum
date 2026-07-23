@@ -145,6 +145,8 @@ let exportFilenameTouched = false;
 let relationshipEditorState = null;
 let relationshipFocusReturnTarget = null;
 let pendingDataQualityHints = [];
+let dialogStack = [];
+let dialogIsolationState = [];
 rebuildDataIndexes();
 
 const familyPalette = [
@@ -1239,18 +1241,19 @@ function showWelcomeSurface() {
   }
   welcomeSurface.classList.remove('hidden');
   welcomeSurface.setAttribute('aria-hidden', 'false');
-  setTimeout(() => {
-    const initialFocus = startupState === 'first-visit'
-      ? $('welcomeOpenExistingFirstVisit') || $('welcomeOpenExistingReturning') || $('welcomeOpenExisting')
-      : $('welcomeContinue');
-    (initialFocus || document.querySelector('[data-testid=\"welcome-open-existing\"]'))?.focus();
-  }, 40);
+  const initialFocus = startupState === 'first-visit'
+    ? $('welcomeOpenExistingFirstVisit') || $('welcomeOpenExistingReturning') || $('welcomeOpenExisting')
+    : $('welcomeContinue');
+  openDialog('welcomeSurface', null, initialFocus || '[data-testid="welcome-open-existing"]', {
+    escape: false
+  });
 }
 function hideWelcomeSurface() {
   const welcomeSurface = $('welcomeSurface');
   if (!welcomeSurface) return;
   welcomeSurface.classList.add('hidden');
   welcomeSurface.setAttribute('aria-hidden', 'true');
+  closeDialog('continue', 'welcomeSurface', { returnFocus: false });
   setTimeout(maybeOpenRequiredRootSelection, 0);
   setTimeout(() => showHelpHints(), 120);
 }
@@ -1561,17 +1564,19 @@ function openRelationshipEditor(sourceId, {
   $('relationshipLayer').classList.remove('hidden');
   $('relationshipDialog').setAttribute('aria-hidden', 'false');
   showRelationshipStep(1);
+  openDialog('relationshipDialog', relationshipFocusReturnTarget, '#relationshipType', {
+    requestClose: () => closeRelationshipEditor()
+  });
   return true;
 }
 function closeRelationshipEditor({ returnFocus = true } = {}) {
   if (!relationshipEditorState) return;
   $('relationshipLayer').classList.add('hidden');
   $('relationshipDialog').setAttribute('aria-hidden', 'true');
-  const focusTarget = relationshipFocusReturnTarget;
   relationshipEditorState = null;
   relationshipFocusReturnTarget = null;
   setRelationshipError('');
-  if (returnFocus) focusTarget?.focus({ preventScroll: true });
+  closeDialog('close', 'relationshipDialog', { returnFocus });
 }
 function readRelationshipStepTwo() {
   if (!relationshipEditorState) return { valid: false };
@@ -4995,6 +5000,7 @@ function focusPersonSheet(mode, focusTarget = '') {
 }
 
 function openSheet(id, { mode = '', focus = '' } = {}) {
+  const trigger = document.activeElement;
   hideDataQualityHint();
   selected = id;
   const p = person(id);
@@ -5009,7 +5015,12 @@ function openSheet(id, { mode = '', focus = '' } = {}) {
   setDialogVisibility($('sheet'), true);
   showBackdrop(true);
   render();
-  focusPersonSheet(nextMode, focus);
+  const initialFocus = nextMode === 'detail'
+    ? (focus === 'editButton' ? '#personEditBtn' : '#sheetTitle')
+    : '#firstName';
+  openDialog('sheet', trigger, initialFocus, {
+    requestClose: () => closeSheet()
+  });
 }
 
 function openPersonEdit(id) {
@@ -5060,6 +5071,7 @@ async function closeSheet(force = false, trigger = document.activeElement) {
   clearPersonSheetDraft();
   setDialogVisibility($('sheet'), false);
   showBackdrop(false);
+  closeDialog('close', 'sheet', { returnFocus: false });
   render();
   if (returnMode) {
     setTimeout(() => openListEditor(returnMode), 0);
@@ -5335,6 +5347,183 @@ function showBackdrop(visible){
   back.classList.toggle('show', visible);
   back.setAttribute('aria-hidden', visible ? 'false' : 'true');
 }
+const dialogFocusableSelector = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'summary',
+  '[tabindex]:not([tabindex="-1"])'
+].join(',');
+
+function topDialogEntry() {
+  return dialogStack[dialogStack.length - 1] || null;
+}
+function dialogIsolationRoot(dialog) {
+  const layer = dialog?.parentElement;
+  if (layer?.matches('.decisionLayer, .relationshipLayer, .exportLayer')) return layer;
+  return dialog;
+}
+function dialogFocusableElements(dialog) {
+  if (!dialog) return [];
+  return [...dialog.querySelectorAll(dialogFocusableSelector)].filter(element => {
+    if (!(element instanceof HTMLElement) || element.hidden || element.closest('[hidden], .hidden')) return false;
+    if (element.getAttribute('aria-hidden') === 'true') return false;
+    const style = window.getComputedStyle(element);
+    return style.display !== 'none' && style.visibility !== 'hidden' && element.getClientRects().length > 0;
+  });
+}
+function resolveDialogFocus(entry) {
+  const requested = typeof entry?.initialFocus === 'function'
+    ? entry.initialFocus()
+    : entry?.initialFocus;
+  if (requested instanceof HTMLElement && entry.dialog.contains(requested)) return requested;
+  if (typeof requested === 'string') {
+    const selected = entry.dialog.querySelector(requested);
+    if (selected instanceof HTMLElement) return selected;
+  }
+  return dialogFocusableElements(entry?.dialog)[0] || entry?.dialog || null;
+}
+function restoreDialogIsolation() {
+  dialogIsolationState.forEach(state => {
+    state.element.inert = state.inert;
+    state.element.classList.toggle('dialogBackgroundDisabled', state.hadFallbackClass);
+    if (state.ariaHidden === null) state.element.removeAttribute('aria-hidden');
+    else state.element.setAttribute('aria-hidden', state.ariaHidden);
+  });
+  dialogIsolationState = [];
+}
+function isolateDialogBackground(activeRoot) {
+  const protectedElements = [activeRoot];
+  if (topDialogEntry()?.id === 'sheet' && $('modeBtn')) protectedElements.push($('modeBtn'));
+  const isolateElement = element => {
+    dialogIsolationState.push({
+      element,
+      inert: element.inert,
+      ariaHidden: element.getAttribute('aria-hidden'),
+      hadFallbackClass: element.classList.contains('dialogBackgroundDisabled')
+    });
+    element.inert = true;
+    element.classList.add('dialogBackgroundDisabled');
+    element.setAttribute('aria-hidden', 'true');
+  };
+  const visit = parent => {
+    [...parent.children].forEach(child => {
+      if (!(child instanceof HTMLElement)) return;
+      const protectedInside = protectedElements.filter(element =>
+        child === element || child.contains(element)
+      );
+      if (!protectedInside.length) {
+        isolateElement(child);
+        return;
+      }
+      if (!protectedInside.includes(child)) visit(child);
+    });
+  };
+  visit(document.body);
+}
+function syncDialogBackdrop() {
+  const entry = topDialogEntry();
+  if (!entry) return;
+  const root = dialogIsolationRoot(entry.dialog);
+  const usesOwnBackdrop = root !== entry.dialog || entry.dialog.id === 'welcomeSurface';
+  showBackdrop(!usesOwnBackdrop);
+}
+function syncDialogState() {
+  restoreDialogIsolation();
+  const top = topDialogEntry();
+  dialogStack.forEach(entry => {
+    entry.dialog.setAttribute('aria-hidden', entry === top ? 'false' : 'true');
+  });
+  if (!top) return;
+  isolateDialogBackground(dialogIsolationRoot(top.dialog));
+  syncDialogBackdrop();
+}
+function focusDialog(entry) {
+  window.setTimeout(() => {
+    if (entry !== topDialogEntry()) return;
+    const target = resolveDialogFocus(entry);
+    if (target === entry.dialog && !target.hasAttribute('tabindex')) target.tabIndex = -1;
+    target?.focus({ preventScroll: true });
+  }, 0);
+}
+function openDialog(id, trigger = document.activeElement, initialFocus = '', options = {}) {
+  const dialog = $(id);
+  if (!dialog) return false;
+  dialog.setAttribute('role', 'dialog');
+  dialog.setAttribute('aria-modal', 'true');
+  const existingIndex = dialogStack.findIndex(entry => entry.id === id);
+  if (existingIndex >= 0) {
+    const [entry] = dialogStack.splice(existingIndex, 1);
+    entry.initialFocus = initialFocus || entry.initialFocus;
+    entry.requestClose = options.requestClose || entry.requestClose;
+    entry.escape = options.escape ?? entry.escape;
+    dialogStack.push(entry);
+    syncDialogState();
+    focusDialog(entry);
+    return true;
+  }
+  const entry = {
+    id,
+    dialog,
+    trigger: trigger instanceof HTMLElement ? trigger : null,
+    initialFocus,
+    requestClose: options.requestClose || null,
+    escape: options.escape !== false
+  };
+  dialogStack.push(entry);
+  syncDialogState();
+  focusDialog(entry);
+  return true;
+}
+function closeDialog(result = 'close', id = '', options = {}) {
+  const index = id
+    ? dialogStack.findIndex(entry => entry.id === id)
+    : dialogStack.length - 1;
+  if (index < 0) return false;
+  const [entry] = dialogStack.splice(index, 1);
+  syncDialogState();
+  if (options.returnFocus !== false && entry.trigger?.isConnected) {
+    window.setTimeout(() => entry.trigger?.focus({ preventScroll: true }), 0);
+  } else if (topDialogEntry()) {
+    focusDialog(topDialogEntry());
+  }
+  return { id: entry.id, result };
+}
+function handleDialogKeyboard(event) {
+  const entry = topDialogEntry();
+  if (!entry) return;
+  if (event.key === 'Escape' && entry.escape) {
+    if (event.target instanceof Element && event.target.closest('details[open]')) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (typeof entry.requestClose === 'function') entry.requestClose('escape');
+    return;
+  }
+  if (event.key !== 'Tab') return;
+  const focusable = dialogFocusableElements(entry.dialog);
+  if (!focusable.length) {
+    event.preventDefault();
+    entry.dialog.focus({ preventScroll: true });
+    return;
+  }
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  const active = document.activeElement;
+  if (!entry.dialog.contains(active)) {
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
+  } else if (event.shiftKey && active === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+document.addEventListener('keydown', handleDialogKeyboard, true);
+
 function settleDecisionDialog(result) {
   const layer = $('decisionLayer');
   const dialog = $('decisionDialog');
@@ -5342,10 +5531,9 @@ function settleDecisionDialog(result) {
   layer.classList.add('hidden');
   dialog.setAttribute('aria-hidden', 'true');
   const resolve = decisionResolver;
-  const focusTarget = decisionFocusReturnTarget;
   decisionResolver = null;
   decisionFocusReturnTarget = null;
-  focusTarget?.focus({ preventScroll: true });
+  closeDialog(result, 'decisionDialog');
   resolve(result);
 }
 function openDecisionDialog({
@@ -5374,9 +5562,11 @@ function openDecisionDialog({
   decisionFocusReturnTarget = trigger instanceof HTMLElement ? trigger : null;
   layer.classList.remove('hidden');
   dialog.setAttribute('aria-hidden', 'false');
-  setTimeout(() => cancelButton.focus(), 0);
   return new Promise(resolve => {
     decisionResolver = resolve;
+    openDialog('decisionDialog', decisionFocusReturnTarget, cancelButton, {
+      requestClose: () => settleDecisionDialog('cancel')
+    });
   });
 }
 function formatExportSize(bytes) {
@@ -5446,13 +5636,15 @@ function openExportDialog(kind = 'json', trigger = document.activeElement) {
   $('exportLayer').classList.remove('hidden');
   $('exportDialog').setAttribute('aria-hidden', 'false');
   updateExportDialog();
-  setTimeout(() => $('exportTitle')?.focus(), 0);
+  openDialog('exportDialog', exportFocusReturnTarget, '#exportTitle', {
+    requestClose: () => closeExportDialog()
+  });
 }
 function closeExportDialog({ returnFocus = true } = {}) {
   $('exportLayer').classList.add('hidden');
   $('exportDialog').setAttribute('aria-hidden', 'true');
-  if (returnFocus) exportFocusReturnTarget?.focus({ preventScroll: true });
   exportFocusReturnTarget = null;
+  closeDialog('close', 'exportDialog', { returnFocus });
 }
 async function submitExportDialog() {
   const button = $('exportSubmit');
@@ -5486,9 +5678,11 @@ function openOverview(trigger = overviewButton) {
   setDialogVisibility(overviewSheet, true);
   overviewButton?.setAttribute('aria-expanded', 'true');
   showBackdrop(true);
+  openDialog('overviewSheet', overviewFocusReturnTarget, '#overviewCloseBtn', {
+    requestClose: () => closeOverview()
+  });
   setTimeout(() => {
     render();
-    $('overviewCloseBtn')?.focus();
   }, 0);
   return true;
 }
@@ -5497,8 +5691,8 @@ function closeOverview({ returnFocus = true } = {}) {
   setDialogVisibility(overviewSheet, false);
   overviewButton?.setAttribute('aria-expanded', 'false');
   showBackdrop(false);
-  if (returnFocus) overviewFocusReturnTarget?.focus({ preventScroll: true });
   overviewFocusReturnTarget = null;
+  closeDialog('close', 'overviewSheet', { returnFocus });
   return true;
 }
 function panFromMinimapEvent(event, inner, state) {
@@ -5575,10 +5769,10 @@ function openRootSelection({ trigger = null, required = false } = {}) {
   setDialogVisibility(sheet, true);
   showBackdrop(true);
   renderRootSelectionResults();
-  setTimeout(() => {
-    const initialFocus = nonPoolPeople.length ? $('rootSelectionSearch') : laterButton;
-    initialFocus?.focus();
-  }, 40);
+  openDialog('rootSelectionSheet', rootSelectionFocusReturnTarget,
+    nonPoolPeople.length ? '#rootSelectionSearch' : '#rootSelectionLaterBtn', {
+      requestClose: () => dismissRootSelection()
+    });
   return true;
 }
 function closeRootSelection({ returnFocus = true } = {}) {
@@ -5587,8 +5781,8 @@ function closeRootSelection({ returnFocus = true } = {}) {
   setDialogVisibility(sheet, false);
   showBackdrop(false);
   rootSelectionRequired = false;
-  if (returnFocus) rootSelectionFocusReturnTarget?.focus({ preventScroll: true });
   rootSelectionFocusReturnTarget = null;
+  closeDialog('close', 'rootSelectionSheet', { returnFocus });
 }
 function deferRootSelection() {
   if (!rootIds.length) {
@@ -5670,6 +5864,7 @@ function openMoreFromNavigation(button) {
   }
 }
 function openListEditor(mode = 'tree'){
+  const trigger = document.activeElement;
   listViewMode = mode;
   $('listTitle').textContent = 'Personenverzeichnis';
   $('listAddBtn').textContent = mode === 'pool' ? '+ Vorratsperson' : '+ Person';
@@ -5677,13 +5872,16 @@ function openListEditor(mode = 'tree'){
   setDialogVisibility($('listSheet'), true);
   showBackdrop(true);
   renderListEditor();
-  setTimeout(()=>$('listSearch').focus(), 80);
+  openDialog('listSheet', trigger, '#listSearch', {
+    requestClose: () => closeListEditor()
+  });
 }
 function closeListEditor(suspend = false){
   setDialogVisibility($('listSheet'), false);
   $('listSheet').classList.toggle('hidden', suspend);
   if (!suspend) listReturnMode = '';
   showBackdrop(false);
+  closeDialog('close', 'listSheet', { returnFocus: !suspend });
   if (!suspend) returnFocusToMainNavTarget();
 }
 function openSheetFromList(id) {
@@ -6174,23 +6372,11 @@ $('decisionLayer')?.addEventListener('click', event => {
   event.stopPropagation();
   if (event.target === $('decisionLayer')) settleDecisionDialog('cancel');
 });
-$('decisionLayer')?.addEventListener('keydown', event => {
-  if (event.key !== 'Escape') return;
-  event.preventDefault();
-  event.stopPropagation();
-  settleDecisionDialog('cancel');
-});
 $('exportDialogClose')?.addEventListener('click', () => closeExportDialog());
 $('exportSubmit')?.addEventListener('click', () => { submitExportDialog(); });
 $('exportLayer')?.addEventListener('click', event => {
   event.stopPropagation();
   if (event.target === $('exportLayer')) closeExportDialog();
-});
-$('exportLayer')?.addEventListener('keydown', event => {
-  if (event.key !== 'Escape') return;
-  event.preventDefault();
-  event.stopPropagation();
-  closeExportDialog();
 });
 $('exportDialog')?.addEventListener('change', updateExportDialog);
 $('exportFilename')?.addEventListener('input', () => {
@@ -6199,12 +6385,6 @@ $('exportFilename')?.addEventListener('input', () => {
 $('relationshipClose')?.addEventListener('click', () => closeRelationshipEditor());
 $('relationshipLayer')?.addEventListener('click', event => {
   if (event.target === $('relationshipLayer')) closeRelationshipEditor();
-});
-$('relationshipLayer')?.addEventListener('keydown', event => {
-  if (event.key !== 'Escape') return;
-  event.preventDefault();
-  event.stopPropagation();
-  closeRelationshipEditor();
 });
 $('relationshipType')?.addEventListener('change', event => {
   if (!relationshipEditorState) return;
@@ -6720,6 +6900,7 @@ if (window.location?.search?.includes('ux-debug=1')) {
       };
     },
     getSelectedPersonId: () => selected,
+    getDialogStack: () => dialogStack.map(entry => entry.id),
     getPersistenceState: () => ({
       ...uiState.persistence,
       statusLabel: getPersistenceStatusLabel()
