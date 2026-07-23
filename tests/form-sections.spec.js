@@ -51,11 +51,12 @@ test('Basis- und Lebensdaten sind offen, seltene Bereiche per Tastatur einklappb
 
   const relations = page.getByTestId('form-section-relations');
   await expect(relations).toHaveAttribute('aria-expanded', 'false');
-  await expect(page.getByLabel('Elternteil 1')).toBeHidden();
+  await expect(page.locator('#quickParents')).toBeHidden();
   await relations.focus();
   await page.keyboard.press('Enter');
   await expect(relations).toHaveAttribute('aria-expanded', 'true');
-  await expect(page.getByLabel('Elternteil 1')).toBeVisible();
+  await expect(page.locator('#quickParents')).toBeVisible();
+  await expect(page.locator('#relationshipFormSummary')).toContainText('Eltern: keine');
 
   const admin = page.getByTestId('form-section-admin');
   await admin.click();

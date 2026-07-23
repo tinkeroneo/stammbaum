@@ -59,37 +59,18 @@ test('Datumsfehler erscheinen feldnah und der Fokus folgt dem ersten Problem', a
   expect(dialogs).toEqual([]);
 });
 
-test('identische Eltern, Selbstbezug und ungültige Partnerschaft öffnen Beziehungen', async ({ page }) => {
+test('Beziehungen sind aus dem Personenformular in einen eigenen Flow ausgelagert', async ({ page }) => {
   const dialogs = [];
   failOnDialogs(page, dialogs);
   await openEditForm(page);
 
   const relations = page.getByTestId('form-section-relations');
   await relations.click();
-  const parent1 = page.getByLabel('Elternteil 1');
-  const parent2 = page.getByLabel('Elternteil 2');
-  const partner = page.getByLabel('Weitere / frühere Partnerperson ergänzen');
-
-  await parent1.selectOption('parent-a');
-  await parent2.selectOption('parent-a');
-  await page.getByTestId('person-save').click();
-  await expect(page.getByText('Bitte zwei unterschiedliche Elternteile auswählen.', { exact: true }).first()).toBeVisible();
-  await expect(parent1).toBeFocused();
-
-  await page.evaluate(() => {
-    const select = document.querySelector('#parent1');
-    select.append(new Option('Aktuelle Person', 'current'));
-    select.value = 'current';
-  });
-  await parent2.selectOption('');
-  await page.getByTestId('person-save').click();
-  await expect(page.getByText('Eine Person kann nicht ihr eigener Elternteil sein.', { exact: true }).first()).toBeVisible();
-
-  await parent1.selectOption('parent-a');
-  await partner.selectOption('parent-a');
-  await page.getByTestId('person-save').click();
-  await expect(page.getByText('Partner/in und Elternteil dürfen nicht dieselbe Person sein.', { exact: true }).first()).toBeVisible();
-  await expect(partner).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.locator('#parent1, #parent2, #partner')).toHaveCount(0);
+  await expect(page.locator('#quickParents')).toHaveText('Elternteil hinzufügen');
+  await page.locator('#quickParents').click();
+  await expect(page.getByTestId('relationship-dialog')).toBeVisible();
+  await expect(page.getByTestId('relationship-type')).toHaveValue('parent');
   expect(dialogs).toEqual([]);
 });
 

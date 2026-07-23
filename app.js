@@ -103,8 +103,6 @@ let sheetSnapshot = '';
 let personSheetMode = 'closed';
 let imageDraft = '';
 let mentionsDraft = [];
-let removedPartnerDraft = new Set();
-let marriageDraft = {};
 let scrollExpanded = new Set();
 let checkCollapsed = new Set();
 let workingFileHandle = null;
@@ -144,6 +142,8 @@ let decisionResolver = null;
 let decisionFocusReturnTarget = null;
 let exportFocusReturnTarget = null;
 let exportFilenameTouched = false;
+let relationshipEditorState = null;
+let relationshipFocusReturnTarget = null;
 rebuildDataIndexes();
 
 const familyPalette = [
@@ -1399,6 +1399,281 @@ function setMarriageDate(p, q, value, reciprocal = true) {
     if (married) q.partnerDetails[p.id] = { ...(q.partnerDetails[p.id] || {}), married };
     else delete q.partnerDetails[p.id];
   }
+}
+function wouldCreateParentCycle(parentId, childId, dataset = data) {
+  const parentKey = String(parentId || '');
+  const childKey = String(childId || '');
+  if (!parentKey || !childKey) return false;
+  if (parentKey === childKey) return true;
+  const people = Array.isArray(dataset?.people) ? dataset.people : [];
+  const children = new Map(people.map(entry => [String(entry.id), []]));
+  people.forEach(entry => {
+    (entry.parents || []).map(String).forEach(id => {
+      if (children.has(id)) children.get(id).push(String(entry.id));
+    });
+  });
+  const queue = [childKey];
+  const seen = new Set();
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current || seen.has(current)) continue;
+    if (current === parentKey) return true;
+    seen.add(current);
+    (children.get(current) || []).forEach(id => queue.push(id));
+  }
+  return false;
+}
+function validateRelationshipChoice(sourceId, type, targetId, dataset = data) {
+  const people = Array.isArray(dataset?.people) ? dataset.people : [];
+  const source = people.find(entry => String(entry.id) === String(sourceId));
+  const target = people.find(entry => String(entry.id) === String(targetId));
+  if (!source || !target) return { valid: false, error: 'Bitte eine vorhandene Person auswählen.' };
+  if (String(source.id) === String(target.id)) {
+    return { valid: false, error: 'Eine Person kann nicht mit sich selbst verknüpft werden.' };
+  }
+  if (type === 'partner') {
+    const sourcePartners = new Set([
+      ...(source.partners || []),
+      source.partner
+    ].map(String).filter(Boolean));
+    const targetPartners = new Set([
+      ...(target.partners || []),
+      target.partner
+    ].map(String).filter(Boolean));
+    if (sourcePartners.has(String(target.id)) || targetPartners.has(String(source.id))) {
+      return { valid: false, error: 'Diese Partnerschaft besteht bereits.' };
+    }
+    return { valid: true, error: '' };
+  }
+  const parent = type === 'parent' ? target : source;
+  const child = type === 'parent' ? source : target;
+  const childParents = [...new Set((child.parents || []).map(String))];
+  if (childParents.includes(String(parent.id))) {
+    return { valid: false, error: 'Diese Eltern-Kind-Beziehung besteht bereits.' };
+  }
+  if (childParents.length >= 2) {
+    return { valid: false, error: `${fullName(child) || child.name} hat bereits zwei Elternteile.` };
+  }
+  if (wouldCreateParentCycle(parent.id, child.id, dataset)) {
+    return { valid: false, error: 'Diese Zuordnung würde einen Kreis in der Eltern-Kind-Struktur erzeugen.' };
+  }
+  return { valid: true, error: '' };
+}
+function renderRelationshipFormSummary(p) {
+  const element = $('relationshipFormSummary');
+  if (!element) return;
+  if (!p) {
+    element.textContent = 'Beziehungen können nach dem ersten Speichern der Person ergänzt werden.';
+    return;
+  }
+  const parents = (p.parents || []).map(person).filter(Boolean).map(entry => fullName(entry) || entry.name);
+  const partners = partnerIds(p).map(person).filter(Boolean).map(entry => fullName(entry) || entry.name);
+  const children = childrenOfPerson(p.id).map(entry => fullName(entry) || entry.name);
+  const sections = [
+    parents.length ? `Eltern: ${parents.join(', ')}` : 'Eltern: keine',
+    partners.length ? `Partner/in: ${partners.join(', ')}` : 'Partner/in: keine',
+    children.length ? `Kinder: ${children.join(', ')}` : 'Kinder: keine'
+  ];
+  element.textContent = sections.join(' · ');
+}
+function relationshipMode() {
+  return document.querySelector('input[name="relationshipMode"]:checked')?.value || 'existing';
+}
+function setRelationshipError(message = '') {
+  const element = $('relationshipError');
+  if (!element) return;
+  element.textContent = message;
+  element.classList.toggle('hidden', !message);
+}
+function renderRelationshipResults() {
+  const container = $('relationshipResults');
+  if (!container || !relationshipEditorState) return;
+  const query = String($('relationshipSearch')?.value || '').trim().toLowerCase();
+  const rows = data.people
+    .filter(entry => entry.id !== relationshipEditorState.sourceId)
+    .filter(entry => !query || searchText(entry).includes(query))
+    .sort((a, b) => fullName(a).localeCompare(fullName(b), 'de'))
+    .slice(0, 40);
+  container.innerHTML = rows.length
+    ? rows.map(entry => {
+      const selectedTarget = relationshipEditorState.targetId === entry.id;
+      const meta = [entry.born, entry.location, entry.pool ? 'Vorrat' : ''].filter(Boolean).join(' · ');
+      return `<button type="button" class="relationshipResult" data-relationship-target="${esc(entry.id)}"
+        aria-pressed="${selectedTarget ? 'true' : 'false'}">
+        <span><strong>${esc(fullName(entry) || entry.name)}</strong>${meta ? `<small>${esc(meta)}</small>` : ''}</span>
+        <span class="relationshipResultState">${selectedTarget ? 'Ausgewählt' : 'Wählen'}</span>
+      </button>`;
+    }).join('')
+    : '<p class="small">Keine passende Person gefunden.</p>';
+}
+function updateRelationshipModeView() {
+  if (!relationshipEditorState) return;
+  relationshipEditorState.mode = relationshipMode();
+  $('relationshipExistingFields')?.classList.toggle('hidden', relationshipEditorState.mode !== 'existing');
+  $('relationshipNewFields')?.classList.toggle('hidden', relationshipEditorState.mode !== 'new');
+  $('relationshipMarriage')?.classList.toggle('hidden', relationshipEditorState.type !== 'partner');
+  if (relationshipEditorState.mode === 'existing') renderRelationshipResults();
+}
+function showRelationshipStep(step) {
+  if (!relationshipEditorState) return;
+  relationshipEditorState.step = step;
+  setRelationshipError('');
+  document.querySelectorAll('[data-relationship-step]').forEach(section => {
+    section.classList.toggle('hidden', Number(section.dataset.relationshipStep) !== step);
+  });
+  if ($('relationshipStepLabel')) $('relationshipStepLabel').textContent = `Schritt ${step} von 3`;
+  if (step === 2) updateRelationshipModeView();
+  setTimeout(() => {
+    if (step === 1) $('relationshipType')?.focus();
+    if (step === 2) {
+      const target = relationshipEditorState?.mode === 'new'
+        ? $('relationshipFirstName')
+        : $('relationshipSearch');
+      target?.focus();
+    }
+    if (step === 3) $('relationshipConfirm')?.focus();
+  }, 0);
+}
+function openRelationshipEditor(sourceId, {
+  type = 'parent',
+  trigger = document.activeElement
+} = {}) {
+  const source = person(sourceId);
+  if (!source) return false;
+  relationshipFocusReturnTarget = trigger instanceof HTMLElement ? trigger : null;
+  relationshipEditorState = {
+    sourceId: source.id,
+    type: ['parent', 'child', 'partner'].includes(type) ? type : 'parent',
+    mode: 'existing',
+    targetId: '',
+    step: 1,
+    firstName: '',
+    lastName: '',
+    marriageDate: ''
+  };
+  $('relationshipType').value = relationshipEditorState.type;
+  document.querySelector('input[name="relationshipMode"][value="existing"]').checked = true;
+  $('relationshipSearch').value = '';
+  $('relationshipFirstName').value = '';
+  $('relationshipLastName').value = '';
+  $('relationshipMarriageDate').value = '';
+  $('relationshipLayer').classList.remove('hidden');
+  $('relationshipDialog').setAttribute('aria-hidden', 'false');
+  showRelationshipStep(1);
+  return true;
+}
+function closeRelationshipEditor({ returnFocus = true } = {}) {
+  if (!relationshipEditorState) return;
+  $('relationshipLayer').classList.add('hidden');
+  $('relationshipDialog').setAttribute('aria-hidden', 'true');
+  const focusTarget = relationshipFocusReturnTarget;
+  relationshipEditorState = null;
+  relationshipFocusReturnTarget = null;
+  setRelationshipError('');
+  if (returnFocus) focusTarget?.focus({ preventScroll: true });
+}
+function readRelationshipStepTwo() {
+  if (!relationshipEditorState) return { valid: false };
+  relationshipEditorState.mode = relationshipMode();
+  relationshipEditorState.type = $('relationshipType').value;
+  relationshipEditorState.firstName = $('relationshipFirstName').value.trim();
+  relationshipEditorState.lastName = $('relationshipLastName').value.trim();
+  relationshipEditorState.marriageDate = $('relationshipMarriageDate').value.trim();
+  if (relationshipEditorState.mode === 'existing') {
+    if (!relationshipEditorState.targetId) {
+      setRelationshipError('Bitte eine vorhandene Person auswählen.');
+      return { valid: false };
+    }
+    const validation = validateRelationshipChoice(
+      relationshipEditorState.sourceId,
+      relationshipEditorState.type,
+      relationshipEditorState.targetId
+    );
+    if (!validation.valid) {
+      setRelationshipError(validation.error);
+      return validation;
+    }
+  } else if (!relationshipEditorState.firstName && !relationshipEditorState.lastName) {
+    setRelationshipError('Bitte mindestens einen Vor- oder Nachnamen für die neue Person eingeben.');
+    return { valid: false };
+  }
+  if (relationshipEditorState.type === 'partner' && !isValidDateInput(relationshipEditorState.marriageDate)) {
+    setRelationshipError('Heiratsdatum bitte als Jahr, MM.JJJJ oder TT.MM.JJJJ eingeben.');
+    return { valid: false };
+  }
+  return { valid: true };
+}
+function relationshipSummaryHtml() {
+  if (!relationshipEditorState) return '';
+  const source = person(relationshipEditorState.sourceId);
+  const target = relationshipEditorState.mode === 'existing'
+    ? person(relationshipEditorState.targetId)
+    : null;
+  const sourceName = fullName(source) || source?.name || 'Ausgangsperson';
+  const targetName = target
+    ? (fullName(target) || target.name)
+    : `${relationshipEditorState.firstName} ${relationshipEditorState.lastName}`.trim();
+  let sentence = '';
+  if (relationshipEditorState.type === 'parent') {
+    sentence = `${targetName} wird als Elternteil von ${sourceName} gespeichert.`;
+  } else if (relationshipEditorState.type === 'child') {
+    sentence = `${targetName} wird als Kind von ${sourceName} gespeichert.`;
+  } else {
+    sentence = `${sourceName} und ${targetName} werden immer gegenseitig als Partner/innen verknüpft.`;
+  }
+  const newHint = relationshipEditorState.mode === 'new'
+    ? ' Dafür wird erst beim Bestätigen eine neue Person angelegt.'
+    : '';
+  const marriageHint = relationshipEditorState.type === 'partner' && relationshipEditorState.marriageDate
+    ? ` Heiratsdatum: ${relationshipEditorState.marriageDate}.`
+    : '';
+  return `<strong>Geplante Änderung</strong>${esc(sentence + newHint + marriageHint)}`;
+}
+function prepareRelationshipSummary() {
+  const validation = readRelationshipStepTwo();
+  if (!validation.valid) return false;
+  $('relationshipSummary').innerHTML = relationshipSummaryHtml();
+  showRelationshipStep(3);
+  return true;
+}
+function confirmRelationshipChange() {
+  if (!relationshipEditorState || !readRelationshipStepTwo().valid) return false;
+  const state = { ...relationshipEditorState };
+  const source = person(state.sourceId);
+  if (!source) return false;
+  const commandBefore = captureCommandState();
+  let target = state.mode === 'existing' ? person(state.targetId) : null;
+  if (!target) {
+    const offsets = state.type === 'parent'
+      ? { x: -120, y: -260 }
+      : state.type === 'child'
+        ? { x: 0, y: 260 }
+        : { x: 230, y: 0 };
+    target = newPersonNear(source, offsets.x, offsets.y);
+    target.firstName = state.firstName;
+    target.lastName = state.lastName;
+    target.name = `${state.firstName} ${state.lastName}`.trim() || 'Neue Person';
+    target.birthName = state.lastName;
+    target.pool = !!source.pool;
+    data.people.push(target);
+  } else if (target.pool && !source.pool) {
+    setPoolBranch(target.id, false);
+  }
+  if (state.type === 'parent') {
+    source.parents = uniqueIds([...(source.parents || []), target.id]);
+  } else if (state.type === 'child') {
+    target.parents = uniqueIds([...(target.parents || []), source.id]);
+  } else {
+    linkPartners(source, target, true);
+    setMarriageDate(source, target, state.marriageDate, true);
+  }
+  resetGeneratedLayout();
+  commitDataCommand('Beziehung hinzufügen', commandBefore);
+  render();
+  if ($('sideNav')?.classList.contains('open')) renderNavigator();
+  renderRelationshipFormSummary(person(state.sourceId));
+  closeRelationshipEditor();
+  return target.id;
 }
 function esc(s) { return String(s || '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
 function safeUrl(value) {
@@ -4323,88 +4598,13 @@ function autoLayout(saveResult = true) {
 }
 
 // -- Form / editor helpers --------------------------------------------
-function suggestParentOrder(currentId, alreadyParentId = '') {
-  const cur = person(currentId);
-  const curSurname = surnameOf(cur?.name);
-  const already = alreadyParentId ? person(alreadyParentId) : null;
-  const partner = primaryPartner(already);
-  const descendants = currentId ? descendantsOf(currentId) : new Set();
-
-  return data.people
-    .filter(p => p.id !== currentId && !descendants.has(p.id))
-    .map(p => {
-      let score = 0;
-      if (partner && p.id === partner.id) score += 1000;
-      if (curSurname && surnameOf(p.name) === curSurname) score += 120;
-      if (cur?.parents?.includes(p.id)) score += 500;
-      if (partnerIds(cur).includes(p.id)) score -= 150;
-      return { p, score };
-    })
-    .sort((a,b) => b.score - a.score || String(a.p.name).localeCompare(String(b.p.name)))
-    .map(x => x.p);
-}
-
-function fillSelects(
-  current,
-  selectedParent1 = $('parent1')?.value || '',
-  selectedParent2 = $('parent2')?.value || '',
-  selectedPartner = $('partner')?.value || ''
-) {
-  const opt = arr => '<option value="">—</option>' + arr.map(p => `<option value="${esc(p.id)}">${esc(selectPersonLabel(p))}</option>`).join('');
-  const partnerOpt = arr => '<option value="">— Partner/in hinzufügen —</option>' + arr.map(p => `<option value="${esc(p.id)}">${esc(selectPersonLabel(p, 'partner'))}</option>`).join('');
-  $('parent1').innerHTML = opt(suggestParentOrder(current, ''));
-  $('parent1').value = selectedParent1;
-  $('parent2').innerHTML = opt(suggestParentOrder(current, selectedParent1));
-  $('parent2').value = selectedParent2;
-  const existingPartners = new Set(partnerIds(person(current)).filter(id => !removedPartnerDraft.has(id)));
-  $('partner').innerHTML = partnerOpt(data.people.filter(p => p.id !== current && !existingPartners.has(p.id)).sort((a,b) => fullName(a).localeCompare(fullName(b))));
-  $('partner').value = selectedPartner;
-}
-
-function renderCurrentPartners(p) {
-  const container = $('currentPartners');
-  if (!container) return;
-  const partners = partnerIds(p).filter(id => !removedPartnerDraft.has(id)).map(person).filter(Boolean);
-  container.innerHTML = partners.length
-    ? partners.map(partner => `
-      <span class="partnerChip">
-        <span class="partnerChipAvatar" style="--family-color:${esc(familyColor(familyKey(partner)))}">${avatarHtml(partner)}</span>
-        <span class="partnerChipName">${esc(fullName(partner) || partner.name)}</span>
-        ${editMode
-          ? `<input class="partnerMarriageDate" data-marriage-partner="${esc(partner.id)}" value="${esc(marriageDraft[partner.id] || '')}" placeholder="Heiratsdatum" aria-label="Heiratsdatum mit ${esc(fullName(partner) || partner.name)}" />`
-          : marriageDraft[partner.id] ? `<small>verh. ${esc(formatBirthDate(marriageDraft[partner.id]))}</small>` : ''}
-        ${editMode ? `<button type="button" class="partnerRemove" data-remove-partner="${esc(partner.id)}" aria-label="Beziehung zu ${esc(fullName(partner) || partner.name)} entfernen">×</button>` : ''}
-      </span>
-    `).join('')
-    : '<span class="partnerEmpty">Noch keine Partner/in verknüpft</span>';
-}
 
 function isValidDateInput(value) {
   return !String(value || '').trim() || parseBirthValue(value) !== null;
 }
 
-function validatePersonForm(currentId, parents, partnerId, born, died) {
+function validatePersonForm(born, died) {
   const errors = [];
-  const descendants = currentId ? descendantsOf(currentId) : new Set();
-
-  if (parents.length !== new Set(parents).size) {
-    errors.push({ fields: ['parent1', 'parent2'], message: 'Bitte zwei unterschiedliche Elternteile auswählen.' });
-  }
-  if (currentId && parents.includes(currentId)) {
-    errors.push({ fields: ['parent1', 'parent2'], message: 'Eine Person kann nicht ihr eigener Elternteil sein.' });
-  }
-  if (currentId && partnerId === currentId) {
-    errors.push({ fields: ['partner'], message: 'Eine Person kann nicht ihr eigener Partner sein.' });
-  }
-  if (partnerId && parents.includes(partnerId)) {
-    errors.push({ fields: ['partner', 'parent1', 'parent2'], message: 'Partner/in und Elternteil dürfen nicht dieselbe Person sein.' });
-  }
-  if (currentId && partnerId && descendants.has(partnerId)) {
-    errors.push({ fields: ['partner'], message: 'Nachkommen können nicht als Partner/in eingetragen werden.' });
-  }
-  if (currentId && parents.some(id => descendants.has(id))) {
-    errors.push({ fields: ['parent1', 'parent2'], message: 'Nachkommen können nicht als Elternteil eingetragen werden.' });
-  }
   if (!isValidDateInput(born)) {
     errors.push({ fields: ['born'], message: 'Geburtsdatum bitte als Jahr, MM.JJJJ, TT.MM. oder TT.MM.JJJJ eingeben.' });
   }
@@ -4481,12 +4681,6 @@ function showFormValidationErrors(errors) {
   return false;
 }
 
-function unlinkPartner(id) {
-  const p = person(id);
-  if (!p) return;
-  for (const partnerId of partnerIds(p)) removePartnerLink(p, partnerId, true);
-}
-
 function linkPartners(p, q, reciprocal = true) {
   if (!p || !q || p.id === q.id) return;
   addPartnerLink(p, q, reciprocal);
@@ -4540,13 +4734,7 @@ function formSnapshot() {
     pool: $('inPool')?.checked || false,
     mainRoot: $('mainRoot')?.checked || false,
     note: $('note')?.value || '',
-    confidence: $('confidence')?.value || 'high',
-    parent1: $('parent1')?.value || '',
-    parent2: $('parent2')?.value || '',
-    partner: $('partner')?.value || '',
-    newMarriageDate: $('partnerMarriageDate')?.value || '',
-    marriages: marriageDraft,
-    removedPartners: [...removedPartnerDraft].sort()
+    confidence: $('confidence')?.value || 'high'
   });
 }
 
@@ -4674,8 +4862,6 @@ function clearPersonSheetDraft() {
   sheetSnapshot = '';
   imageDraft = '';
   mentionsDraft = [];
-  removedPartnerDraft = new Set();
-  marriageDraft = {};
 }
 
 function populatePersonForm(p, id) {
@@ -4693,18 +4879,13 @@ function populatePersonForm(p, id) {
   imageDraft = p?.image || '';
   updateImagePreview();
   mentionsDraft = (p?.mentions || []).map(item => ({ ...item }));
-  removedPartnerDraft = new Set();
-  marriageDraft = Object.fromEntries(partnerIds(p).map(partnerId => [partnerId, marriageDateFor(p, partnerId)]));
   renderMentionEditor();
   $('note').value = p?.note || '';
   $('confidence').value = p?.confidence || 'high';
   $('inPool').checked = !!p?.pool;
   $('mainRoot').checked = !!p && isMainRoot(p.id);
-  fillSelects(id, p?.parents?.[0] || '', p?.parents?.[1] || '');
-  $('partnerMarriageDate').value = '';
-  renderCurrentPartners(p);
+  renderRelationshipFormSummary(p);
   applyPersonFieldSettings();
-  $('partnerMarriageDate').disabled = !$('partner').value;
   $('clearImageBtn').disabled = !imageDraft;
   $('inPool').title = p ? `${poolBranchIds(p.id).size} Person(en) in diesem Zweig` : '';
   sheetSnapshot = formSnapshot();
@@ -4844,13 +5025,11 @@ async function saveSheet() {
   const died = $('died').value.trim();
   const link = $('personLink').value.trim();
   const confidence = $('confidence').value || 'high';
-  const parents = [$('parent1').value, $('parent2').value].filter(Boolean);
-  const newPartner = $('partner').value;
-  const newMarriageDate = $('partnerMarriageDate').value.trim();
+  const parents = p ? [...(p.parents || [])] : [];
   const keepBranchInPool = $('inPool').checked;
   const makeMainRoot = $('mainRoot').checked;
 
-  const validationErrors = validatePersonForm(selected, parents, newPartner, born, died);
+  const validationErrors = validatePersonForm(born, died);
   if (makeMainRoot && keepBranchInPool) {
     validationErrors.push({
       fields: ['inPool', 'mainRoot'],
@@ -4861,21 +5040,6 @@ async function saveSheet() {
     validationErrors.push({
       fields: ['mainRoot'],
       message: 'Es können höchstens zwei Hauptwurzeln festgelegt werden.'
-    });
-  }
-  Object.entries(marriageDraft).forEach(([partnerId, value]) => {
-    if (isValidDateInput(value)) return;
-    const marriageInput = [...document.querySelectorAll('[data-marriage-partner]')]
-      .find(input => input.dataset.marriagePartner === partnerId);
-    validationErrors.push({
-      elements: [marriageInput].filter(Boolean),
-      message: 'Heiratsdatum bitte als Jahr, MM.JJJJ oder TT.MM.JJJJ eingeben.'
-    });
-  });
-  if (newPartner && !isValidDateInput(newMarriageDate)) {
-    validationErrors.push({
-      fields: ['partnerMarriageDate'],
-      message: 'Heiratsdatum bitte als Jahr, MM.JJJJ oder TT.MM.JJJJ eingeben.'
     });
   }
   if (!showFormValidationErrors(validationErrors)) return false;
@@ -4919,32 +5083,6 @@ async function saveSheet() {
     rootIds.push(p.id);
   } else if (!makeMainRoot) {
     rootIds = rootIds.filter(id => id !== p.id);
-  }
-  for (const partnerId of removedPartnerDraft) removePartnerLink(p, partnerId, true);
-  for (const [partnerId, married] of Object.entries(marriageDraft)) {
-    const q = person(partnerId);
-    if (q && !removedPartnerDraft.has(partnerId)) setMarriageDate(p, q, married, true);
-  }
-  parents.map(person).filter(Boolean).forEach((parent, index) => {
-    if (parent.pool && !keepBranchInPool) {
-      parent.x = Math.round(p.x + (index === 0 ? -120 : 120));
-      parent.y = Math.round(p.y - 260);
-      setPoolBranch(parent.id, false);
-    }
-  });
-
-  if (newPartner) {
-    const q = person(newPartner);
-    if (q && !partnerIds(p).includes(q.id)) {
-      if (q.pool && !keepBranchInPool) {
-        q.x = Math.round(p.x + 230);
-        q.y = Math.round(p.y);
-        setPoolBranch(q.id, false);
-      }
-      const reciprocal = !partnerIds(p).length || confirm('Partner/in auch bei der anderen Person eintragen?\n\nOK = gegenseitig verknüpfen\nAbbrechen = nur bei dieser Person eintragen');
-      linkPartners(p, q, reciprocal);
-      setMarriageDate(p, q, newMarriageDate, reciprocal);
-    }
   }
   setPoolBranch(p.id, keepBranchInPool);
 
@@ -5982,6 +6120,41 @@ $('exportDialog')?.addEventListener('change', updateExportDialog);
 $('exportFilename')?.addEventListener('input', () => {
   exportFilenameTouched = true;
 });
+$('relationshipClose')?.addEventListener('click', () => closeRelationshipEditor());
+$('relationshipLayer')?.addEventListener('click', event => {
+  if (event.target === $('relationshipLayer')) closeRelationshipEditor();
+});
+$('relationshipLayer')?.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return;
+  event.preventDefault();
+  event.stopPropagation();
+  closeRelationshipEditor();
+});
+$('relationshipType')?.addEventListener('change', event => {
+  if (!relationshipEditorState) return;
+  relationshipEditorState.type = event.target.value;
+  updateRelationshipModeView();
+});
+document.querySelectorAll('input[name="relationshipMode"]').forEach(input => {
+  input.addEventListener('change', updateRelationshipModeView);
+});
+$('relationshipSearch')?.addEventListener('input', renderRelationshipResults);
+$('relationshipResults')?.addEventListener('click', event => {
+  const button = event.target.closest('[data-relationship-target]');
+  if (!button || !relationshipEditorState) return;
+  relationshipEditorState.targetId = button.dataset.relationshipTarget;
+  setRelationshipError('');
+  renderRelationshipResults();
+});
+$('relationshipStep1Next')?.addEventListener('click', () => {
+  if (!relationshipEditorState) return;
+  relationshipEditorState.type = $('relationshipType').value;
+  showRelationshipStep(2);
+});
+$('relationshipStep2Back')?.addEventListener('click', () => showRelationshipStep(1));
+$('relationshipStep2Next')?.addEventListener('click', prepareRelationshipSummary);
+$('relationshipStep3Back')?.addEventListener('click', () => showRelationshipStep(2));
+$('relationshipConfirm')?.addEventListener('click', confirmRelationshipChange);
 document.querySelectorAll('.formSectionToggle').forEach(button => {
   const body = $(button.getAttribute('aria-controls'));
   if (!body) return;
@@ -5991,12 +6164,6 @@ document.querySelectorAll('.formSectionToggle').forEach(button => {
     button.setAttribute('aria-expanded', String(!expanded));
     body.hidden = expanded;
   });
-});
-$('parent1').addEventListener('change', () => {
-  const old = $('parent2').value;
-  const arr = suggestParentOrder(selected, $('parent1').value);
-  $('parent2').innerHTML = '<option value="">—</option>' + arr.map(p => `<option value="${esc(p.id)}">${esc(selectPersonLabel(p))}</option>`).join('');
-  $('parent2').value = old;
 });
 
 $('saveBtn').addEventListener('click', () => { saveSheet(); });
@@ -6034,24 +6201,6 @@ $('mentionRows')?.addEventListener('click', e => {
   if (!button || !(editMode || !person(selected))) return;
   mentionsDraft.splice(Number(button.dataset.removeMention), 1);
   renderMentionEditor();
-});
-$('currentPartners')?.addEventListener('click', e => {
-  const button = e.target.closest('[data-remove-partner]');
-  if (!button || !editMode || !selected) return;
-  removedPartnerDraft.add(button.dataset.removePartner);
-  const parent1 = $('parent1').value;
-  const parent2 = $('parent2').value;
-  fillSelects(selected, parent1, parent2);
-  renderCurrentPartners(person(selected));
-});
-$('currentPartners')?.addEventListener('input', e => {
-  const partnerId = e.target.dataset.marriagePartner;
-  if (!partnerId || !editMode) return;
-  marriageDraft[partnerId] = e.target.value;
-});
-$('partner')?.addEventListener('change', () => {
-  $('partnerMarriageDate').disabled = !(editMode || !person(selected)) || !$('partner').value;
-  if (!$('partner').value) $('partnerMarriageDate').value = '';
 });
 overviewButton?.addEventListener('click', () => openOverview(overviewButton));
 $('overviewCloseBtn')?.addEventListener('click', () => closeOverview());
@@ -6151,9 +6300,15 @@ $('quickFocus').addEventListener('click', () => {
   if (focusMode) setFocusMode(false);
   else if (selected) setFocusMode(true, selected);
 });
-$('quickChild').addEventListener('click', () => selected && addChildFor(selected));
-$('quickPartner').addEventListener('click', () => selected && addPartnerFor(selected));
-$('quickParents').addEventListener('click', () => selected && addParentsFor(selected));
+[$('quickChild'), $('quickPartner'), $('quickParents')].filter(Boolean).forEach(button => {
+  button.addEventListener('click', event => {
+    if (!selected) return;
+    openRelationshipEditor(selected, {
+      type: event.currentTarget.dataset.relationshipType,
+      trigger: event.currentTarget
+    });
+  });
+});
 
 $('deleteBtn').addEventListener('click', event => {
   if (!editMode) return;
@@ -6506,6 +6661,8 @@ if (window.location?.search?.includes('ux-debug=1')) {
     clearCommandHistory,
     analyzeDeletionImpact: (targetId, dataset = data, roots = rootIds) =>
       analyzeDeletionImpact(dataset, targetId, roots),
+    wouldCreateParentCycle,
+    validateRelationshipChoice,
     getDataSnapshot: () => cloneCommandValue({
       people: data.people,
       rootIds,

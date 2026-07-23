@@ -324,6 +324,78 @@
                     </div>
                 </section>
             </div>
+            <div class="relationshipLayer hidden" id="relationshipLayer" data-testid="relationship-layer">
+                <section class="relationshipDialog" id="relationshipDialog" role="dialog" aria-modal="true"
+                    aria-hidden="true" aria-labelledby="relationshipTitle" aria-describedby="relationshipIntro"
+                    data-testid="relationship-dialog">
+                    <div class="relationshipTop">
+                        <div>
+                            <p class="relationshipEyebrow" id="relationshipStepLabel">Schritt 1 von 3</p>
+                            <h2 id="relationshipTitle">Beziehung ändern</h2>
+                        </div>
+                        <button type="button" class="pill" id="relationshipClose"
+                            data-testid="relationship-close">Schließen</button>
+                    </div>
+                    <p id="relationshipIntro">Die Beziehung wird erst nach der Zusammenfassung gespeichert.</p>
+                    <p class="relationshipError hidden" id="relationshipError" role="alert"></p>
+
+                    <section class="relationshipStep" data-relationship-step="1">
+                        <label for="relationshipType">Welche Beziehung soll ergänzt werden?</label>
+                        <select id="relationshipType" data-testid="relationship-type">
+                            <option value="parent">Elternteil</option>
+                            <option value="child">Kind</option>
+                            <option value="partner">Partner/in</option>
+                        </select>
+                        <div class="relationshipActions">
+                            <button type="button" class="pill primary" id="relationshipStep1Next">Person wählen</button>
+                        </div>
+                    </section>
+
+                    <section class="relationshipStep hidden" data-relationship-step="2">
+                        <fieldset class="relationshipMode">
+                            <legend>Person auswählen</legend>
+                            <label><input type="radio" name="relationshipMode" value="existing" checked />
+                                Vorhandene Person</label>
+                            <label><input type="radio" name="relationshipMode" value="new" />
+                                Neue Person</label>
+                        </fieldset>
+                        <div id="relationshipExistingFields">
+                            <label for="relationshipSearch">Person suchen</label>
+                            <input id="relationshipSearch" data-testid="relationship-search"
+                                placeholder="Name, Jahr oder Ort" autocomplete="off" />
+                            <div class="relationshipResults" id="relationshipResults"
+                                data-testid="relationship-results"></div>
+                        </div>
+                        <div class="relationshipNewFields hidden" id="relationshipNewFields">
+                            <div class="grid">
+                                <div class="field"><label for="relationshipFirstName">Erster Name</label>
+                                    <input id="relationshipFirstName" /></div>
+                                <div class="field"><label for="relationshipLastName">Familienname</label>
+                                    <input id="relationshipLastName" /></div>
+                            </div>
+                        </div>
+                        <div class="field relationshipMarriage hidden" id="relationshipMarriage">
+                            <label for="relationshipMarriageDate">Heiratsdatum, optional</label>
+                            <input id="relationshipMarriageDate"
+                                placeholder="z. B. 12.05.1972 oder 1972" />
+                        </div>
+                        <div class="relationshipActions">
+                            <button type="button" class="pill" id="relationshipStep2Back">Zurück</button>
+                            <button type="button" class="pill primary" id="relationshipStep2Next">Zusammenfassung</button>
+                        </div>
+                    </section>
+
+                    <section class="relationshipStep hidden" data-relationship-step="3">
+                        <div class="relationshipSummary" id="relationshipSummary"
+                            data-testid="relationship-summary"></div>
+                        <div class="relationshipActions">
+                            <button type="button" class="pill" id="relationshipStep3Back">Zurück</button>
+                            <button type="button" class="pill primary" id="relationshipConfirm"
+                                data-testid="relationship-confirm">Beziehung speichern</button>
+                        </div>
+                    </section>
+                </section>
+            </div>
             <div class="exportLayer hidden" id="exportLayer" data-testid="export-layer">
                 <section class="exportDialog" id="exportDialog" role="dialog" aria-modal="true"
                     aria-hidden="true" aria-labelledby="exportTitle" data-testid="export-dialog">
@@ -516,20 +588,14 @@
                             <span>Beziehungen</span><span class="formSectionChevron" aria-hidden="true">⌄</span>
                         </button>
                         <div class="formSectionBody" id="formSectionRelations" hidden>
+                            <p class="relationshipFormSummary" id="relationshipFormSummary"></p>
                             <div class="actions editQuickActions">
-                                <button type="button" class="pill" id="quickChild" aria-label="Kind hinzufügen">+ Kind</button>
-                                <button type="button" class="pill" id="quickPartner"
-                                    aria-label="Neue Partnerin oder neuen Partner hinzufügen">+ Neue Partner/in</button>
                                 <button type="button" class="pill" id="quickParents"
-                                    aria-label="Eltern hinzufügen">+ Eltern</button>
-                            </div>
-                            <div class="grid">
-                                <div class="field"><label for="parent1">Elternteil 1</label><select id="parent1"></select></div>
-                                <div class="field"><label for="parent2">Elternteil 2</label><select id="parent2"></select></div>
-                                <div class="field full"><label>Partner/innen</label><div class="partnerChips" id="currentPartners"></div></div>
-                                <div class="field full"><label for="partner">Weitere / frühere Partnerperson ergänzen</label><select id="partner"></select></div>
-                                <div class="field full"><label for="partnerMarriageDate">Heiratsdatum zur neuen Partnerperson</label><input id="partnerMarriageDate"
-                                        placeholder="z. B. 12.05.1972 oder 1972" /></div>
+                                    data-relationship-type="parent">Elternteil hinzufügen</button>
+                                <button type="button" class="pill" id="quickChild"
+                                    data-relationship-type="child">Kind hinzufügen</button>
+                                <button type="button" class="pill" id="quickPartner"
+                                    data-relationship-type="partner">Partner/in hinzufügen</button>
                             </div>
                         </div>
                     </section>
