@@ -127,6 +127,12 @@ let persistenceSaveChain = Promise.resolve();
 let persistenceNoticeShown = false;
 let persistenceDbPromise = null;
 let persistenceWriteChain = Promise.resolve();
+const commandHistoryLimit = 50;
+const commandHistoryByteLimit = 8 * 1024 * 1024;
+let commandHistory = [];
+let commandHistoryIndex = 0;
+let commandHistoryBytes = 0;
+let commandHistoryAction = '';
 let renderVirtualizationActive = false;
 let busyDepth = 0;
 let focusLayoutRestore = null;
@@ -380,6 +386,9 @@ const uiState = {
       hasBusyState: busyDepth > 0,
       persistenceNoticeShown
     };
+  },
+  get commands() {
+    return getCommandHistoryState();
   }
 };
 
@@ -397,6 +406,181 @@ function uiInvariants() {
     dataPersistenceInvariant: persistenceMode === 'memory' || hasPersistedTreeData || !!workingFileHandle || localStorage.getItem(storeKey),
     rootLimitInvariant: rootIds.length <= 2
   };
+}
+
+function cloneCommandValue(value) {
+  if (value === null || value === undefined) return value;
+  return JSON.parse(JSON.stringify(value));
+}
+function captureCommandState() {
+  return {
+    people: new Map(data.people.map((entry, index) => [
+      entry.id,
+      { index, json: JSON.stringify(entry) }
+    ])),
+    order: data.people.map(entry => entry.id),
+    rootIds: [...rootIds],
+    layoutMode,
+    savedClassicPositions: savedClassicPositions
+      ? [...savedClassicPositions.entries()].map(([id, position]) => [id, { ...position }])
+      : null
+  };
+}
+function sameCommandValue(a, b) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+function createDataCommand(label, before, after) {
+  const ids = new Set([...before.people.keys(), ...after.people.keys()]);
+  const people = [...ids].sort().flatMap(id => {
+    const previous = before.people.get(id)?.json;
+    const next = after.people.get(id)?.json;
+    if (previous === next) return [];
+    return [{
+      id,
+      before: previous ? JSON.parse(previous) : null,
+      after: next ? JSON.parse(next) : null
+    }];
+  });
+  const order = sameCommandValue(before.order, after.order)
+    ? null
+    : { before: before.order, after: after.order };
+  const roots = sameCommandValue(before.rootIds, after.rootIds)
+    ? null
+    : { before: before.rootIds, after: after.rootIds };
+  const layout = before.layoutMode === after.layoutMode
+    && sameCommandValue(before.savedClassicPositions, after.savedClassicPositions)
+    ? null
+    : {
+      before: {
+        mode: before.layoutMode,
+        classicPositions: before.savedClassicPositions
+      },
+      after: {
+        mode: after.layoutMode,
+        classicPositions: after.savedClassicPositions
+      }
+    };
+  if (!people.length && !order && !roots && !layout) return null;
+  const command = { label, people, order, roots, layout };
+  command.bytes = JSON.stringify(command).length * 2;
+  command.do = () => applyDataCommand(command, 'after');
+  command.undo = () => applyDataCommand(command, 'before');
+  return command;
+}
+function getCommandHistoryState() {
+  return {
+    canUndo: commandHistoryIndex > 0,
+    canRedo: commandHistoryIndex < commandHistory.length,
+    undoLabel: commandHistoryIndex > 0 ? commandHistory[commandHistoryIndex - 1].label : '',
+    redoLabel: commandHistoryIndex < commandHistory.length ? commandHistory[commandHistoryIndex].label : '',
+    length: commandHistory.length,
+    index: commandHistoryIndex,
+    bytes: commandHistoryBytes,
+    lastAction: commandHistoryAction
+  };
+}
+function notifyCommandHistoryChanged(action = '') {
+  commandHistoryAction = action;
+  window.dispatchEvent(new CustomEvent('commandhistorychange', {
+    detail: getCommandHistoryState()
+  }));
+}
+function clearCommandHistory() {
+  commandHistory = [];
+  commandHistoryIndex = 0;
+  commandHistoryBytes = 0;
+  notifyCommandHistoryChanged('');
+}
+function recordDataCommand(label, before) {
+  const command = createDataCommand(label, before, captureCommandState());
+  if (!command) return null;
+  if (commandHistoryIndex < commandHistory.length) {
+    commandHistory
+      .splice(commandHistoryIndex)
+      .forEach(entry => { commandHistoryBytes -= entry.bytes || 0; });
+  }
+  commandHistory.push(command);
+  commandHistoryIndex = commandHistory.length;
+  commandHistoryBytes += command.bytes || 0;
+  while (commandHistory.length > 1 && (
+    commandHistory.length > commandHistoryLimit
+    || commandHistoryBytes > commandHistoryByteLimit
+  )) {
+    const removed = commandHistory.shift();
+    commandHistoryBytes -= removed.bytes || 0;
+    commandHistoryIndex = Math.max(0, commandHistoryIndex - 1);
+  }
+  notifyCommandHistoryChanged(`Ausgeführt: ${label}`);
+  return command;
+}
+function commitDataCommand(label, before) {
+  const command = recordDataCommand(label, before);
+  save();
+  return command;
+}
+function applyDataCommand(command, direction) {
+  const current = new Map(data.people.map(entry => [entry.id, entry]));
+  for (const change of command.people) {
+    const target = change[direction];
+    if (target === null) current.delete(change.id);
+    else current.set(change.id, cloneCommandValue(target));
+  }
+  const targetOrder = command.order?.[direction] || data.people.map(entry => entry.id);
+  const orderedPeople = targetOrder.map(id => current.get(id)).filter(Boolean);
+  const orderedIds = new Set(targetOrder);
+  data.people = [...orderedPeople, ...[...current.values()].filter(entry => !orderedIds.has(entry.id))];
+  if (command.roots) rootIds = [...command.roots[direction]];
+  if (command.layout) {
+    layoutMode = command.layout[direction].mode;
+    const classicPositions = command.layout[direction].classicPositions;
+    savedClassicPositions = classicPositions
+      ? new Map(classicPositions.map(([id, position]) => [id, { ...position }]))
+      : null;
+  }
+  data.rootIds = rootIds.filter(id => current.has(id)).slice(0, 2);
+  rootIds = [...data.rootIds];
+  if (selected && !current.has(selected)) selected = null;
+  if (focusId && !current.has(focusId)) {
+    focusId = null;
+    focusMode = false;
+  }
+  rebuildDataIndexes();
+  save();
+  updateLayoutButton();
+  updatePoolButton();
+  updateRootButton();
+  updateFocusButton();
+  render();
+  if ($('sideNav')?.classList.contains('open')) renderNavigator();
+  if ($('listSheet')?.classList.contains('open')) renderListEditor();
+  if ($('scrollSheet')?.classList.contains('open')) renderScrollView();
+  if ($('checkSheet')?.classList.contains('open')) runChecks();
+  if ($('sheet')?.classList.contains('open')) {
+    if (selected && person(selected)) openSheet(selected, { mode: 'detail' });
+    else {
+      personSheetMode = 'closed';
+      clearPersonSheetDraft();
+      setDialogVisibility($('sheet'), false);
+      showBackdrop(false);
+    }
+  }
+  return true;
+}
+function undoCommand() {
+  if (commandHistoryIndex <= 0) return false;
+  const command = commandHistory[commandHistoryIndex - 1];
+  commandHistoryIndex -= 1;
+  command.undo();
+  notifyCommandHistoryChanged(`Rückgängig: ${command.label}`);
+  return command.label;
+}
+function redoCommand() {
+  if (commandHistoryIndex >= commandHistory.length) return false;
+  const command = commandHistory[commandHistoryIndex];
+  command.do();
+  commandHistoryIndex += 1;
+  notifyCommandHistoryChanged(`Wiederholt: ${command.label}`);
+  return command.label;
 }
 
 function loadPersonFieldSettings() {
@@ -705,6 +889,7 @@ async function runBusy(label, task) {
   }
 }
 function applyLoadedData(imported, { fitResult = true } = {}) {
+  clearCommandHistory();
   data = imported;
   rebuildDataIndexes();
   const preferFocus = nonPoolPeople.length > 1200;
@@ -1100,6 +1285,7 @@ function dismissCurrentHelpHint() {
   renderCurrentHelpHint({ focusClose: true });
 }
 function initializeEmptyTreeModel() {
+  clearCommandHistory();
   data = normalize({ people: [] });
   rebuildDataIndexes();
   workingFileHandle = null;
@@ -2495,6 +2681,7 @@ function applyRadialLayout() {
   }
 }
 function setLayoutMode(next) {
+  const commandBefore = captureCommandState();
   if (next !== 'classic') {
     captureClassicPositions();
     restoreClassicPositions();
@@ -2504,6 +2691,7 @@ function setLayoutMode(next) {
   if (layoutMode === 'tree') applyTreeLayout();
   if (layoutMode === 'radial') applyRadialLayout();
   updateLayoutButton();
+  commitDataCommand(`Layout ${next === 'classic' ? 'Klassisch' : next === 'tree' ? 'Baum' : 'Radial'}`, commandBefore);
   render();
   fit();
 }
@@ -2742,7 +2930,15 @@ function onNodePointerDown(e) {
     const member = person(branchId);
     return [branchId, { x: member.x, y: member.y }];
   }));
-  drag = { id, sx: e.clientX, sy: e.clientY, positions, branch: e.shiftKey, moved: false };
+  drag = {
+    id,
+    sx: e.clientX,
+    sy: e.clientY,
+    positions,
+    branch: e.shiftKey,
+    moved: false,
+    commandBefore: captureCommandState()
+  };
   if (drag.branch) {
     nodes.querySelectorAll('.person').forEach(el => el.classList.toggle('branchDragging', branchIds.has(el.dataset.id)));
   }
@@ -2766,8 +2962,9 @@ window.addEventListener('pointermove', e => {
 
 window.addEventListener('pointerup', e => {
   if (!drag) return;
-  const id = drag.id;
-  const moved = drag.moved;
+  const dragState = drag;
+  const id = dragState.id;
+  const moved = dragState.moved;
   drag = null;
   nodes.querySelectorAll('.branchDragging').forEach(el => el.classList.remove('branchDragging'));
   if (moved) {
@@ -2775,7 +2972,7 @@ window.addEventListener('pointerup', e => {
       cancelAnimationFrame(renderFrame);
       renderFrame = null;
     }
-    save();
+    commitDataCommand(dragState.branch ? 'Zweig verschieben' : 'Person verschieben', dragState.commandBefore);
     render();
     suppressOpenUntil = Date.now() + 450;
     return;
@@ -2854,15 +3051,16 @@ window.addEventListener('pointerup', e => {
     pan = null;
     return;
   }
-  const id = drag.id;
-  const moved = drag.moved;
+  const dragState = drag;
+  const id = dragState.id;
+  const moved = dragState.moved;
   drag = null;
   if (moved) {
     if (renderFrame) {
       cancelAnimationFrame(renderFrame);
       renderFrame = null;
     }
-    save();
+    commitDataCommand(dragState.branch ? 'Zweig verschieben' : 'Person verschieben', dragState.commandBefore);
     render();
     suppressOpenUntil = Date.now() + 450;
     return;
@@ -3131,6 +3329,7 @@ function estimatedGenerationYear(p, depth, siblingIndex){
 function autoLayout(saveResult = true) {
   const activePeople = nonPoolPeople;
   if (!activePeople.length) return;
+  const commandBefore = saveResult ? captureCommandState() : null;
   const largeDataset = activePeople.length > 1200;
 
   const byId = new Map(activePeople.map(p => [p.id, p]));
@@ -4042,7 +4241,7 @@ function autoLayout(saveResult = true) {
 
   if (saveResult) {
     clearGeneratedLayoutState();
-    save();
+    commitDataCommand('Auto-Layout anwenden', commandBefore);
   }
   render();
   fit();
@@ -4561,6 +4760,7 @@ function resetGeneratedLayout() {
 async function saveSheet() {
   const saveTrigger = document.activeElement;
   let p = person(selected);
+  const wasExistingPerson = !!p;
   const firstName = $('firstName').value.trim();
   const birthName = $('birthName').value.trim();
   const lastName = $('lastName').value.trim() || birthName;
@@ -4615,6 +4815,7 @@ async function saveSheet() {
     });
     if (decision !== 'confirm') return false;
   }
+  const commandBefore = captureCommandState();
 
   if (!p) {
     const pos = pendingNewPos || screenToWorld(main.getBoundingClientRect().left + main.clientWidth / 2, main.getBoundingClientRect().top + main.clientHeight / 2);
@@ -4674,7 +4875,7 @@ async function saveSheet() {
 
   withPreservedView(() => {
     resetGeneratedLayout();
-    if (!save()) return;
+    commitDataCommand(wasExistingPerson ? 'Person speichern' : 'Person anlegen', commandBefore);
     render();
     if($('sideNav')?.classList.contains('open')) renderNavigator();
     if($('listSheet')?.classList.contains('open')) renderListEditor();
@@ -4692,6 +4893,7 @@ function newPersonNear(base, dx, dy) {
 }
 function addChildFor(id) {
   const p = person(id); if (!p) return;
+  const commandBefore = captureCommandState();
   const child = newPersonNear(p, 0, 260);
   child.pool = !!p.pool;
   const inheritedName = String(p.lastName || p.birthName || fullName(p).trim().split(/\s+/).slice(-1)[0] || '').trim();
@@ -4703,20 +4905,31 @@ function addChildFor(id) {
   const partner = primaryPartner(p);
   if (partner) child.parents.push(partner.id);
   data.people.push(child);
-  resetGeneratedLayout(); save(); render(); if($('sideNav')?.classList.contains('open')) renderNavigator(); openSheet(child.id, { mode: 'edit' });
+  resetGeneratedLayout();
+  commitDataCommand('Kind anlegen', commandBefore);
+  render();
+  if($('sideNav')?.classList.contains('open')) renderNavigator();
+  openSheet(child.id, { mode: 'edit' });
 }
 function addPartnerFor(id) {
   const p = person(id); if (!p) return;
+  const commandBefore = captureCommandState();
   const q = newPersonNear(p, 230, 0);
   q.pool = !!p.pool;
   q.name = 'Partner/in von ' + p.name;
   linkPartners(p, q);
   data.people.push(q);
-  resetGeneratedLayout(); save(); render(); if($('sideNav')?.classList.contains('open')) renderNavigator(); openSheet(q.id, { mode: 'edit' });
+  resetGeneratedLayout();
+  commitDataCommand('Partnerperson anlegen', commandBefore);
+  render();
+  if($('sideNav')?.classList.contains('open')) renderNavigator();
+  openSheet(q.id, { mode: 'edit' });
 }
 function addParentsFor(id) {
   const p = person(id); if (!p) return;
+  const commandBefore = captureCommandState();
   const a = newPersonNear(p, -120, -260);
+  data.people.push(a);
   const b = newPersonNear(p, 120, -260);
   a.pool = !!p.pool;
   b.pool = !!p.pool;
@@ -4724,8 +4937,43 @@ function addParentsFor(id) {
   b.name = 'Elternteil 2 von ' + p.name;
   linkPartners(a, b);
   p.parents = [a.id, b.id];
-  data.people.push(a, b);
-  resetGeneratedLayout(); save(); render(); if($('sideNav')?.classList.contains('open')) renderNavigator(); openSheet(a.id, { mode: 'edit' });
+  data.people.push(b);
+  resetGeneratedLayout();
+  commitDataCommand('Eltern anlegen', commandBefore);
+  render();
+  if($('sideNav')?.classList.contains('open')) renderNavigator();
+  openSheet(a.id, { mode: 'edit' });
+}
+function deletePersonWithCommand(id) {
+  const target = person(id);
+  if (!target) return false;
+  const commandBefore = captureCommandState();
+  if (focusId === id) {
+    focusMode = false;
+    focusId = null;
+    updateFocusButton();
+  }
+  if (isMainRoot(id)) {
+    rootIds = rootIds.filter(rootId => rootId !== id);
+    updateRootButton();
+  }
+  data.people = data.people
+    .filter(entry => entry.id !== id)
+    .map(entry => {
+      const partners = partnerIds(entry).filter(partnerId => partnerId !== id);
+      const partnerDetails = { ...(entry.partnerDetails || {}) };
+      delete partnerDetails[id];
+      return {
+        ...entry,
+        parents: (entry.parents || []).filter(parentId => parentId !== id),
+        partner: partners[0] || '',
+        partners,
+        partnerDetails
+      };
+    });
+  if (activeFamily && !data.people.some(entry => matchesFamily(entry, activeFamily))) activeFamily = '';
+  commitDataCommand('Person löschen', commandBefore);
+  return true;
 }
 
 let listSortMode = 'family';
@@ -5017,12 +5265,13 @@ function dismissRootSelection() {
 function chooseStartRoot(id) {
   const chosen = person(id);
   if (!chosen || chosen.pool) return false;
+  const commandBefore = captureCommandState();
   const retainedRoots = rootIds
     .filter(existingId => existingId !== chosen.id && person(existingId) && !person(existingId).pool);
   rootIds = [chosen.id, ...retainedRoots].slice(0, 2);
   temporaryRootId = '';
   rootSelectionDeferredForDataset = false;
-  save();
+  commitDataCommand('Startperson festlegen', commandBefore);
   closeRootSelection();
   selected = chosen.id;
   render();
@@ -5553,7 +5802,13 @@ function renderListEditor(){
       closeListEditor();
       if(act === 'activate') {
         const p = person(id);
-        if (p) { setPoolBranch(p.id, false); save(); updatePoolButton(); render(); }
+        if (p) {
+          const commandBefore = captureCommandState();
+          setPoolBranch(p.id, false);
+          commitDataCommand('Aus Vorrat eingliedern', commandBefore);
+          updatePoolButton();
+          render();
+        }
       }
     });
   });
@@ -5752,25 +6007,7 @@ $('quickParents').addEventListener('click', () => selected && addParentsFor(sele
 $('deleteBtn').addEventListener('click', () => {
   if (!editMode) return;
   if (!selected) return;
-  if (focusId === selected) {
-    focusMode = false;
-    focusId = null;
-    updateFocusButton();
-  }
-  if (isMainRoot(selected)) {
-    rootIds = rootIds.filter(id => id !== selected);
-    updateRootButton();
-  }
-  data.people = data.people
-    .filter(p => p.id !== selected)
-    .map(p => {
-      const partners = partnerIds(p).filter(id => id !== selected);
-      const partnerDetails = { ...(p.partnerDetails || {}) };
-      delete partnerDetails[selected];
-      return { ...p, parents: (p.parents || []).filter(x => x !== selected), partner: partners[0] || '', partners, partnerDetails };
-    });
-  if (activeFamily && !data.people.some(p => matchesFamily(p, activeFamily))) activeFamily = '';
-  save();
+  deletePersonWithCommand(selected);
   if($('sideNav')?.classList.contains('open')) renderNavigator();
   closeSheet(true);
 });
@@ -6112,7 +6349,42 @@ if (window.location?.search?.includes('ux-debug=1')) {
     setWorkingFileHandleForTest: handle => {
       workingFileHandle = handle || null;
       updateWorkingFileButton();
-    }
+    },
+    getCommandHistoryState,
+    undoCommand,
+    redoCommand,
+    clearCommandHistory,
+    getDataSnapshot: () => cloneCommandValue({
+      people: data.people,
+      rootIds,
+      layoutMode
+    }),
+    updatePersonForTest: (id, patch, label = 'Person testen') => {
+      const target = person(id);
+      if (!target || !patch || typeof patch !== 'object') return false;
+      const commandBefore = captureCommandState();
+      Object.assign(target, cloneCommandValue(patch));
+      commitDataCommand(label, commandBefore);
+      render();
+      return true;
+    },
+    addChildForTest: id => addChildFor(id),
+    addPartnerForTest: id => addPartnerFor(id),
+    addParentsForTest: id => addParentsFor(id),
+    setPoolForTest: (id, pooled) => {
+      if (!person(id)) return false;
+      const commandBefore = captureCommandState();
+      setPoolBranch(id, !!pooled);
+      commitDataCommand(pooled ? 'In Vorrat verschieben' : 'Aus Vorrat eingliedern', commandBefore);
+      render();
+      return true;
+    },
+    deletePersonForTest: id => {
+      const deleted = deletePersonWithCommand(id);
+      if (deleted) render();
+      return deleted;
+    },
+    setLayoutModeForTest: mode => setLayoutMode(mode)
   };
 }
 computeStartupStateNow();
