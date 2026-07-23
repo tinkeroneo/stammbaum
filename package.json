@@ -1,0 +1,11 @@
+{
+  "name": "stammbaum-ui",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:smoke": "playwright test tests/smoke.spec.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1"
+  }
+}

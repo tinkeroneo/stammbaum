@@ -1,6 +1,11 @@
 test.pdf
 *.json
 !Bodensteiner.json
+!package.json
+!package-lock.json
 *.tmp
 *.log
 extract_yumpu_familybook.py
+node_modules/
+test-results/
+playwright-report/

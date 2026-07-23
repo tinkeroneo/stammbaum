@@ -2,7 +2,17 @@
 'use strict';
 
 // -- Data / persistence ----------------------------------------------------
+const startupStateSignals = {
+  localStorageAvailable: false,
+  localStorageSnapshotAvailable: false,
+  indexedDbAvailable: false,
+  indexedDbSnapshotAvailable: false,
+  defaultDataLoaded: false,
+  storageFailure: false
+};
+let startupState = 'first-visit';
 const storeKey = 'mobile-family-tree-v5-clean';
+const startupStateMetaKey = storeKey + '-meta';
 const persistenceDbName = storeKey + '-db';
 const persistenceStoreName = 'treeState';
 const persistenceRecordKey = 'current';
@@ -19,9 +29,10 @@ const sample = { people: [
   {id:'p5',name:'Kind 1',born:'1990',died:'',birthName:'',note:'',x:650,y:690,parents:['p3','p4'],partner:''},
   {id:'p6',name:'Kind 2',born:'1994',died:'',birthName:'',note:'',x:900,y:690,parents:['p3','p4'],partner:''}
 ]};
-
 let hasPersistedTreeData = false;
+let startupStateMeta = null;
 let data = load();
+startupStateMeta = loadStartupStateMeta();
 let selected = null;
 let view = { x: 0, y: 0, s: 0.72 };
 let drag = null;
@@ -56,9 +67,14 @@ let nameMode = 'full';
 let layoutMode = 'classic';
 let savedClassicPositions = null;
 let rootIds = [...(data.rootIds || [])];
+let temporaryRootId = '';
+let rootSelectionDeferredForDataset = false;
+let rootSelectionRequired = false;
+let rootSelectionFocusReturnTarget = null;
 let spotlightId = null;
 let spotlightTimer = null;
 let sheetSnapshot = '';
+let personSheetMode = 'closed';
 let imageDraft = '';
 let mentionsDraft = [];
 let removedPartnerDraft = new Set();
@@ -85,6 +101,7 @@ let persistenceWriteChain = Promise.resolve();
 let renderVirtualizationActive = false;
 let busyDepth = 0;
 let focusLayoutRestore = null;
+let mainNavFocusReturnTarget = null;
 rebuildDataIndexes();
 
 const familyPalette = [
@@ -101,6 +118,248 @@ const optionalPersonFields = [
   { key: 'mentions', label: 'Erwähnungen' }
 ];
 let personFieldSettings = loadPersonFieldSettings();
+
+function computeStartupStateFromSignals({
+  hasLocalSnapshot = false,
+  hasIndexedDbSnapshot = false,
+  hasWorkingFile = false,
+  hasDemoData = false,
+  hasStorageFailure = false
+} = {}) {
+  const resolved = {
+    hasLocalSnapshot: !!hasLocalSnapshot,
+    hasIndexedDbSnapshot: !!hasIndexedDbSnapshot,
+    hasWorkingFile: !!hasWorkingFile,
+    hasDemoData: !!hasDemoData,
+    hasStorageFailure: !!hasStorageFailure
+  };
+
+  if (resolved.hasWorkingFile) return 'working-file';
+  if (resolved.hasIndexedDbSnapshot || resolved.hasLocalSnapshot) return 'returning-local';
+  if (resolved.hasStorageFailure) return 'memory-only';
+  if (resolved.hasDemoData) return 'demo';
+  return 'first-visit';
+}
+
+function resolveStartupState({
+  hasLocalSnapshot = false,
+  hasIndexedDbSnapshot = false,
+  hasWorkingFile = false,
+  hasDemoData = false,
+  hasStorageFailure = false
+} = {}) {
+  return computeStartupStateFromSignals({
+    hasLocalSnapshot,
+    hasIndexedDbSnapshot,
+    hasWorkingFile,
+    hasDemoData,
+    hasStorageFailure
+  });
+}
+
+function getStartupState() {
+  return startupState;
+}
+function getStartupSignals() {
+  return {
+    hasLocalSnapshot: startupStateSignals.localStorageSnapshotAvailable,
+    hasIndexedDbSnapshot: startupStateSignals.indexedDbSnapshotAvailable,
+    hasWorkingFile: !!workingFileHandle,
+    hasDemoData: startupStateSignals.defaultDataLoaded,
+    hasStorageFailure: startupStateSignals.storageFailure
+  };
+}
+
+function guessTreeName(dataset = data) {
+  const people = Array.isArray(dataset?.people) ? dataset.people : [];
+  const familyCounts = new Map();
+  for (const person of people) {
+    const lastName = String(person?.lastName || person?.birthName || '').trim();
+    if (!lastName) continue;
+    const normalized = lastName.toLowerCase();
+    familyCounts.set(normalized, (familyCounts.get(normalized) || 0) + 1);
+  }
+
+  const topFamily = [...familyCounts.entries()]
+    .sort((a, b) => b[1] - a[1])[0]?.[0];
+  if (topFamily) return topFamily.split(' ').map(part => part ? part[0].toUpperCase() + part.slice(1) : '').join(' ');
+
+  const firstName = String(people[0]?.lastName || people[0]?.birthName || '').trim();
+  if (firstName) return firstName;
+  return 'Mein Stammbaum';
+}
+function loadStartupStateMeta() {
+  try {
+    const raw = localStorage.getItem(startupStateMetaKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+function writeStartupStateMeta(patch = {}) {
+  if (!patch || typeof patch !== 'object') return;
+  try {
+    const currentMeta = (startupStateMeta && typeof startupStateMeta === 'object') ? startupStateMeta : {};
+    const next = {
+      ...currentMeta,
+      ...patch,
+      personCount: Number.isFinite(patch.personCount) ? patch.personCount : (currentMeta?.personCount ?? 0),
+      updatedAt: patch.updatedAt ?? new Date().toISOString(),
+      treeName: patch.treeName || currentMeta?.treeName
+    };
+    localStorage.setItem(startupStateMetaKey, JSON.stringify(next));
+    startupStateMeta = next;
+  } catch {
+    startupStateMeta = null;
+  }
+}
+function getWelcomeStorageModeLabel() {
+  if (workingFileHandle) return `Arbeitsdatei (${workingFileHandle.name || 'unbekannt'})`;
+  if (startupStateSignals.localStorageSnapshotAvailable) return 'Lokaler Browser-Speicher';
+  if (startupStateSignals.indexedDbSnapshotAvailable) return 'IndexedDB';
+  if (startupStateSignals.storageFailure) return 'Sitzungsspeicher';
+  return 'Nicht dauerhaft gespeichert';
+}
+function formatStartupTimestamp(iso) {
+  if (!iso) return 'unbekannt';
+  const ms = Number.isFinite(Number(iso)) ? Number(iso) : Date.parse(iso);
+  if (!Number.isFinite(ms)) return 'unbekannt';
+  try {
+    return new Date(ms).toLocaleString('de-DE', {
+      dateStyle: 'short',
+      timeStyle: 'short'
+    });
+  } catch {
+    return String(new Date(ms).toLocaleString());
+  }
+}
+function getWelcomeMetadata() {
+  const count = Number.isFinite(data?.people?.length) ? data.people.length : 0;
+  return {
+    treeName: guessTreeName(),
+    personCount: count,
+    storageMode: getWelcomeStorageModeLabel(),
+    lastSavedAt: startupStateMeta?.updatedAt || null
+  };
+}
+function refreshWelcomeMeta() {
+  const meta = getWelcomeMetadata();
+  writeStartupStateMeta({
+    treeName: meta.treeName,
+    personCount: meta.personCount,
+    storageMode: meta.storageMode,
+    updatedAt: startupStateMeta?.updatedAt || new Date().toISOString(),
+    workingFileName: workingFileHandle?.name || startupStateMeta?.workingFileName || ''
+  });
+}
+function getPersistenceStatusLabel() {
+  if (busyDepth > 0) return 'Speichert ...';
+  if (workingFileHandle) return 'Arbeitsdatei verbunden';
+  if (startupState === 'memory-only' || startupStateSignals.storageFailure || persistenceMode === 'memory') {
+    return 'Nur in diesem Browser';
+  }
+  if (persistenceMode === 'indexeddb' || startupStateSignals.indexedDbSnapshotAvailable || startupStateSignals.localStorageSnapshotAvailable) {
+    return 'Gespeichert';
+  }
+  if (startupState === 'working-file') return 'Arbeitsdatei verbunden';
+  if (startupState === 'returning-local' || startupState === 'demo' || startupState === 'first-visit' || startupState === 'memory-only') {
+    return 'Gespeichert';
+  }
+  return 'Sichern erforderlich';
+}
+function updateHeaderMeta() {
+  const titleEl = $('app-title');
+  const statusEl = $('app-storage-status');
+  if (titleEl) titleEl.textContent = guessTreeName();
+  if (statusEl) statusEl.textContent = getPersistenceStatusLabel();
+}
+const surfaceStateKeys = ['sheet','sideNav','searchSheet','rootSelectionSheet','birthdaySheet','scrollSheet','checkSheet','listSheet','fileMenu','settingsMenu'];
+
+const uiState = {
+  get data() {
+    return {
+      isLoaded: !!data,
+      personCount: data?.people?.length || 0,
+      visiblePersonCount: nonPoolPeople?.length || 0,
+      rootCount: rootIds?.length || 0,
+      activeFamily: activeFamily || ''
+    };
+  },
+  get viewport() {
+    return {
+      viewX: view.x,
+      viewY: view.y,
+      zoom: view.s,
+      dragging: !!(drag || pan || pinch),
+      selectionActive: !!selection,
+      compactMode,
+      nameMode,
+      layoutMode,
+      hasMinimapState: !!minimapState,
+      focusAreaMode: focusMode,
+      focusPersonId: focusId || ''
+    };
+  },
+  get mode() {
+    return {
+      editMode,
+      compactMode,
+      nameMode,
+      layoutMode,
+      focusMode,
+      focusId: focusId || ''
+    };
+  },
+  get selection() {
+    return {
+      selectedId: selected || '',
+      hasSelection: !!selected,
+      activeSheetPersonId: selected || '',
+      selectedPerson: person(selected)?.id || '',
+      listViewMode,
+      listReturnMode,
+      focusMode,
+      pendingNewPerson: pendingNewPos ? true : false
+    };
+  },
+  get surfaces() {
+    const result = Object.fromEntries(surfaceStateKeys.map(id => [id, isUiSurfaceOpen(id)]));
+    const active = Object.entries(result).find(([, open]) => open)?.[0] || '';
+    const countOpen = Object.values(result).filter(Boolean).length;
+    return {
+      states: result,
+      activeDialog: active,
+      openSurfaceCount: countOpen
+    };
+  },
+  get persistence() {
+    return {
+      persistenceMode,
+      hasPersistedTreeData,
+      workingFile: workingFileHandle?.name || '',
+      hasBusyState: busyDepth > 0,
+      persistenceNoticeShown
+    };
+  }
+};
+
+function isUiSurfaceOpen(id) {
+  const el = $(id);
+  return !!(el && el.classList.contains('open'));
+}
+
+function uiInvariants() {
+  const surfaces = uiState.surfaces;
+  return {
+    singleOverlayOpen: surfaces.openSurfaceCount <= 1,
+    sheetSelectionInvariant: !isUiSurfaceOpen('sheet') || !!selected,
+    selectedInData: !selected || !!person(selected),
+    dataPersistenceInvariant: persistenceMode === 'memory' || hasPersistedTreeData || !!workingFileHandle || localStorage.getItem(storeKey),
+    rootLimitInvariant: rootIds.length <= 2
+  };
+}
 
 function loadPersonFieldSettings() {
   try {
@@ -211,13 +470,38 @@ function normalize(d) {
 
 function load() {
   try {
+    startupStateSignals.localStorageAvailable = true;
     const raw = localStorage.getItem(storeKey);
-    if (raw) {
-      hasPersistedTreeData = true;
-      return normalize(JSON.parse(raw));
+    if (!raw) {
+      startupStateSignals.localStorageSnapshotAvailable = false;
+      return normalize(structuredClone(sample));
     }
-  } catch {}
-  return normalize(structuredClone(sample));
+    try {
+      hasPersistedTreeData = true;
+      startupStateSignals.localStorageSnapshotAvailable = true;
+      const parsed = normalize(JSON.parse(raw));
+      const existingMeta = (startupStateMeta && typeof startupStateMeta === 'object') ? startupStateMeta : {};
+      const normalizedName = guessTreeName(parsed);
+      startupStateMeta = {
+        ...existingMeta,
+        personCount: parsed?.people?.length || 0,
+        storageMode: 'local',
+        updatedAt: existingMeta?.updatedAt || new Date().toISOString(),
+        treeName: normalizedName || existingMeta?.treeName || 'Mein Stammbaum'
+      };
+      writeStartupStateMeta(startupStateMeta);
+      return parsed;
+    } catch {
+      startupStateSignals.storageFailure = true;
+      startupStateSignals.localStorageSnapshotAvailable = false;
+      return normalize(structuredClone(sample));
+    }
+  } catch {
+    startupStateSignals.localStorageAvailable = false;
+    startupStateSignals.localStorageSnapshotAvailable = false;
+    startupStateSignals.storageFailure = true;
+    return normalize(structuredClone(sample));
+  }
 }
 function openPersistenceDb() {
   if (typeof indexedDB === 'undefined') return Promise.resolve(null);
@@ -376,7 +660,10 @@ async function runBusy(label, task) {
     return await task();
   } finally {
     busyDepth = Math.max(0, busyDepth - 1);
-    if (!busyDepth) setBusyState(false);
+    if (!busyDepth) {
+      setBusyState(false);
+      updateHeaderMeta();
+    }
   }
 }
 function applyLoadedData(imported, { fitResult = true } = {}) {
@@ -387,6 +674,8 @@ function applyLoadedData(imported, { fitResult = true } = {}) {
   focusId = null;
   activeFamily = '';
   rootIds = [...(imported.rootIds || [])];
+  temporaryRootId = '';
+  rootSelectionDeferredForDataset = false;
   updateFocusButton();
   updateRootButton();
   if (fitResult) {
@@ -396,6 +685,8 @@ function applyLoadedData(imported, { fitResult = true } = {}) {
   }
   if ($('sideNav')?.classList.contains('open')) renderNavigator();
   if ($('scrollSheet')?.classList.contains('open')) renderScrollView();
+  updateHeaderMeta();
+  setTimeout(maybeOpenRequiredRootSelection, 0);
 }
 function schedulePersistedJsonWrite(json) {
   if (typeof indexedDB === 'undefined') return;
@@ -409,12 +700,20 @@ function schedulePersistedJsonWrite(json) {
     });
 }
 async function loadPersistedDataIfAvailable() {
-  const persistedJson = await readPersistedJson();
+  startupStateSignals.indexedDbAvailable = typeof indexedDB !== 'undefined';
+  let persistedJson = '';
+  try {
+    persistedJson = await readPersistedJson();
+  } catch {
+    startupStateSignals.storageFailure = true;
+  }
+  startupStateSignals.indexedDbSnapshotAvailable = !!persistedJson;
   if (persistedJson) {
     try {
       applyLoadedData(normalize(JSON.parse(persistedJson)));
       hasPersistedTreeData = true;
       persistenceMode = 'indexeddb';
+      startupStateSignals.storageFailure = false;
       return true;
     } catch {}
   }
@@ -425,20 +724,51 @@ async function loadPersistedDataIfAvailable() {
   return false;
 }
 async function loadDefaultDataIfAvailable() {
-  if (await loadPersistedDataIfAvailable()) return;
-  await runBusy('Beispieldaten werden geladen …', () => loadDefaultData({ saveResult: true, fitResult: true }));
+  const hadSnapshotAtStartup = startupStateSignals.localStorageSnapshotAvailable || startupStateSignals.indexedDbSnapshotAvailable;
+  const hadStorageFailureAtStartup = startupStateSignals.storageFailure;
+  if (startupStateSignals.localStorageSnapshotAvailable) {
+    computeStartupStateNow();
+    return startupState;
+  }
+  if (startupStateSignals.storageFailure) {
+    computeStartupStateNow();
+    return startupState;
+  }
+  if (await loadPersistedDataIfAvailable()) {
+    computeStartupStateNow();
+    return startupState;
+  }
+  const loaded = await runBusy('Beispieldaten werden geladen …', () => loadDefaultData({ saveResult: true, fitResult: true }));
+  if (!hadSnapshotAtStartup && !hadStorageFailureAtStartup) {
+    startupState = startupStateSignals.storageFailure ? 'memory-only' : 'demo';
+    return startupState;
+  }
+  computeStartupStateNow();
+  return loaded ? 'demo' : startupState;
 }
 async function loadDefaultData({ saveResult = true, fitResult = true } = {}) {
+  let loadedDefaultData = false;
   try {
     const response = await fetch(defaultDataUrl, { cache: 'no-store' });
     if (!response.ok) throw new Error('Default JSON not reachable');
     data = normalize(await response.json());
+    loadedDefaultData = true;
   } catch {
     data = normalize(structuredClone(sample));
+    loadedDefaultData = true;
   }
+  startupStateSignals.defaultDataLoaded = loadedDefaultData;
   applyLoadedData(data, { fitResult: false });
+  refreshWelcomeMeta();
+  updateHeaderMeta();
   if (saveResult) save();
   if (fitResult) focusPreferredPerson({ preferFocus: focusMode || nonPoolPeople.length > 1200 });
+  return loadedDefaultData;
+}
+function computeStartupStateNow() {
+  startupState = resolveStartupState(getStartupSignals());
+  updateHeaderMeta();
+  return startupState;
 }
 function save() {
   rebuildDataIndexes();
@@ -446,19 +776,43 @@ function save() {
   const json = JSON.stringify(data, null, 2);
   hasPersistedTreeData = true;
   schedulePersistedJsonWrite(json);
+  let persistenceError = false;
   try {
     localStorage.setItem(storeKey, json);
     persistenceMode = 'local';
+    startupStateSignals.localStorageAvailable = true;
+    startupStateSignals.localStorageSnapshotAvailable = true;
+    startupStateSignals.storageFailure = false;
   } catch {
+    persistenceError = true;
     try { localStorage.removeItem(storeKey); } catch {}
+    startupStateSignals.localStorageSnapshotAvailable = false;
+    startupStateSignals.localStorageAvailable = false;
     if (typeof indexedDB !== 'undefined') {
       persistenceMode = 'indexeddb';
+      startupStateSignals.indexedDbAvailable = true;
+      startupStateSignals.storageFailure = false;
     } else {
       persistenceMode = 'memory';
+      startupStateSignals.storageFailure = true;
       notifyMemoryOnlyPersistence();
     }
   }
+  const metadataPayload = {
+    treeName: guessTreeName(),
+    personCount: data?.people?.length || 0,
+    workingFileName: workingFileHandle?.name || '',
+    updatedAt: new Date().toISOString()
+  };
+  if (persistenceError) {
+    metadataPayload.storageMode = (startupStateSignals.storageFailure ? 'memory' : 'indexeddb');
+  } else {
+    metadataPayload.storageMode = 'local';
+  }
+  writeStartupStateMeta(metadataPayload);
   scheduleWorkingFileWrite(json);
+  computeStartupStateNow();
+  updateHeaderMeta();
   return true;
 }
 function updateWorkingFileButton() {
@@ -468,6 +822,7 @@ function updateWorkingFileButton() {
   btn.title = workingFileHandle
     ? 'Änderungen werden automatisch in diese Datei geschrieben'
     : 'JSON-Datei öffnen und künftig direkt aktualisieren';
+  updateHeaderMeta();
 }
 function scheduleWorkingFileWrite(json = '') {
   if (!workingFileHandle) return;
@@ -479,11 +834,19 @@ function scheduleWorkingFileWrite(json = '') {
         const writable = await workingFileHandle.createWritable();
         await writable.write(payload);
         await writable.close();
+        writeStartupStateMeta({
+          storageMode: 'file',
+          workingFileName: workingFileHandle?.name || '',
+          treeName: guessTreeName(),
+          personCount: data?.people?.length || 0,
+          updatedAt: new Date().toISOString()
+        });
       })
       .catch(() => {
         workingFileHandle = null;
         updateWorkingFileButton();
         alert('Die Arbeitsdatei konnte nicht aktualisiert werden. Bitte erneut öffnen.');
+        updateHeaderMeta();
       });
   }, 180);
 }
@@ -506,7 +869,21 @@ async function openWorkingFile() {
     applyLoadedData(imported, { fitResult: false });
     updateWorkingFileButton();
     save();
-    focusPreferredPerson({ preferFocus: focusMode || nonPoolPeople.length > 1200 });
+    startupStateSignals.storageFailure = false;
+    startupStateSignals.localStorageSnapshotAvailable = false;
+    startupStateSignals.defaultDataLoaded = false;
+    startupStateSignals.indexedDbSnapshotAvailable = false;
+  startupStateSignals.indexedDbAvailable = typeof indexedDB !== 'undefined';
+  writeStartupStateMeta({
+      storageMode: 'file',
+      workingFileName: workingFileHandle?.name || '',
+      treeName: guessTreeName(imported),
+      personCount: imported?.people?.length || 0,
+    updatedAt: new Date().toISOString()
+  });
+  computeStartupStateNow();
+  updateHeaderMeta();
+  focusPreferredPerson({ preferFocus: focusMode || nonPoolPeople.length > 1200 });
   } catch (err) {
     if (err?.name !== 'AbortError') alert('Arbeitsdatei konnte nicht geöffnet werden.');
   }
@@ -527,6 +904,110 @@ async function copyTreeJson() {
     area.remove();
     alert(copied ? 'Aktuelle JSON-Daten wurden in die Zwischenablage kopiert.' : 'JSON konnte nicht kopiert werden.');
   }
+}
+function showWelcomeSurface() {
+  const welcomeSurface = $('welcomeSurface');
+  if (!welcomeSurface) return;
+  const title = $('welcomeTitle');
+  const description = $('welcomeDescription');
+  const returnDetails = $('welcomeReturningDetails');
+  const treeName = $('welcomeReturningTreeName');
+  const personCount = $('welcomeReturningPersonCount');
+  const lastSaved = $('welcomeReturningLastSaved');
+  const storageMode = $('welcomeReturningStorageMode');
+  const continueButton = $('welcomeContinue');
+  const returnNotice = $('welcomeReturningNotice');
+  const firstVisitActions = $('welcomeFirstVisitActions');
+  const returnActions = $('welcomeReturningActions');
+
+  if (startupState === 'first-visit') {
+    if (title) title.textContent = 'Deine Familiengeschichte auf einen Blick';
+    if (description) description.textContent = 'Du startest direkt mit einem klaren Startpunkt:'
+      + ' entweder öffnest du einen bestehenden Stammbaum, legst einen neuen an oder schaust dir die Demo an.';
+    returnDetails?.classList.add('hidden');
+    returnNotice?.classList.add('hidden');
+    firstVisitActions?.classList.remove('hidden');
+    returnActions?.classList.add('hidden');
+    continueButton?.classList.add('hidden');
+    if ($('welcomeOpenExistingFirstVisit')) {
+      $('welcomeOpenExistingFirstVisit').textContent = 'Bestehenden Stammbaum öffnen';
+    }
+  } else {
+    const meta = getWelcomeMetadata();
+    if (title) title.textContent = 'Willkommen zurück';
+    if (description) description.textContent = 'Wir sind zu einem gespeicherten Stammbaum bereit.';
+    if (treeName) treeName.textContent = `Baumname: ${meta.treeName}`;
+    if (personCount) personCount.textContent = `Personen: ${meta.personCount.toLocaleString('de-DE')}`;
+    if (lastSaved) {
+      const savedLabel = startupState === 'memory-only' || !startupStateMeta?.updatedAt ? 'unbekannt' : formatStartupTimestamp(meta.lastSavedAt || startupStateMeta.updatedAt);
+      lastSaved.textContent = `Zuletzt gespeichert: ${savedLabel}`;
+    }
+    if (storageMode) storageMode.textContent = `Speicherort: ${meta.storageMode}`;
+    returnDetails?.classList.remove('hidden');
+    firstVisitActions?.classList.add('hidden');
+    returnActions?.classList.remove('hidden');
+    if (continueButton) {
+      continueButton.classList.remove('hidden');
+      continueButton.textContent = 'Weiterarbeiten';
+      if (startupState === 'memory-only') {
+        returnNotice?.classList.remove('hidden');
+        if (returnNotice) returnNotice.textContent = 'Achtung: Keine dauerhafte Speicherung im Browser erkannt. Bitte exportiere oder öffne eine Arbeitsdatei.';
+      } else {
+        returnNotice?.classList.add('hidden');
+      }
+    }
+    if ($('welcomeOpenExistingReturning')) {
+      $('welcomeOpenExistingReturning').textContent = 'Andere Datei öffnen';
+    }
+  }
+  welcomeSurface.classList.remove('hidden');
+  welcomeSurface.setAttribute('aria-hidden', 'false');
+  setTimeout(() => {
+    const initialFocus = startupState === 'first-visit'
+      ? $('welcomeOpenExistingFirstVisit') || $('welcomeOpenExistingReturning') || $('welcomeOpenExisting')
+      : $('welcomeContinue');
+    (initialFocus || document.querySelector('[data-testid=\"welcome-open-existing\"]'))?.focus();
+  }, 40);
+}
+function hideWelcomeSurface() {
+  const welcomeSurface = $('welcomeSurface');
+  if (!welcomeSurface) return;
+  welcomeSurface.classList.add('hidden');
+  welcomeSurface.setAttribute('aria-hidden', 'true');
+  setTimeout(maybeOpenRequiredRootSelection, 0);
+}
+function initializeEmptyTreeModel() {
+  data = normalize({ people: [] });
+  rebuildDataIndexes();
+  workingFileHandle = null;
+  hasPersistedTreeData = false;
+  persistenceMode = 'memory';
+  updateWorkingFileButton();
+  startupStateSignals.localStorageSnapshotAvailable = false;
+  startupStateSignals.indexedDbSnapshotAvailable = false;
+  startupStateSignals.defaultDataLoaded = false;
+  startupStateSignals.storageFailure = false;
+  startupStateSignals.localStorageAvailable = false;
+  startupStateSignals.indexedDbAvailable = typeof indexedDB !== 'undefined';
+  computeStartupStateNow();
+  writeStartupStateMeta({
+    storageMode: 'memory',
+    workingFileName: '',
+    treeName: guessTreeName(),
+    personCount: 0,
+    updatedAt: new Date().toISOString()
+  });
+  selected = null;
+  pendingNewPos = null;
+  rootIds = [];
+  temporaryRootId = '';
+  rootSelectionDeferredForDataset = false;
+  render();
+  fit();
+  updateHeaderMeta();
+}
+function openWelcomeDemoData() {
+  return loadDefaultData({ saveResult: true, fitResult: true });
 }
 function person(id) { return personById.get(id); }
 function childrenOfPerson(id) { return childrenByParentId.get(id) || []; }
@@ -925,10 +1406,34 @@ function fitFocusNeighborhood(id) {
   const ids = focusNeighborhood(id);
   const people = nonPoolPeople.filter(p => ids.has(p.id));
   if (!people.length) {
-    fit();
+    fitAll();
     return;
   }
   fitPeople(people, nonPoolPeople.length > 1200 ? 0.82 : 0.72);
+}
+function fitReadablePerson() {
+  const id = focusMode && focusId ? focusId : (selected || preferredLandingPersonId());
+  if (!id || !person(id)) return fitAll();
+  jumpToPerson(id);
+}
+function fitAll() {
+  const ids = visibleIds();
+  const visible = data.people.filter(p => ids.has(p.id));
+  if (!visible.length) return;
+  const xs = visible.map(p => p.x);
+  const ys = visible.map(p => p.y);
+  const minX = Math.min(...xs) - 190;
+  const maxX = Math.max(...xs) + 190;
+  const minY = Math.min(...ys) - 150;
+  const maxY = Math.max(...ys) + 150;
+  const fitScale = Math.min(
+    main.clientWidth / (maxX - minX),
+    main.clientHeight / (maxY - minY)
+  );
+  view.s = Math.max(minZoom, Math.min(1.3, fitScale));
+  view.x = -((minX + maxX) / 2) * view.s;
+  view.y = -((minY + maxY) / 2) * view.s;
+  applyView();
 }
 function restoreFocusLayoutPositions() {
   if (!focusLayoutRestore) return;
@@ -1385,11 +1890,15 @@ function updateModeUI() {
   document.body.classList.toggle('viewMode', !editMode);
   const btn = $('modeBtn');
   if (btn) {
-    const label = editMode ? 'Ansehen' : 'Bearbeiten';
-    btn.textContent = editMode ? '👁' : '✎';
-    btn.title = label;
-    btn.setAttribute('aria-label', label);
-    btn.setAttribute('aria-pressed', editMode ? 'true' : 'false');
+    const isEdit = !!editMode;
+    const activeLabel = isEdit ? 'Bearbeiten' : 'Ansehen';
+    btn.title = `Modus umschalten (aktiv: ${activeLabel})`;
+    btn.setAttribute('aria-label', `Modus umschalten. Aktueller Modus: ${activeLabel}.`);
+    btn.setAttribute('aria-pressed', isEdit ? 'true' : 'false');
+    const viewSegment = btn.querySelector('[data-mode="view"]');
+    const editSegment = btn.querySelector('[data-mode="edit"]');
+    if (viewSegment) viewSegment.classList.toggle('is-active', !isEdit);
+    if (editSegment) editSegment.classList.toggle('is-active', isEdit);
     btn.classList.add('primary');
   }
   $('addBtn')?.classList.toggle('hidden', !editMode);
@@ -1414,18 +1923,33 @@ function cycleViewPreset() {
 function updateNameModeButton() {
   const labels = { short: 'Kurz', detail: 'Detail', compact: 'Kompakt', initials: 'Initialen' };
   const btn = $('nameModeBtn');
-  if (btn) btn.textContent = `Ansicht: ${labels[currentViewPreset()]}`;
+  if (btn) {
+    const title = btn.querySelector('.settingsItemTitle');
+    const text = `Ansicht: ${labels[currentViewPreset()]}`;
+    if (title) title.textContent = text;
+    else btn.textContent = text;
+  }
 }
 function updateLayoutButton() {
   const labels = { classic: 'Klassisch', tree: 'Baum', radial: 'Radial' };
   const btn = $('layoutBtn');
-  if (btn) btn.textContent = `Layout: ${labels[layoutMode]}`;
+  if (btn) {
+    const title = btn.querySelector('.settingsItemTitle');
+    const text = `Layout: ${labels[layoutMode]}`;
+    if (title) title.textContent = text;
+    else btn.textContent = text;
+  }
 }
 function updatePoolButton() {
   const btn = $('poolBtn');
   if (!btn) return;
   const count = pooledPeopleCount;
-  btn.dataset.count = String(count);
+  const badge = btn.querySelector('.settingsBadge');
+  if (badge) {
+    const text = String(count);
+    badge.textContent = text;
+    badge.style.display = count > 0 ? 'grid' : 'none';
+  }
   btn.title = `Vorrat (${count})`;
   btn.setAttribute('aria-label', `Personenvorrat öffnen, ${count} Personen`);
 }
@@ -1453,6 +1977,38 @@ function toggleSettingsMenu() {
   menu.classList.toggle('open', open);
   menu.setAttribute('aria-hidden', open ? 'false' : 'true');
   btn?.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+function markMainNavTarget(btnId) {
+  const btn = typeof btnId === 'string' ? $(btnId) : btnId;
+  mainNavFocusReturnTarget = btn?.classList?.contains('mainNavBtn') ? btn : null;
+}
+function returnFocusToMainNavTarget() {
+  if (!mainNavFocusReturnTarget) return;
+  mainNavFocusReturnTarget.focus({ preventScroll: true });
+  mainNavFocusReturnTarget = null;
+}
+function updateMainNavCurrent(targetId) {
+  document.querySelectorAll('.mainNavBtn').forEach(btn => {
+    if (!(btn instanceof HTMLElement)) return;
+    if (btn.id === targetId) {
+      btn.setAttribute('aria-current', 'page');
+    } else {
+      btn.removeAttribute('aria-current');
+    }
+  });
+}
+function closeSecondaryPanelsForNavigation() {
+  closeRootSelection();
+  closeSearch();
+  closeListEditor();
+  closeNavigator();
+  closeBirthdays();
+  closeCheck();
+  closeScrollView();
+  closeSheet(true);
+  closeSettingsMenu();
+  closeFileMenu();
+  showBackdrop(false);
 }
 function closeFileMenu() {
   const menu = $('fileMenu');
@@ -1498,20 +2054,24 @@ function updateZoomClass() {
 function updateFocusButton() {
   const btn = $('focusBtn');
   if (!btn) return;
-  btn.textContent = focusMode ? 'Alle' : 'Fokus 2/2';
+  const title = btn.querySelector('.settingsItemTitle');
+  const text = focusMode ? 'Gesamter Baum' : 'Fokusbereich';
+  if (title) title.textContent = text;
+  else btn.textContent = text;
   btn.classList.toggle('primary', focusMode);
 }
 function preferredLandingPersonId() {
   const activePeople = nonPoolPeople;
   if (!activePeople.length) return '';
   if (focusId && person(focusId) && !person(focusId).pool) return focusId;
-  if (selected && person(selected) && !person(selected).pool) return selected;
   const rooted = rootIds.map(id => person(id)).filter(p => p && !p.pool);
   if (rooted.length) {
     const withChildren = rooted.find(p => hasChildren(p.id));
     if (withChildren) return withChildren.id;
     return rooted[0].id;
   }
+  if (temporaryRootId && person(temporaryRootId) && !person(temporaryRootId).pool) return temporaryRootId;
+  if (selected && person(selected) && !person(selected).pool) return selected;
   const withChildren = activePeople.find(p => hasChildren(p.id));
   return (withChildren || activePeople[0]).id;
 }
@@ -1703,12 +2263,19 @@ function personTileContent(p, className = '') {
   const dates = [p.born, p.died && '– ' + p.died].filter(Boolean).join(' ');
   const birth = birthNameDiffers(p) ? ` <span class="birthInfo">(geb. ${esc(p.birthName)})</span>` : '';
   const meta = dates || birth ? `<div class="meta">${esc(dates)}${birth}</div>` : '';
-  const tileTags = [p.occupation && p.occupation.slice(0,22), p.religion && p.religion.slice(0,22), p.location && p.location.slice(0,22), p.note && p.note.slice(0,22), confidenceText(p)].filter(Boolean).slice(0, 3);
+  const tileTags = [
+    !rootIds.length && temporaryRootId === p.id && 'Temporärer Start',
+    p.occupation && p.occupation.slice(0,22),
+    p.religion && p.religion.slice(0,22),
+    p.location && p.location.slice(0,22),
+    p.note && p.note.slice(0,22),
+    confidenceText(p)
+  ].filter(Boolean).slice(0, 3);
   const tags = tileTags.length ? `<div class="tags">${tileTags.map(tag => `<span class="tag">${esc(tag)}</span>`).join('')}</div>` : '';
   const display = visibleName(p);
   const title = fullName(p) !== display ? ` title="${esc(fullName(p))}"` : '';
   const cls = className ? ` class="${className}"` : '';
-  return `<div${cls} data-member-id="${esc(p.id)}"><div class="avatar">${avatarHtml(p, display)}</div><h3${title}>${esc(display)}</h3>${meta}${tags}</div>`;
+  return `<div${cls} tabindex="-1" data-member-id="${esc(p.id)}" data-testid="person-card-${esc(p.id)}"><div class="avatar">${avatarHtml(p, display)}</div><h3${title}>${esc(display)}</h3>${meta}${tags}</div>`;
 }
 
 // -- Rendering ---------------------------------------------------------
@@ -3395,7 +3962,9 @@ function formSnapshot() {
 }
 
 function hasUnsavedSheetChanges() {
-  return editMode && $('sheet').classList.contains('open') && formSnapshot() !== sheetSnapshot;
+  return ['edit', 'create'].includes(personSheetMode)
+    && $('sheet').classList.contains('open')
+    && formSnapshot() !== sheetSnapshot;
 }
 
 function confirmDiscardSheetChanges() {
@@ -3407,52 +3976,64 @@ function confirmDiscardSheetChanges() {
   return confirm('Ohne Speichern schließen?');
 }
 
-function relationButtons(people) {
-  if (!people.length) return '<span class="detailValue">Offen</span>';
-  return `<div class="detailLinks">${people.map(p => `<button type="button" class="detailLink" data-id="${esc(p.id)}">${esc(fullName(p) || p.name)}</button>`).join('')}</div>`;
+function relationButtons(items, relationKey, relationLabel) {
+  if (!items.length) return '';
+  return `<div class="detailLinks">${items.map(item => {
+    const related = item.person || item;
+    const suffix = item.suffix || '';
+    const name = fullName(related) || related.name;
+    return `<button type="button" class="detailLink detailRelationLink" data-person-relation="${esc(relationKey)}"
+      data-person-id="${esc(related.id)}" data-testid="person-relation-${esc(relationKey)}-${esc(related.id)}"
+      aria-label="${esc(`${name} als ${relationLabel} öffnen`)}">${esc(name)}${suffix ? ` · ${esc(suffix)}` : ''}</button>`;
+  }).join('')}</div>`;
 }
-function siblingList(p) {
-  const parents = new Set(p?.parents || []);
-  if (!parents.size) return [];
-  return data.people
-    .filter(other => other.id !== p.id && (other.parents || []).some(pid => parents.has(pid)))
+
+function detailSection(title, content, modifier = '') {
+  return `<section class="detailSection ${modifier ? `detailSection${modifier}` : ''}">${title ? `<span class="detailLabel">${esc(title)}</span>` : ''}${content}</section>`;
+}
+
+function buildPersonDetailModel(p) {
+  if (!p) return null;
+  const parents = (p.parents || []).map(person).filter(Boolean);
+  const partners = partnerIds(p).map(person).filter(Boolean).map(partner => {
+    const married = marriageDateFor(p, partner.id);
+    return { person: partner, suffix: married ? `verh. ${formatBirthDate(married)}` : '' };
+  });
+  const children = data.people
+    .filter(child => (child.parents || []).includes(p.id))
     .sort((a,b) => (birthSortValue(a) ?? Infinity) - (birthSortValue(b) ?? Infinity) || fullName(a).localeCompare(fullName(b)));
+  const life = [
+    p.born ? `geb. ${formatBirthDate(p.born)}` : '',
+    p.died ? `gest. ${formatBirthDate(p.died)}` : '',
+    ageInfo(p)
+  ].filter(Boolean).join(' · ') || 'Lebensdaten nicht eingetragen';
+  return {
+    person: p,
+    name: displayName(p),
+    life,
+    parents,
+    partners,
+    children,
+    sources: cleanMentions(p.mentions),
+    link: safeUrl(p.link),
+    confidence: confidenceText(p),
+    isRoot: isMainRoot(p.id),
+    isTemporaryRoot: !rootIds.length && temporaryRootId === p.id
+  };
 }
 
 function renderPersonDetails(p) {
   const details = $('personDetails');
-  if (!details) return;
-  details.classList.toggle('hidden', editMode || !p);
-  if (editMode || !p) {
-    details.innerHTML = '';
+  const model = buildPersonDetailModel(p);
+  if (!details || !model) {
+    if (details) details.innerHTML = '';
     return;
   }
-
-  const parents = (p.parents || []).map(person).filter(Boolean);
-  const partners = partnerIds(p).map(person).filter(Boolean);
-  const partnerDetails = partners.length
-    ? `<div class="detailLinks">${partners.map(partner => {
-        const married = marriageDateFor(p, partner.id);
-        return `<button type="button" class="detailLink" data-id="${esc(partner.id)}">${esc(fullName(partner) || partner.name)}${married ? ` · verh. ${esc(formatBirthDate(married))}` : ''}</button>`;
-      }).join('')}</div>`
-    : '<span class="detailValue">Offen</span>';
-  const siblings = siblingList(p);
-  const children = data.people
-    .filter(child => (child.parents || []).includes(p.id))
-    .sort((a,b) => (birthSortValue(a) ?? Infinity) - (birthSortValue(b) ?? Infinity) || fullName(a).localeCompare(fullName(b)));
-  const dates = [
-    p.born ? `geb. ${formatBirthDate(p.born)}` : '',
-    p.died ? `gest. ${p.died}` : '',
-    ageInfo(p)
-  ].filter(Boolean).join(' · ') || 'Lebensdaten offen';
-  const confidence = confidenceText(p);
-  const link = safeUrl(p.link);
-  const mentions = cleanMentions(p.mentions);
-  const mentionHtml = mentions.map(item => {
+  const sourceHtml = model.sources.map(item => {
     const url = safeUrl(item.link);
     const title = url
       ? `<a class="detailValue" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(item.title || item.link)}</a>`
-      : `<div class="detailValue">${esc(item.title || item.link || 'Erwähnung')}</div>`;
+      : `<div class="detailValue">${esc(item.title || item.link || 'Quelle')}</div>`;
     return `<div class="mentionItem">${title}${item.date ? `<small>${esc(item.date)}</small>` : ''}</div>`;
   }).join('');
 
@@ -3460,46 +4041,45 @@ function renderPersonDetails(p) {
     <div class="detailHero" style="--family-color:${esc(familyColor(familyKey(p)))}">
       <div class="detailAvatar">${avatarHtml(p)}</div>
       <div>
-        <div class="detailName">${esc(displayName(p))}</div>
-        <div class="detailMeta">${esc(dates)}</div>
+        <div class="detailName">${esc(model.name)}</div>
+        <div class="detailMeta">${esc(model.life)}</div>
       </div>
     </div>
     <div class="detailGrid">
-      ${isMainRoot(p.id) ? '<div class="detailBox full"><span class="detailLabel">Hauptwurzel</span><div class="detailValue">Ausgangspunkt des Stammbaums</div></div>' : ''}
-      <div class="detailBox"><span class="detailLabel">Partner/in</span>${partnerDetails}</div>
-      <div class="detailBox"><span class="detailLabel">Eltern</span>${relationButtons(parents)}</div>
-      <div class="detailBox full"><span class="detailLabel">Geschwister</span>${siblings.length ? relationButtons(siblings) : '<span class="detailValue">Keine eingetragen</span>'}</div>
-      <div class="detailBox full"><span class="detailLabel">Kinder</span>${relationButtons(children)}</div>
-      ${p.occupation ? `<div class="detailBox"><span class="detailLabel">Beruf</span><div class="detailValue">${esc(p.occupation)}</div></div>` : ''}
-      ${p.religion ? `<div class="detailBox"><span class="detailLabel">Glaubensrichtung</span><div class="detailValue">${esc(p.religion)}</div></div>` : ''}
-      ${p.location ? `<div class="detailBox"><span class="detailLabel">Ort</span><div class="detailValue">${esc(p.location)}</div></div>` : ''}
-      ${link ? `<div class="detailBox full"><span class="detailLabel">Link</span><a class="detailValue" href="${esc(link)}" target="_blank" rel="noopener noreferrer">${esc(p.link)}</a></div>` : ''}
-      ${mentionHtml ? `<div class="detailBox full"><span class="detailLabel">Erwähnungen / Quellen</span><div class="mentionList">${mentionHtml}</div></div>` : ''}
-      ${confidence ? `<div class="detailBox full"><span class="detailLabel">Sicherheit</span><div class="detailValue">${esc(confidenceLabel(p.confidence))}</div></div>` : ''}
-      ${p.note ? `<div class="detailBox full"><span class="detailLabel">Notiz</span><div class="detailValue">${esc(p.note)}</div></div>` : ''}
+      ${model.isRoot ? detailSection('Hauptwurzel', '<div class="detailValue">Ausgangspunkt des Stammbaums</div>', '--identity') : ''}
+      ${model.isTemporaryRoot ? detailSection('Temporärer Start', '<div class="detailValue">Nur der aktuelle Einstieg; Beziehungen bleiben unverändert.</div>', '--identity') : ''}
+      ${model.parents.length ? detailSection('Eltern', relationButtons(model.parents, 'parent', 'Elternteil'), '--relations') : ''}
+      ${model.partners.length ? detailSection('Partner/in', relationButtons(model.partners, 'partner', 'Partnerperson'), '--relations') : ''}
+      ${model.children.length ? detailSection('Kinder', relationButtons(model.children, 'child', 'Kind'), '--relations') : ''}
+      ${p.occupation ? detailSection('Beruf', `<div class="detailValue">${esc(p.occupation)}</div>`) : ''}
+      ${p.religion ? detailSection('Glaubensrichtung', `<div class="detailValue">${esc(p.religion)}</div>`) : ''}
+      ${p.location ? detailSection('Ort', `<div class="detailValue">${esc(p.location)}</div>`) : ''}
+      ${model.link ? detailSection('Link', `<a class="detailValue" href="${esc(model.link)}" target="_blank" rel="noopener noreferrer">${esc(p.link)}</a>`, '--full') : ''}
+      ${sourceHtml ? detailSection('Quellen', `<div class="mentionList">${sourceHtml}</div>`, '--full') : ''}
+      ${model.confidence ? detailSection('Sicherheit', `<div class="detailValue">${esc(confidenceLabel(p.confidence))}</div>`, '--full') : ''}
+      ${p.note ? detailSection('Notiz', `<div class="detailValue">${esc(p.note)}</div>`, '--full') : ''}
     </div>
   `;
 
-  details.querySelectorAll('[data-id]').forEach(btn => {
+  details.querySelectorAll('[data-person-id]').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
-      const targetId = btn.dataset.id;
+      const targetId = btn.dataset.personId;
       jumpToPerson(targetId);
-      openSheet(targetId);
+      openSheet(targetId, { mode: 'detail', focus: 'heading' });
     });
   });
 }
 
-function openSheet(id) {
-  selected = id;
-  const p = person(id);
-  $('sheetTitle').textContent = p ? (editMode ? 'Person bearbeiten' : 'Person ansehen') : 'Neue Person';
-  $('quickFocus').style.display = p ? '' : 'none';
-  $('quickFocus').textContent = 'Fokus 2/2';
-  $('quickChild').style.display = p && editMode ? '' : 'none';
-  $('quickPartner').style.display = p && editMode ? '' : 'none';
-  $('quickParents').style.display = p && editMode ? '' : 'none';
+function clearPersonSheetDraft() {
+  sheetSnapshot = '';
+  imageDraft = '';
+  mentionsDraft = [];
+  removedPartnerDraft = new Set();
+  marriageDraft = {};
+}
 
+function populatePersonForm(p, id) {
   $('firstName').value = p?.firstName || '';
   $('lastName').value = p?.lastName || '';
   $('nickname').value = p?.nickname || '';
@@ -3524,42 +4104,118 @@ function openSheet(id) {
   $('partnerMarriageDate').value = '';
   renderCurrentPartners(p);
   applyPersonFieldSettings();
-  sheetSnapshot = formSnapshot();
-  renderPersonDetails(p);
-
-  const editable = editMode || !p;
-  ['firstName','lastName','nickname','born','died','birthName','occupation','religion','location','personLink','note','confidence','inPool','mainRoot','parent1','parent2','partner','partnerMarriageDate'].forEach(id => {
-    const el = $(id);
-    if (el) el.disabled = !editable;
-  });
-  $('partnerMarriageDate').disabled = !editable || !$('partner').value;
-  $('chooseImageBtn').disabled = !editable;
-  $('clearImageBtn').disabled = !editable || !imageDraft;
-  $('addMentionBtn').disabled = !editable;
-  $('mentionRows').querySelectorAll('input,button').forEach(el => { el.disabled = !editable; });
-  $('inPool').disabled = !editable;
-  $('mainRoot').disabled = !editable;
+  $('partnerMarriageDate').disabled = !$('partner').value;
+  $('clearImageBtn').disabled = !imageDraft;
   $('inPool').title = p ? `${poolBranchIds(p.id).size} Person(en) in diesem Zweig` : '';
-  $('deleteBtn').style.display = p && editMode ? 'block' : 'none';
-  $('saveBtn').style.display = editable ? 'block' : 'none';
+  sheetSnapshot = formSnapshot();
+}
+
+function setPersonSheetView(mode, p) {
+  personSheetMode = mode;
+  $('sheet').dataset.view = mode;
+  $('personDetailView').hidden = mode !== 'detail';
+  $('personEditView').hidden = mode === 'detail';
+  $('personEditBack').classList.toggle('hidden', mode !== 'edit');
+  $('sheetTitle').textContent = mode === 'detail'
+    ? 'Person ansehen'
+    : (mode === 'edit' ? 'Person bearbeiten' : 'Neue Person');
+  $('quickFocus').style.display = p ? '' : 'none';
+  $('quickFocus').textContent = 'Fokus';
+  $('personEditBtn').style.display = p ? '' : 'none';
+  $('quickChild').style.display = p && mode === 'edit' ? '' : 'none';
+  $('quickPartner').style.display = p && mode === 'edit' ? '' : 'none';
+  $('quickParents').style.display = p && mode === 'edit' ? '' : 'none';
+  $('deleteBtn').style.display = p && mode === 'edit' ? '' : 'none';
+}
+
+function focusPersonSheet(mode, focusTarget = '') {
+  setTimeout(() => {
+    if (!$('sheet').classList.contains('open') || personSheetMode !== mode) return;
+    if (focusTarget === 'editButton') $('personEditBtn')?.focus();
+    else if (mode === 'edit' || mode === 'create') $('firstName')?.focus();
+    else $('sheetTitle')?.focus();
+  }, 80);
+}
+
+function openSheet(id, { mode = '', focus = '' } = {}) {
+  selected = id;
+  const p = person(id);
+  const nextMode = p ? (mode === 'edit' ? 'edit' : 'detail') : 'create';
+  if (nextMode === 'detail') {
+    clearPersonSheetDraft();
+    renderPersonDetails(p);
+  } else {
+    populatePersonForm(p, id);
+  }
+  setPersonSheetView(nextMode, p);
   setDialogVisibility($('sheet'), true);
   showBackdrop(true);
+  render();
+  focusPersonSheet(nextMode, focus);
+}
+
+function openPersonEdit(id) {
+  const p = person(id);
+  if (!p) return false;
+  if (!editMode) {
+    editMode = true;
+    updateModeUI();
+  }
+  openSheet(id, { mode: 'edit' });
+  return true;
+}
+
+function returnToPersonDetail(force = false) {
+  const id = selected;
+  if (!person(id)) return false;
+  if (!force && !confirmDiscardSheetChanges()) return false;
+  clearPersonSheetDraft();
+  openSheet(id, { mode: 'detail', focus: 'editButton' });
+  return true;
+}
+
+function focusSelectedPersonCard(id) {
+  if (!id) {
+    returnFocusToMainNavTarget();
+    return;
+  }
+  const selector = `[data-member-id="${CSS.escape(id)}"]`;
+  const card = document.querySelector(selector);
+  if (card instanceof HTMLElement) card.focus({ preventScroll: true });
+  else returnFocusToMainNavTarget();
 }
 
 function closeSheet(force = false) {
   if (!force && !confirmDiscardSheetChanges()) return false;
   const returnMode = listReturnMode;
+  const reopenSearch = searchReturnMode;
+  const reopenQuery = searchReturnQuery;
+  const reopenScrollTop = searchReturnScrollTop;
+  const closingPersonId = person(selected)?.id || '';
   listReturnMode = '';
-  selected = null;
-  sheetSnapshot = '';
-  imageDraft = '';
-  mentionsDraft = [];
-  removedPartnerDraft = new Set();
-  marriageDraft = {};
+  searchReturnMode = false;
+  searchReturnQuery = '';
+  searchReturnScrollTop = 0;
+  selected = closingPersonId || null;
+  personSheetMode = 'closed';
+  clearPersonSheetDraft();
   setDialogVisibility($('sheet'), false);
   showBackdrop(false);
   render();
-  if (returnMode) setTimeout(() => openListEditor(returnMode), 0);
+  if (returnMode) {
+    setTimeout(() => openListEditor(returnMode), 0);
+  } else if (reopenSearch) {
+    setTimeout(() => {
+      openSearch();
+      const queryInput = $('personSearch');
+      if (queryInput) queryInput.value = reopenQuery;
+      renderSearchResults();
+      if ($('searchRows')) $('searchRows').scrollTop = reopenScrollTop || 0;
+    }, 0);
+  } else {
+    setTimeout(() => focusSelectedPersonCard(closingPersonId), 0);
+  }
+  setTimeout(maybeOpenRequiredRootSelection, 0);
   return true;
 }
 
@@ -3673,7 +4329,8 @@ function saveSheet() {
     updatePoolButton();
     updateRootButton();
     sheetSnapshot = formSnapshot();
-    closeSheet(true);
+    openSheet(p.id, { mode: 'detail', focus: 'editButton' });
+    setTimeout(maybeOpenRequiredRootSelection, 0);
   });
   return true;
 }
@@ -3694,7 +4351,7 @@ function addChildFor(id) {
   const partner = primaryPartner(p);
   if (partner) child.parents.push(partner.id);
   data.people.push(child);
-  resetGeneratedLayout(); save(); render(); if($('sideNav')?.classList.contains('open')) renderNavigator(); openSheet(child.id);
+  resetGeneratedLayout(); save(); render(); if($('sideNav')?.classList.contains('open')) renderNavigator(); openSheet(child.id, { mode: 'edit' });
 }
 function addPartnerFor(id) {
   const p = person(id); if (!p) return;
@@ -3703,7 +4360,7 @@ function addPartnerFor(id) {
   q.name = 'Partner/in von ' + p.name;
   linkPartners(p, q);
   data.people.push(q);
-  resetGeneratedLayout(); save(); render(); if($('sideNav')?.classList.contains('open')) renderNavigator(); openSheet(q.id);
+  resetGeneratedLayout(); save(); render(); if($('sideNav')?.classList.contains('open')) renderNavigator(); openSheet(q.id, { mode: 'edit' });
 }
 function addParentsFor(id) {
   const p = person(id); if (!p) return;
@@ -3716,12 +4373,15 @@ function addParentsFor(id) {
   linkPartners(a, b);
   p.parents = [a.id, b.id];
   data.people.push(a, b);
-  resetGeneratedLayout(); save(); render(); if($('sideNav')?.classList.contains('open')) renderNavigator(); openSheet(a.id);
+  resetGeneratedLayout(); save(); render(); if($('sideNav')?.classList.contains('open')) renderNavigator(); openSheet(a.id, { mode: 'edit' });
 }
 
 let listSortMode = 'family';
 let listViewMode = 'tree';
 let listReturnMode = '';
+let searchReturnMode = false;
+let searchReturnScrollTop = 0;
+let searchReturnQuery = '';
 
 function setDialogVisibility(el, visible){
   el.classList.toggle('open', visible);
@@ -3731,6 +4391,161 @@ function showBackdrop(visible){
   const back = $('backdrop');
   back.classList.toggle('show', visible);
   back.setAttribute('aria-hidden', visible ? 'false' : 'true');
+}
+function technicalRootCandidateId() {
+  const activePeople = nonPoolPeople.filter(p => p && !p.pool);
+  if (!activePeople.length) return '';
+  const withChildren = activePeople.find(p => hasChildren(p.id));
+  return (withChildren || activePeople[0]).id;
+}
+function welcomeSurfaceIsOpen() {
+  const welcome = $('welcomeSurface');
+  return !!welcome && !welcome.classList.contains('hidden') && welcome.getAttribute('aria-hidden') !== 'true';
+}
+function renderRootSelectionResults() {
+  const rowsEl = $('rootSelectionRows');
+  const searchEl = $('rootSelectionSearch');
+  if (!rowsEl || !searchEl) return;
+  const q = searchEl.value.trim().toLowerCase();
+  const rows = [...nonPoolPeople]
+    .filter(p => !q || personSearchText(p).includes(q))
+    .sort((a, b) => fullName(a).localeCompare(fullName(b)))
+    .slice(0, 80);
+
+  if (!nonPoolPeople.length) {
+    rowsEl.innerHTML = '<p class="small" role="status">Dieser Stammbaum enthält noch keine Person. Lege zuerst eine Person an.</p>';
+    return;
+  }
+  if (!rows.length) {
+    rowsEl.innerHTML = '<p class="small" role="status">Keine passende Person gefunden.</p>';
+    return;
+  }
+
+  rowsEl.innerHTML = rows.map(p => {
+    const dates = [p.born, p.died && '– ' + p.died].filter(Boolean).join(' ');
+    const current = rootIds.includes(p.id);
+    const extra = [dates, p.location, current && 'Aktueller Start'].filter(Boolean).join(' · ');
+    return `
+      <button type="button" class="searchRow" data-root-person-id="${esc(p.id)}"
+        data-testid="root-selection-result-${esc(p.id)}" aria-pressed="${current ? 'true' : 'false'}">
+        <span class="swatch" style="background:${esc(familyColor(familyKey(p)))}"></span>
+        <span><strong>${esc(fullName(p) || p.name)}</strong><small>${esc(extra) || 'Lebensdaten offen'}</small></span>
+      </button>
+    `;
+  }).join('');
+
+  rowsEl.querySelectorAll('[data-root-person-id]').forEach(row => {
+    row.addEventListener('click', () => chooseStartRoot(row.dataset.rootPersonId));
+  });
+}
+function openRootSelection({ trigger = null, required = false } = {}) {
+  const sheet = $('rootSelectionSheet');
+  if (!sheet) return false;
+  rootSelectionRequired = required;
+  rootSelectionFocusReturnTarget = trigger instanceof HTMLElement
+    ? trigger
+    : (document.activeElement instanceof HTMLElement ? document.activeElement : $('startNavBtn'));
+  const laterButton = $('rootSelectionLaterBtn');
+  if (laterButton) laterButton.textContent = required ? 'Später' : 'Schließen';
+  if ($('rootSelectionSearch')) {
+    $('rootSelectionSearch').value = '';
+    $('rootSelectionSearch').disabled = !nonPoolPeople.length;
+  }
+  setDialogVisibility(sheet, true);
+  showBackdrop(true);
+  renderRootSelectionResults();
+  setTimeout(() => {
+    const initialFocus = nonPoolPeople.length ? $('rootSelectionSearch') : laterButton;
+    initialFocus?.focus();
+  }, 40);
+  return true;
+}
+function closeRootSelection({ returnFocus = true } = {}) {
+  const sheet = $('rootSelectionSheet');
+  if (!sheet?.classList.contains('open')) return;
+  setDialogVisibility(sheet, false);
+  showBackdrop(false);
+  rootSelectionRequired = false;
+  if (returnFocus) rootSelectionFocusReturnTarget?.focus({ preventScroll: true });
+  rootSelectionFocusReturnTarget = null;
+}
+function deferRootSelection() {
+  if (!rootIds.length) {
+    rootSelectionDeferredForDataset = true;
+    temporaryRootId = technicalRootCandidateId();
+  }
+  closeRootSelection();
+  if (!temporaryRootId) return;
+  selected = temporaryRootId;
+  render();
+  jumpToPerson(temporaryRootId);
+}
+function dismissRootSelection() {
+  if (rootSelectionRequired) deferRootSelection();
+  else closeRootSelection();
+}
+function chooseStartRoot(id) {
+  const chosen = person(id);
+  if (!chosen || chosen.pool) return false;
+  const retainedRoots = rootIds
+    .filter(existingId => existingId !== chosen.id && person(existingId) && !person(existingId).pool);
+  rootIds = [chosen.id, ...retainedRoots].slice(0, 2);
+  temporaryRootId = '';
+  rootSelectionDeferredForDataset = false;
+  save();
+  closeRootSelection();
+  selected = chosen.id;
+  render();
+  jumpToPerson(chosen.id);
+  updateRootButton();
+  return true;
+}
+function maybeOpenRequiredRootSelection() {
+  if (rootIds.length || !nonPoolPeople.length || rootSelectionDeferredForDataset) return false;
+  if (welcomeSurfaceIsOpen() || isUiSurfaceOpen('rootSelectionSheet')) return false;
+  const anotherSurfaceOpen = surfaceStateKeys
+    .filter(id => id !== 'rootSelectionSheet')
+    .some(id => isUiSurfaceOpen(id));
+  if (anotherSurfaceOpen) return false;
+  return openRootSelection({ trigger: $('startNavBtn'), required: true });
+}
+function openStartFromNavigation() {
+  closeSecondaryPanelsForNavigation();
+  updateMainNavCurrent('startNavBtn');
+  const id = preferredLandingPersonId();
+  if (!id) {
+    fit();
+    return;
+  }
+  if (focusMode && focusId && person(focusId)) {
+    setFocusMode(true, focusId);
+    return;
+  }
+  selected = id;
+  render();
+  jumpToPerson(id);
+  fit();
+}
+function openSearchFromNavigation(button) {
+  markMainNavTarget(button);
+  updateMainNavCurrent(button.id);
+  closeSecondaryPanelsForNavigation();
+  openSearch();
+  setTimeout(() => $('personSearch')?.focus(), 80);
+}
+function openPeopleFromNavigation(button) {
+  markMainNavTarget(button);
+  updateMainNavCurrent(button.id);
+  closeSecondaryPanelsForNavigation();
+  openListEditor('tree');
+}
+function openMoreFromNavigation(button) {
+  markMainNavTarget(button);
+  updateMainNavCurrent(button.id);
+  closeSecondaryPanelsForNavigation();
+  if (!$('settingsMenu')?.classList.contains('open')) {
+    toggleSettingsMenu();
+  }
 }
 function openListEditor(mode = 'tree'){
   listViewMode = mode;
@@ -3747,6 +4562,7 @@ function closeListEditor(suspend = false){
   $('listSheet').classList.toggle('hidden', suspend);
   if (!suspend) listReturnMode = '';
   showBackdrop(false);
+  if (!suspend) returnFocusToMainNavTarget();
 }
 function openSheetFromList(id) {
   listReturnMode = listViewMode;
@@ -3762,6 +4578,7 @@ function openNavigator(){
 function closeNavigator(){
   setDialogVisibility($('sideNav'), false);
   showBackdrop(false);
+  returnFocusToMainNavTarget();
 }
 function openSearch(){
   setDialogVisibility($('searchSheet'), true);
@@ -3772,6 +4589,11 @@ function openSearch(){
 function closeSearch(){
   setDialogVisibility($('searchSheet'), false);
   showBackdrop(false);
+  returnFocusToMainNavTarget();
+}
+function openSearchResultList() {
+  closeSearch();
+  openListEditor('tree');
 }
 function openBirthdays(){
   setDialogVisibility($('birthdaySheet'), true);
@@ -3781,6 +4603,7 @@ function openBirthdays(){
 function closeBirthdays(){
   setDialogVisibility($('birthdaySheet'), false);
   showBackdrop(false);
+  returnFocusToMainNavTarget();
 }
 function openScrollView(){
   setDialogVisibility($('scrollSheet'), true);
@@ -3791,6 +4614,7 @@ function openScrollView(){
 function closeScrollView(){
   setDialogVisibility($('scrollSheet'), false);
   showBackdrop(false);
+  returnFocusToMainNavTarget();
 }
 function renderScrollView(){
   const ids = visibleIds();
@@ -3932,27 +4756,54 @@ function jumpToPerson(id) {
   applyView();
   showSpotlight(id);
 }
+function escapeSearchText(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+function highlightSearchMatch(value, query) {
+  const text = String(value || '');
+  const normalized = String(query || '').trim();
+  if (!normalized) return esc(text);
+  return esc(text).replace(
+    new RegExp(escapeSearchText(normalized), 'gi'),
+    match => `<mark class="searchMatch">${match}</mark>`
+  );
+}
 function renderSearchResults(){
-  const q = ($('personSearch')?.value || '').trim().toLowerCase();
+  const query = ($('personSearch')?.value || '').trim();
+  const q = query.toLowerCase();
   const rows = [...nonPoolPeople]
     .filter(p => !q || personSearchText(p).includes(q))
     .sort((a,b) => fullName(a).localeCompare(fullName(b)))
     .slice(0, 80);
 
-  $('searchRows').innerHTML = rows.map(p => {
+  const hasQuery = !!q;
+  const emptyState = hasQuery && rows.length === 0;
+  if ($('searchSummary')) {
+    $('searchSummary').textContent = hasQuery
+      ? (rows.length ? `${rows.length} Treffer für „${query}“` : `Keine Treffer für „${query}“`)
+      : '';
+  }
+  $('searchEmptyState')?.classList.toggle('hidden', !emptyState);
+  const searchRows = $('searchRows');
+  if (!searchRows) return;
+  searchRows.innerHTML = rows.map(p => {
     const dates = [p.born, p.died && '- '+p.died].filter(Boolean).join(' ');
     const extra = [birthNameDiffers(p) && 'geb. '+p.birthName, p.occupation, p.religion, p.location].filter(Boolean).join(' · ');
     return `
-      <button type="button" class="searchRow" data-id="${esc(p.id)}">
+      <button type="button" class="searchRow" data-id="${esc(p.id)}" data-testid="person-search-result-${esc(p.id)}">
         <span class="swatch" style="background:${esc(familyColor(familyKey(p)))}"></span>
-        <span><strong>${esc(fullName(p) || p.name)}</strong><small>${esc([dates, extra].filter(Boolean).join(' · ')) || 'Lebensdaten offen'}</small></span>
+        <span><strong>${highlightSearchMatch(fullName(p) || p.name, query)}</strong><small>${highlightSearchMatch([dates, extra].filter(Boolean).join(' · ') || 'Lebensdaten offen', query)}</small></span>
       </button>
     `;
   }).join('');
-  $('searchRows').querySelectorAll('.searchRow').forEach(row => {
+  searchRows.querySelectorAll('.searchRow').forEach(row => {
     row.addEventListener('click', () => {
+      searchReturnMode = true;
+      searchReturnQuery = query;
+      searchReturnScrollTop = searchRows.scrollTop;
       closeSearch();
       jumpToPerson(row.dataset.id);
+      openSheet(row.dataset.id);
     });
   });
 }
@@ -4004,6 +4855,7 @@ function openCheck(){
 function closeCheck(){
   setDialogVisibility($('checkSheet'), false);
   showBackdrop(false);
+  returnFocusToMainNavTarget();
 }
 function renderCheck(){
   const issues = dataIssues();
@@ -4174,7 +5026,13 @@ $('parent1').addEventListener('change', () => {
 });
 
 $('saveBtn').addEventListener('click', saveSheet);
+$('personEditView')?.addEventListener('submit', e => {
+  e.preventDefault();
+  saveSheet();
+});
 $('closeBtn').addEventListener('click', closeSheet);
+$('personEditBtn')?.addEventListener('click', () => selected && openPersonEdit(selected));
+$('personEditBack')?.addEventListener('click', () => returnToPersonDetail());
 $('chooseImageBtn')?.addEventListener('click', () => {
   if (!(editMode || !person(selected))) return;
   $('personImageInput').click();
@@ -4222,7 +5080,8 @@ $('partner')?.addEventListener('change', () => {
   if (!$('partner').value) $('partnerMarriageDate').value = '';
 });
 $('backdrop').addEventListener('click', () => {
-  if($('sideNav').classList.contains('open')) closeNavigator();
+  if($('rootSelectionSheet')?.classList.contains('open')) dismissRootSelection();
+  else if($('sideNav').classList.contains('open')) closeNavigator();
   else if($('searchSheet').classList.contains('open')) closeSearch();
   else if($('birthdaySheet').classList.contains('open')) closeBirthdays();
   else if($('scrollSheet').classList.contains('open')) closeScrollView();
@@ -4233,11 +5092,12 @@ $('backdrop').addEventListener('click', () => {
 window.addEventListener('keydown', e => {
   const active = document.activeElement;
   const isTyping = active && ['INPUT','TEXTAREA','SELECT'].includes(active.tagName);
-  const dialogOpen = ['fileMenu','settingsMenu','sheet','sideNav','searchSheet','birthdaySheet','scrollSheet','checkSheet','listSheet']
+  const dialogOpen = ['fileMenu','settingsMenu','sheet','sideNav','searchSheet','rootSelectionSheet','birthdaySheet','scrollSheet','checkSheet','listSheet']
     .some(id => $(id)?.classList.contains('open'));
   if (e.key === 'Escape') {
     if ($('fileMenu')?.classList.contains('open')) { closeFileMenu(); e.preventDefault(); }
     else if ($('settingsMenu')?.classList.contains('open')) { closeSettingsMenu(); e.preventDefault(); }
+    else if ($('rootSelectionSheet')?.classList.contains('open')) { dismissRootSelection(); e.preventDefault(); }
     else if ($('sheet').classList.contains('open')) { closeSheet(); e.preventDefault(); }
     else if ($('sideNav').classList.contains('open')) { closeNavigator(); e.preventDefault(); }
     else if ($('searchSheet').classList.contains('open')) { closeSearch(); e.preventDefault(); }
@@ -4260,7 +5120,7 @@ window.addEventListener('keydown', e => {
   }
   if (e.key === '+' || e.key === '=') { zoomTo(view.s * 1.18); e.preventDefault(); }
   if (e.key === '-') { zoomTo(view.s / 1.18); e.preventDefault(); }
-  if (e.key === '0' || e.key === 'Home') { fit(); e.preventDefault(); }
+  if (e.key === '0' || e.key === 'Home') { fitAll(); e.preventDefault(); }
   if (editMode && e.key === 'Delete' && $('sheet').classList.contains('open') && selected) { $('deleteBtn').click(); e.preventDefault(); }
 });
 $('modeBtn').addEventListener('click', () => {
@@ -4269,12 +5129,16 @@ $('modeBtn').addEventListener('click', () => {
   updateModeUI();
   render();
   if ($('sheet').classList.contains('open')) {
-    if (selected && person(selected)) openSheet(selected);
-    else closeSheet(true);
+    if (selected && person(selected)) {
+      openSheet(selected, { mode: editMode ? 'edit' : 'detail' });
+    } else if (personSheetMode !== 'create') {
+      closeSheet(true);
+    }
   }
 });
 $('addBtn').addEventListener('click', () => { selected = null; pendingNewPos = null; openSheet(null); });
 $('focusBtn')?.addEventListener('click', () => {
+  closeSettingsMenu();
   if (focusMode) {
     setFocusMode(false);
     return;
@@ -4315,15 +5179,25 @@ $('deleteBtn').addEventListener('click', () => {
 
 $('zin').addEventListener('click', () => zoomTo(view.s * 1.18));
 $('zout').addEventListener('click', () => zoomTo(view.s / 1.18));
-$('home').addEventListener('click', fit);
+$('home').addEventListener('click', fitReadablePerson);
 $('fileBtn')?.addEventListener('click', e => {
   e.stopPropagation();
   toggleFileMenu();
 });
 $('fileMenu')?.addEventListener('click', e => e.stopPropagation());
-$('settingsBtn')?.addEventListener('click', e => {
+// Hauptnavigation (Desktop/Mobil): konsistente Steuerung über neue Hauptbuttons
+$('startNavBtn').addEventListener('click', () => {
+  openStartFromNavigation();
+});
+$('searchBtn').addEventListener('click', e => {
+  openSearchFromNavigation(e.currentTarget);
+});
+$('listBtn').addEventListener('click', e => {
+  openPeopleFromNavigation(e.currentTarget);
+});
+$('settingsBtn').addEventListener('click', e => {
   e.stopPropagation();
-  toggleSettingsMenu();
+  openMoreFromNavigation(e.currentTarget);
 });
 $('settingsMenu')?.addEventListener('click', e => e.stopPropagation());
 $('settingsMenu')?.addEventListener('change', e => {
@@ -4340,18 +5214,30 @@ document.addEventListener('click', e => {
   closeSettingsMenu();
 });
 $('fitBtn').addEventListener('click', () => {
-  fit();
+  fitAll();
   closeSettingsMenu();
+});
+$('rootSelectionBtn')?.addEventListener('click', () => {
+  closeSettingsMenu();
+  openRootSelection({ trigger: $('settingsBtn'), required: false });
 });
 $('autoBtn').addEventListener('click', async () => {
   if (confirm('Automatische kompakte Anordnung anwenden? Aktuelle Positionen werden überschrieben.')) {
     await runBusy('Auto-Anordnung läuft …', async () => { autoLayout(); });
   }
+  closeSettingsMenu();
 });
 $('collapseAllBtn').addEventListener('click', () => {
   const anyOpen = data.people.some(p=>hasChildren(p.id) && !collapsed.has(p.id));
-  if(anyOpen){ data.people.forEach(p=>{ if(hasChildren(p.id)) collapsed.add(p.id); }); $('collapseAllBtn').textContent='Alle ausklappen'; }
-  else { collapsed.clear(); $('collapseAllBtn').textContent='Alle einklappen'; }
+  if(anyOpen){ data.people.forEach(p=>{ if(hasChildren(p.id)) collapsed.add(p.id); });
+    const title = $('collapseAllBtn')?.querySelector('.settingsItemTitle');
+    if (title) title.textContent='Alle ausklappen';
+  }
+  else {
+    collapsed.clear();
+    const title = $('collapseAllBtn')?.querySelector('.settingsItemTitle');
+    if (title) title.textContent='Alle einklappen';
+  }
   saveCollapsed(); autoLayout();
   closeSettingsMenu();
 });
@@ -4361,6 +5247,7 @@ $('poolBtn')?.addEventListener('click', () => {
 });
 
 $('resetBtn').addEventListener('click', async () => {
+  closeSettingsMenu();
   if (confirm('Beispiel wirklich zurücksetzen?')) {
     await runBusy('Beispiel wird zurückgesetzt …', async () => {
       localStorage.removeItem(storeKey);
@@ -4420,15 +5307,17 @@ $('copyJsonBtn')?.addEventListener('click', async () => {
   await copyTreeJson();
 });
 
-$('listBtn').addEventListener('click', () => openListEditor('tree'));
-$('searchBtn').addEventListener('click', openSearch);
+$('listCloseBtn').addEventListener('click', () => closeListEditor());
 $('searchCloseBtn').addEventListener('click', closeSearch);
+$('searchOpenListBtn')?.addEventListener('click', openSearchResultList);
 $('personSearch').addEventListener('input', renderSearchResults);
-$('scrollBtn').addEventListener('click', openScrollView);
+$('rootSelectionLaterBtn')?.addEventListener('click', dismissRootSelection);
+$('rootSelectionSearch')?.addEventListener('input', renderRootSelectionResults);
+$('scrollBtn').addEventListener('click', () => { closeSettingsMenu(); openScrollView(); });
 $('scrollCloseBtn').addEventListener('click', closeScrollView);
-$('birthdayBtn').addEventListener('click', openBirthdays);
+$('birthdayBtn').addEventListener('click', () => { closeSettingsMenu(); openBirthdays(); });
 $('birthdayCloseBtn').addEventListener('click', closeBirthdays);
-$('navBtn').addEventListener('click', openNavigator);
+$('navBtn').addEventListener('click', () => { closeSettingsMenu(); openNavigator(); });
 $('navCloseBtn').addEventListener('click', closeNavigator);
 $('navClearBtn').addEventListener('click', () => jumpToFamily(''));
 $('navSearch').addEventListener('input', renderNavigator);
@@ -4444,10 +5333,9 @@ $('compactBtn')?.addEventListener('click', () => {
   cycleViewPreset();
   closeSettingsMenu();
 });
-$('checkBtn').addEventListener('click', openCheck);
+$('checkBtn').addEventListener('click', () => { closeSettingsMenu(); openCheck(); });
 $('checkCloseBtn').addEventListener('click', closeCheck);
-$('imageBtn').addEventListener('click', exportImageView);
-$('listCloseBtn').addEventListener('click', () => closeListEditor());
+$('imageBtn').addEventListener('click', () => { closeSettingsMenu(); exportImageView(); });
 $('listAddBtn').addEventListener('click', () => {
   const returnMode = listViewMode;
   const addToPool = returnMode === 'pool';
@@ -4465,6 +5353,26 @@ $('listSortFamilyBtn').addEventListener('click', () => { listSortMode='family'; 
 $('importBtn').addEventListener('click', () => {
   closeFileMenu();
   $('fileInput').click();
+});
+function openWelcomeImport() {
+  $('fileInput').value = '';
+  $('fileInput').click();
+}
+document.getElementById('welcomeOpenExistingFirstVisit')?.addEventListener('click', openWelcomeImport);
+document.getElementById('welcomeOpenExistingReturning')?.addEventListener('click', openWelcomeImport);
+document.querySelector('[data-testid=\"welcome-new-tree\"]')?.addEventListener('click', () => {
+  if (startupState !== 'first-visit') return;
+  hideWelcomeSurface();
+  initializeEmptyTreeModel();
+  openSheet(null);
+});
+document.querySelector('[data-testid=\"welcome-demo\"]')?.addEventListener('click', async () => {
+  if (startupState !== 'first-visit') return;
+  await openWelcomeDemoData();
+  hideWelcomeSurface();
+});
+document.querySelector('[data-testid=\"welcome-continue\"]')?.addEventListener('click', () => {
+  hideWelcomeSurface();
 });
 if (minimap) {
   minimap.addEventListener('click', e => {
@@ -4490,6 +5398,8 @@ $('fileInput').addEventListener('change', e => {
       applyLoadedData(imported, { fitResult: false });
       updateWorkingFileButton();
       save();
+      hideWelcomeSurface();
+      refreshWelcomeMeta();
       focusPreferredPerson({ preferFocus: focusMode || nonPoolPeople.length > 1200 });
     } catch {
       alert('Import nicht erkannt. Erwartet wird ein JSON-Export dieser App.');
@@ -4526,8 +5436,52 @@ updatePoolButton();
 updateWorkingFileButton();
 updateRootButton();
 updateFocusButton();
-loadDefaultDataIfAvailable();
-setTimeout(fit, 50);
+if (window.location?.search?.includes('ux-debug=1')) {
+  window.__uxStartupDebug = {
+    computeStartupStateFromSignals,
+    getStartupState,
+    getStartupSignals,
+    computeStartupStateNow,
+    getUiState: () => ({
+      data: uiState.data,
+      viewport: uiState.viewport,
+      mode: uiState.mode,
+      selection: uiState.selection,
+      surfaces: uiState.surfaces,
+      persistence: uiState.persistence
+    }),
+    getUiInvariants: uiInvariants
+  };
+  window.__uxDebug = {
+    getView: () => ({ ...view }),
+    getPerson: id => {
+      const target = person(id);
+      if (!target) return null;
+      return {
+        id: target.id,
+        name: target.name,
+        x: target.x,
+        y: target.y,
+        selected: target.id === selected
+      };
+    },
+    getSelectedPersonId: () => selected
+  };
+}
+computeStartupStateNow();
+updateHeaderMeta();
+if (startupState === 'first-visit') {
+  showWelcomeSurface();
+} else {
+  Promise.resolve(loadDefaultDataIfAvailable())
+    .then(() => {
+      setTimeout(fit, 50);
+    })
+    .catch(() => {})
+    .finally(() => {
+      showWelcomeSurface();
+    });
+}
 setTimeout(() => $('hint').classList.add('hidden'), 8000);
 
 })();
