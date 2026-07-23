@@ -5287,6 +5287,16 @@ function renderListEditor(){
   });
 }
 // -- UI event wiring ----------------------------------------------------
+document.querySelectorAll('.formSectionToggle').forEach(button => {
+  const body = $(button.getAttribute('aria-controls'));
+  if (!body) return;
+  body.hidden = button.getAttribute('aria-expanded') !== 'true';
+  button.addEventListener('click', () => {
+    const expanded = button.getAttribute('aria-expanded') === 'true';
+    button.setAttribute('aria-expanded', String(!expanded));
+    body.hidden = expanded;
+  });
+});
 $('parent1').addEventListener('change', () => {
   const old = $('parent2').value;
   const arr = suggestParentOrder(selected, $('parent1').value);

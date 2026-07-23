@@ -403,69 +403,122 @@
                 </section>
 
                 <form class="personEditView" id="personEditView" data-testid="person-edit-form" hidden novalidate>
-                    <div class="actions editQuickActions">
-                        <button type="button" class="pill" id="quickChild" aria-label="Kind hinzufügen">+ Kind</button>
-                        <button type="button" class="pill" id="quickPartner"
-                            aria-label="Neue Partnerin oder neuen Partner hinzufügen">+ Neue Partner/in</button>
-                        <button type="button" class="pill" id="quickParents"
-                            aria-label="Eltern hinzufügen">+ Eltern</button>
-                    </div>
-                    <div class="grid">
-                    <div class="field"><label for="firstName">Vorname</label><input id="firstName"
-                            placeholder="Vorname" /></div>
-                    <div class="field"><label for="lastName">Nachname</label><input id="lastName"
-                            placeholder="Nachname" /></div>
-                    <div class="field full"><label for="nickname">Rufname / Kurzname</label><input id="nickname"
-                            placeholder="z. B. Lotte" /></div>
-                    <div class="field"><label for="born">Geboren</label><input id="born"
-                            placeholder="1954, 05.1954, 23.05. oder 23.05.1954" /></div>
-                    <div class="field"><label for="died">Gestorben</label><input id="died" placeholder="optional" />
-                    </div>
-                    <div class="field full"><label for="birthName">Geburtsname</label><input id="birthName"
-                            placeholder="z. B. Meißner" /></div>
-                    <div class="field full optionalField" data-person-field="occupation"><label for="occupation">Beruf</label><input id="occupation"
-                            placeholder="z. B. Schreinerin, Lehrer, Landwirt …" /></div>
-                    <div class="field full optionalField" data-person-field="religion"><label for="religion">Glaubensrichtung</label><input id="religion"
-                            placeholder="z. B. katholisch, evangelisch, jüdisch …" /></div>
-                    <div class="field full optionalField" data-person-field="location"><label for="location">Ort</label><input id="location"
-                            placeholder="Wohnort, Herkunftsort oder Station" /></div>
-                    <div class="field full optionalField" data-person-field="link"><label for="personLink">Link</label><input id="personLink"
-                            type="url" inputmode="url" placeholder="https://…" /></div>
-                    <div class="field full optionalField" data-person-field="image">
-                        <label>Bild</label>
-                        <div class="imageField">
-                            <div class="imagePreview" id="imagePreview" aria-hidden="true"></div>
-                            <div class="imageActions">
-                                <button type="button" class="pill" id="chooseImageBtn">Bild wählen</button>
-                                <button type="button" class="pill ghost" id="clearImageBtn">Entfernen</button>
+                    <section class="formSection" data-form-section="basis">
+                        <button type="button" class="formSectionToggle" aria-expanded="true"
+                            aria-controls="formSectionBasis" data-testid="form-section-basis">
+                            <span>Basisdaten</span><span class="formSectionChevron" aria-hidden="true">⌄</span>
+                        </button>
+                        <div class="formSectionBody grid" id="formSectionBasis">
+                            <div class="field"><label for="firstName">Vorname</label><input id="firstName"
+                                    placeholder="Vorname" /></div>
+                            <div class="field"><label for="lastName">Nachname</label><input id="lastName"
+                                    placeholder="Nachname" /></div>
+                            <div class="field full"><label for="nickname">Rufname / Kurzname</label><input id="nickname"
+                                    placeholder="z. B. Lotte" /></div>
+                        </div>
+                    </section>
+
+                    <section class="formSection" data-form-section="life">
+                        <button type="button" class="formSectionToggle" aria-expanded="true"
+                            aria-controls="formSectionLife" data-testid="form-section-life">
+                            <span>Lebensdaten</span><span class="formSectionChevron" aria-hidden="true">⌄</span>
+                        </button>
+                        <div class="formSectionBody grid" id="formSectionLife">
+                            <div class="field"><label for="born">Geboren</label><input id="born"
+                                    placeholder="1954, 05.1954, 23.05. oder 23.05.1954" /></div>
+                            <div class="field"><label for="died">Gestorben</label><input id="died"
+                                    placeholder="optional" /></div>
+                            <div class="field full"><label for="birthName">Geburtsname</label><input id="birthName"
+                                    placeholder="z. B. Meißner" /></div>
+                        </div>
+                    </section>
+
+                    <section class="formSection" data-form-section="relations">
+                        <button type="button" class="formSectionToggle" aria-expanded="false"
+                            aria-controls="formSectionRelations" data-testid="form-section-relations">
+                            <span>Beziehungen</span><span class="formSectionChevron" aria-hidden="true">⌄</span>
+                        </button>
+                        <div class="formSectionBody" id="formSectionRelations" hidden>
+                            <div class="actions editQuickActions">
+                                <button type="button" class="pill" id="quickChild" aria-label="Kind hinzufügen">+ Kind</button>
+                                <button type="button" class="pill" id="quickPartner"
+                                    aria-label="Neue Partnerin oder neuen Partner hinzufügen">+ Neue Partner/in</button>
+                                <button type="button" class="pill" id="quickParents"
+                                    aria-label="Eltern hinzufügen">+ Eltern</button>
+                            </div>
+                            <div class="grid">
+                                <div class="field"><label for="parent1">Elternteil 1</label><select id="parent1"></select></div>
+                                <div class="field"><label for="parent2">Elternteil 2</label><select id="parent2"></select></div>
+                                <div class="field full"><label>Partner/innen</label><div class="partnerChips" id="currentPartners"></div></div>
+                                <div class="field full"><label for="partner">Weitere / frühere Partnerperson ergänzen</label><select id="partner"></select></div>
+                                <div class="field full"><label for="partnerMarriageDate">Heiratsdatum zur neuen Partnerperson</label><input id="partnerMarriageDate"
+                                        placeholder="z. B. 12.05.1972 oder 1972" /></div>
                             </div>
                         </div>
-                    </div>
-                    <div class="field full optionalField" data-person-field="mentions">
-                        <label>Erwähnungen / Quellen</label>
-                        <div class="mentionRows" id="mentionRows"></div>
-                        <button type="button" class="pill mentionAddBtn" id="addMentionBtn">+ Erwähnung</button>
-                    </div>
-                    <div class="field full"><label for="note">Notiz</label><textarea id="note"
-                            placeholder="Beruf, Ort, Besonderheiten …"></textarea></div>
-                    <div class="field full"><label for="confidence">Sicherheit</label><select id="confidence">
-                            <option value="high">Hoch</option>
-                            <option value="medium">Mittel</option>
-                            <option value="low">Niedrig</option>
-                        </select></div>
-                    <div class="field full"><label class="poolCheck"><input type="checkbox" id="inPool" /> Diesen Zweig im Vorrat behalten und nicht im Stammbaum anzeigen</label></div>
-                    <div class="field full"><label class="poolCheck"><input type="checkbox" id="mainRoot" /> Diese Person als Hauptwurzel festlegen (maximal zwei)</label></div>
-                    <div class="field"><label for="parent1">Elternteil 1</label><select id="parent1"></select></div>
-                    <div class="field"><label for="parent2">Elternteil 2</label><select id="parent2"></select></div>
-                    <div class="field full"><label>Partner/innen</label><div class="partnerChips" id="currentPartners"></div></div>
-                    <div class="field full"><label for="partner">Weitere / frühere Partnerperson ergänzen</label><select id="partner"></select></div>
-                    <div class="field full"><label for="partnerMarriageDate">Heiratsdatum zur neuen Partnerperson</label><input id="partnerMarriageDate"
-                            placeholder="z. B. 12.05.1972 oder 1972" /></div>
-                    </div>
-                    <p class="small">Position: Karte im Stammbaum ziehen. Neue Personen landen in der Nähe der aktuellen
-                        Ansicht.</p>
+                    </section>
+
+                    <section class="formSection" data-form-section="additional">
+                        <button type="button" class="formSectionToggle" aria-expanded="false"
+                            aria-controls="formSectionAdditional" data-testid="form-section-additional">
+                            <span>Weitere Angaben</span><span class="formSectionChevron" aria-hidden="true">⌄</span>
+                        </button>
+                        <div class="formSectionBody grid" id="formSectionAdditional" hidden>
+                            <div class="field full optionalField" data-person-field="occupation"><label for="occupation">Beruf</label><input id="occupation"
+                                    placeholder="z. B. Schreinerin, Lehrer, Landwirt …" /></div>
+                            <div class="field full optionalField" data-person-field="religion"><label for="religion">Glaubensrichtung</label><input id="religion"
+                                    placeholder="z. B. katholisch, evangelisch, jüdisch …" /></div>
+                            <div class="field full optionalField" data-person-field="location"><label for="location">Ort</label><input id="location"
+                                    placeholder="Wohnort, Herkunftsort oder Station" /></div>
+                            <div class="field full"><label for="note">Notiz</label><textarea id="note"
+                                    placeholder="Beruf, Ort, Besonderheiten …"></textarea></div>
+                            <div class="field full"><label for="confidence">Sicherheit</label><select id="confidence">
+                                    <option value="high">Hoch</option>
+                                    <option value="medium">Mittel</option>
+                                    <option value="low">Niedrig</option>
+                                </select></div>
+                        </div>
+                    </section>
+
+                    <section class="formSection" data-form-section="sources">
+                        <button type="button" class="formSectionToggle" aria-expanded="false"
+                            aria-controls="formSectionSources" data-testid="form-section-sources">
+                            <span>Quellen und Bild</span><span class="formSectionChevron" aria-hidden="true">⌄</span>
+                        </button>
+                        <div class="formSectionBody grid" id="formSectionSources" hidden>
+                            <div class="field full optionalField" data-person-field="link"><label for="personLink">Link</label><input id="personLink"
+                                    type="url" inputmode="url" placeholder="https://…" /></div>
+                            <div class="field full optionalField" data-person-field="image">
+                                <label>Bild</label>
+                                <div class="imageField">
+                                    <div class="imagePreview" id="imagePreview" aria-hidden="true"></div>
+                                    <div class="imageActions">
+                                        <button type="button" class="pill" id="chooseImageBtn">Bild wählen</button>
+                                        <button type="button" class="pill ghost" id="clearImageBtn">Entfernen</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="field full optionalField" data-person-field="mentions">
+                                <label>Erwähnungen / Quellen</label>
+                                <div class="mentionRows" id="mentionRows"></div>
+                                <button type="button" class="pill mentionAddBtn" id="addMentionBtn">+ Erwähnung</button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="formSection" data-form-section="admin">
+                        <button type="button" class="formSectionToggle" aria-expanded="false"
+                            aria-controls="formSectionAdmin" data-testid="form-section-admin">
+                            <span>Verwaltung</span><span class="formSectionChevron" aria-hidden="true">⌄</span>
+                        </button>
+                        <div class="formSectionBody grid" id="formSectionAdmin" hidden>
+                            <div class="field full"><label class="poolCheck"><input type="checkbox" id="inPool" /> Diesen Zweig im Vorrat behalten und nicht im Stammbaum anzeigen</label></div>
+                            <div class="field full"><label class="poolCheck"><input type="checkbox" id="mainRoot" /> Diese Person als Hauptwurzel festlegen (maximal zwei)</label></div>
+                            <p class="small formPositionHint">Position: Karte im Stammbaum ziehen. Neue Personen landen in der Nähe der aktuellen Ansicht.</p>
+                            <button type="button" class="pill danger formDeleteBtn" id="deleteBtn">Person löschen</button>
+                        </div>
+                    </section>
+
                     <div class="actions formActions">
-                        <button type="button" class="pill danger" id="deleteBtn">Löschen</button>
                         <button type="button" class="pill primary" id="saveBtn"
                             data-testid="person-save">Speichern</button>
                     </div>

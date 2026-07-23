@@ -191,6 +191,15 @@ svg.lines{position:absolute;inset:0;width:100%;height:100%;overflow:visible;poin
 .personDetailView,.personEditView{min-width:0}
 .personEditView{display:grid;gap:10px}
 .editQuickActions{margin-top:0}
+.formSection{min-width:0;border:1px solid rgba(78,54,30,.13);border-radius:16px;background:rgba(255,247,234,.72);overflow:hidden}
+.formSectionToggle{width:100%;min-height:46px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:transparent;color:var(--ink);box-shadow:none;text-align:left;font-size:14px;font-weight:900}
+.formSectionToggle[aria-expanded="true"]{background:rgba(71,106,80,.08)}
+.formSectionChevron{font-size:18px;line-height:1;transition:transform .16s ease}
+.formSectionToggle[aria-expanded="true"] .formSectionChevron{transform:rotate(180deg)}
+.formSectionBody{padding:12px;border-top:1px solid rgba(78,54,30,.1)}
+.formSectionBody[hidden]{display:none!important}
+.formPositionHint{grid-column:1/-1;margin:0}
+.formDeleteBtn{justify-self:start}
 .personFocusAction{display:grid;gap:4px;justify-items:start}
 .personActionHint{max-width:220px;color:var(--muted);font-size:12px;line-height:1.3}
 .textAction{background:transparent;border-style:dashed;color:var(--ink)}
@@ -386,7 +395,7 @@ textarea{min-height:70px;resize:vertical}
   .partnerMarriageDate{grid-column:1/-1;width:100%}
   .sheet .actions{flex-wrap:wrap}
   .sheet .actions button{flex:1 1 128px}
-  .personEditView > .formActions{position:sticky;bottom:-16px;margin:2px -14px -16px;padding:10px 14px 14px;background:linear-gradient(180deg,rgba(255,250,240,0),var(--panel) 22%)}
+  .personEditView > .formActions{position:sticky;bottom:-16px;margin:2px 0 -16px;padding:10px 0 14px;background:linear-gradient(180deg,rgba(255,250,240,0),var(--panel) 22%)}
   .actions button{min-height:42px}
   .scrollSheet,.sideNav,.searchSheet,.checkSheet,.birthdaySheet{left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));top:max(8px,env(safe-area-inset-top));bottom:max(8px,env(safe-area-inset-bottom));width:auto;border-radius:18px;max-height:none;padding:12px}
   .sideTop{position:sticky;top:-12px;z-index:2;margin:-12px -12px 0;padding:12px;background:var(--panel);border-radius:18px 18px 0 0;box-shadow:0 1px 0 rgba(78,54,30,.08)}
