@@ -108,8 +108,6 @@ let marriageDraft = {};
 let scrollExpanded = new Set();
 let checkCollapsed = new Set();
 let workingFileHandle = null;
-let workingFileWriteTimer = null;
-let workingFileWriteChain = Promise.resolve();
 let personById = new Map();
 let nonPoolPeople = [];
 let childrenByParentId = new Map();
@@ -121,6 +119,11 @@ let familyKeyByPersonId = new Map();
 let relationComponentIds = [];
 let pooledPeopleCount = 0;
 let persistenceMode = 'local';
+let persistenceState = 'clean';
+let persistenceRevision = 0;
+let persistenceCompletedRevision = 0;
+let persistenceLastError = '';
+let persistenceSaveChain = Promise.resolve();
 let persistenceNoticeShown = false;
 let persistenceDbPromise = null;
 let persistenceWriteChain = Promise.resolve();
@@ -288,19 +291,17 @@ function refreshWelcomeMeta() {
   });
 }
 function getPersistenceStatusLabel() {
-  if (busyDepth > 0) return 'Speichert ...';
-  if (workingFileHandle) return 'Arbeitsdatei verbunden';
-  if (startupState === 'memory-only' || startupStateSignals.storageFailure || persistenceMode === 'memory') {
-    return 'Nur in diesem Browser';
-  }
-  if (persistenceMode === 'indexeddb' || startupStateSignals.indexedDbSnapshotAvailable || startupStateSignals.localStorageSnapshotAvailable) {
-    return 'Gespeichert';
-  }
-  if (startupState === 'working-file') return 'Arbeitsdatei verbunden';
-  if (startupState === 'returning-local' || startupState === 'demo' || startupState === 'first-visit' || startupState === 'memory-only') {
-    return 'Gespeichert';
-  }
-  return 'Sichern erforderlich';
+  const labels = {
+    clean: 'Bereit',
+    dirty: 'Ungespeicherte Änderungen',
+    saving: 'Speichert …',
+    'saved-local': 'Lokal gespeichert',
+    'saved-file': 'In Arbeitsdatei gespeichert',
+    'degraded-indexeddb': 'Im Ersatzspeicher gesichert',
+    'memory-only': 'Nur im Arbeitsspeicher',
+    error: 'Speicherfehler'
+  };
+  return labels[persistenceState] || 'Sichern erforderlich';
 }
 function updateHeaderMeta() {
   const titleEl = $('app-title');
@@ -370,6 +371,10 @@ const uiState = {
   get persistence() {
     return {
       persistenceMode,
+      persistenceState,
+      persistenceRevision,
+      persistenceCompletedRevision,
+      persistenceLastError,
       hasPersistedTreeData,
       workingFile: workingFileHandle?.name || '',
       hasBusyState: busyDepth > 0,
@@ -721,16 +726,93 @@ function applyLoadedData(imported, { fitResult = true } = {}) {
   updateHeaderMeta();
   setTimeout(maybeOpenRequiredRootSelection, 0);
 }
+function setPersistenceState(nextState, { revision = persistenceRevision, error = '' } = {}) {
+  if (revision < persistenceRevision && ['saved-local', 'saved-file', 'degraded-indexeddb', 'memory-only', 'error'].includes(nextState)) return;
+  persistenceState = nextState;
+  persistenceLastError = error;
+  updateHeaderMeta();
+}
 function schedulePersistedJsonWrite(json) {
-  if (typeof indexedDB === 'undefined') return;
+  if (typeof indexedDB === 'undefined') return Promise.resolve(false);
   persistenceWriteChain = persistenceWriteChain
-    .then(async () => {
-      const ok = await writePersistedJson(json);
-      if (!ok && persistenceMode !== 'memory') persistenceMode = 'memory';
-    })
-    .catch(() => {
-      persistenceMode = 'memory';
+    .then(() => writePersistedJson(json))
+    .catch(() => false);
+  return persistenceWriteChain;
+}
+async function persistSaveRevision(job) {
+  const { revision, json, metadata, fileHandle } = job;
+  if (revision === persistenceRevision) setPersistenceState('saving', { revision });
+
+  let localOk = false;
+  try {
+    localStorage.setItem(storeKey, json);
+    localOk = true;
+  } catch {
+    try { localStorage.removeItem(storeKey); } catch {}
+  }
+
+  const indexedDbAvailable = typeof indexedDB !== 'undefined';
+  const indexedDbOk = indexedDbAvailable ? await writePersistedJson(json).catch(() => false) : false;
+
+  let fileOk = false;
+  let fileError = '';
+  if (fileHandle) {
+    try {
+      const writable = await fileHandle.createWritable();
+      await writable.write(json);
+      await writable.close();
+      fileOk = true;
+    } catch (error) {
+      fileError = error?.message || 'Arbeitsdatei konnte nicht geschrieben werden.';
+      if (revision === persistenceRevision && workingFileHandle === fileHandle) {
+        workingFileHandle = null;
+        updateWorkingFileButton();
+      }
+    }
+  }
+
+  let nextState = 'memory-only';
+  let storageMode = 'memory';
+  if (fileError) {
+    nextState = 'error';
+    storageMode = localOk ? 'local' : (indexedDbOk ? 'indexeddb' : 'memory');
+  } else if (fileOk) {
+    nextState = 'saved-file';
+    storageMode = 'file';
+  } else if (localOk) {
+    nextState = 'saved-local';
+    storageMode = 'local';
+  } else if (indexedDbOk) {
+    nextState = 'degraded-indexeddb';
+    storageMode = 'indexeddb';
+  }
+
+  const hasDurableResult = localOk || indexedDbOk || fileOk;
+  if (hasDurableResult) {
+    writeStartupStateMeta({
+      ...metadata,
+      storageMode,
+      workingFileName: fileOk ? (fileHandle?.name || '') : ''
     });
+  }
+  persistenceCompletedRevision = Math.max(persistenceCompletedRevision, revision);
+  if (revision === persistenceRevision) {
+    persistenceMode = storageMode;
+    startupStateSignals.localStorageAvailable = localOk;
+    startupStateSignals.localStorageSnapshotAvailable = localOk;
+    startupStateSignals.indexedDbAvailable = indexedDbAvailable;
+    startupStateSignals.indexedDbSnapshotAvailable = indexedDbOk;
+    startupStateSignals.storageFailure = nextState === 'memory-only'
+      || (nextState === 'error' && !localOk && !indexedDbOk);
+    hasPersistedTreeData = hasDurableResult;
+    setPersistenceState(nextState, { revision, error: fileError });
+    computeStartupStateNow();
+    if (nextState === 'memory-only') notifyMemoryOnlyPersistence();
+    if (nextState === 'error') {
+      alert('Die Arbeitsdatei konnte nicht aktualisiert werden. Die Änderung wurde, soweit möglich, zusätzlich im Browser gesichert.');
+    }
+  }
+  return { revision, state: nextState, localOk, indexedDbOk, fileOk, fileError };
 }
 async function loadPersistedDataIfAvailable() {
   startupStateSignals.indexedDbAvailable = typeof indexedDB !== 'undefined';
@@ -807,45 +889,24 @@ function save() {
   rebuildDataIndexes();
   data.rootIds = rootIds.filter(id => person(id)).slice(0, 2);
   const json = JSON.stringify(data, null, 2);
-  hasPersistedTreeData = true;
-  schedulePersistedJsonWrite(json);
-  let persistenceError = false;
-  try {
-    localStorage.setItem(storeKey, json);
-    persistenceMode = 'local';
-    startupStateSignals.localStorageAvailable = true;
-    startupStateSignals.localStorageSnapshotAvailable = true;
-    startupStateSignals.storageFailure = false;
-  } catch {
-    persistenceError = true;
-    try { localStorage.removeItem(storeKey); } catch {}
-    startupStateSignals.localStorageSnapshotAvailable = false;
-    startupStateSignals.localStorageAvailable = false;
-    if (typeof indexedDB !== 'undefined') {
-      persistenceMode = 'indexeddb';
-      startupStateSignals.indexedDbAvailable = true;
-      startupStateSignals.storageFailure = false;
-    } else {
-      persistenceMode = 'memory';
-      startupStateSignals.storageFailure = true;
-      notifyMemoryOnlyPersistence();
-    }
-  }
-  const metadataPayload = {
+  const revision = ++persistenceRevision;
+  const metadata = {
     treeName: guessTreeName(),
     personCount: data?.people?.length || 0,
     workingFileName: workingFileHandle?.name || '',
     updatedAt: new Date().toISOString()
   };
-  if (persistenceError) {
-    metadataPayload.storageMode = (startupStateSignals.storageFailure ? 'memory' : 'indexeddb');
-  } else {
-    metadataPayload.storageMode = 'local';
-  }
-  writeStartupStateMeta(metadataPayload);
-  scheduleWorkingFileWrite(json);
-  computeStartupStateNow();
-  updateHeaderMeta();
+  setPersistenceState('dirty', { revision });
+  const job = { revision, json, metadata, fileHandle: workingFileHandle };
+  persistenceSaveChain = persistenceSaveChain
+    .then(() => persistSaveRevision(job))
+    .catch(error => {
+      if (revision === persistenceRevision) {
+        persistenceCompletedRevision = Math.max(persistenceCompletedRevision, revision);
+        setPersistenceState('error', { revision, error: error?.message || 'Unbekannter Speicherfehler' });
+      }
+      return { revision, state: 'error' };
+    });
   return true;
 }
 function updateWorkingFileButton() {
@@ -856,32 +917,6 @@ function updateWorkingFileButton() {
     ? 'Änderungen werden automatisch in diese Datei geschrieben'
     : 'JSON-Datei öffnen und künftig direkt aktualisieren';
   updateHeaderMeta();
-}
-function scheduleWorkingFileWrite(json = '') {
-  if (!workingFileHandle) return;
-  clearTimeout(workingFileWriteTimer);
-  workingFileWriteTimer = setTimeout(() => {
-    const payload = json || JSON.stringify(data, null, 2);
-    workingFileWriteChain = workingFileWriteChain
-      .then(async () => {
-        const writable = await workingFileHandle.createWritable();
-        await writable.write(payload);
-        await writable.close();
-        writeStartupStateMeta({
-          storageMode: 'file',
-          workingFileName: workingFileHandle?.name || '',
-          treeName: guessTreeName(),
-          personCount: data?.people?.length || 0,
-          updatedAt: new Date().toISOString()
-        });
-      })
-      .catch(() => {
-        workingFileHandle = null;
-        updateWorkingFileButton();
-        alert('Die Arbeitsdatei konnte nicht aktualisiert werden. Bitte erneut öffnen.');
-        updateHeaderMeta();
-      });
-  }, 180);
 }
 async function openWorkingFile() {
   if (!window.showOpenFilePicker) {
@@ -902,21 +937,11 @@ async function openWorkingFile() {
     applyLoadedData(imported, { fitResult: false });
     updateWorkingFileButton();
     save();
-    startupStateSignals.storageFailure = false;
-    startupStateSignals.localStorageSnapshotAvailable = false;
+    await persistenceSaveChain;
     startupStateSignals.defaultDataLoaded = false;
-    startupStateSignals.indexedDbSnapshotAvailable = false;
-  startupStateSignals.indexedDbAvailable = typeof indexedDB !== 'undefined';
-  writeStartupStateMeta({
-      storageMode: 'file',
-      workingFileName: workingFileHandle?.name || '',
-      treeName: guessTreeName(imported),
-      personCount: imported?.people?.length || 0,
-    updatedAt: new Date().toISOString()
-  });
-  computeStartupStateNow();
-  updateHeaderMeta();
-  focusPreferredPerson({ preferFocus: focusMode || nonPoolPeople.length > 1200 });
+    computeStartupStateNow();
+    updateHeaderMeta();
+    focusPreferredPerson({ preferFocus: focusMode || nonPoolPeople.length > 1200 });
   } catch (err) {
     if (err?.name !== 'AbortError') alert('Arbeitsdatei konnte nicht geöffnet werden.');
   }
@@ -4433,7 +4458,10 @@ function focusPersonSheet(mode, focusTarget = '') {
   setTimeout(() => {
     if (!$('sheet').classList.contains('open') || personSheetMode !== mode) return;
     if (focusTarget === 'editButton') $('personEditBtn')?.focus();
-    else if (mode === 'edit' || mode === 'create') $('firstName')?.focus();
+    else if (mode === 'edit' || mode === 'create') {
+      const active = document.activeElement;
+      if (!active || active === document.body || !$('sheet').contains(active)) $('firstName')?.focus();
+    }
     else $('sheetTitle')?.focus();
   }, 80);
 }
@@ -6068,7 +6096,23 @@ if (window.location?.search?.includes('ux-debug=1')) {
         selected: target.id === selected
       };
     },
-    getSelectedPersonId: () => selected
+    getSelectedPersonId: () => selected,
+    getPersistenceState: () => ({
+      ...uiState.persistence,
+      statusLabel: getPersistenceStatusLabel()
+    }),
+    waitForPersistence: () => persistenceSaveChain,
+    savePersonNoteForTest: (id, note) => {
+      const target = person(id);
+      if (!target) return null;
+      target.note = String(note);
+      save();
+      return persistenceRevision;
+    },
+    setWorkingFileHandleForTest: handle => {
+      workingFileHandle = handle || null;
+      updateWorkingFileButton();
+    }
   };
 }
 computeStartupStateNow();
