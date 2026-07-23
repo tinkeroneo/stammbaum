@@ -534,6 +534,18 @@
 
                 <section class="personDetailView" id="personDetailView" data-testid="person-detail-view">
                     <div class="personDetails" id="personDetails" data-testid="person-details"></div>
+                    <aside class="dataQualityHint hidden" id="dataQualityHint" role="status"
+                        aria-labelledby="dataQualityTitle" data-testid="data-quality-hint">
+                        <h3 id="dataQualityTitle">Angaben bei Gelegenheit ergänzen</h3>
+                        <p>Die Person wurde gespeichert. Diese offenen Angaben sind bei historischen Daten erlaubt:</p>
+                        <ul id="dataQualityHintList"></ul>
+                        <div class="dataQualityActions">
+                            <button type="button" class="pill primary" id="dataQualityComplete"
+                                data-testid="data-quality-complete">Jetzt ergänzen</button>
+                            <button type="button" class="pill" id="dataQualityLater"
+                                data-testid="data-quality-later">Später</button>
+                        </div>
+                    </aside>
                     <div class="actions personDetailActions">
                         <span class="personFocusAction">
                         <button type="button" class="pill textAction" id="quickFocus"

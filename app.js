@@ -144,6 +144,7 @@ let exportFocusReturnTarget = null;
 let exportFilenameTouched = false;
 let relationshipEditorState = null;
 let relationshipFocusReturnTarget = null;
+let pendingDataQualityHints = [];
 rebuildDataIndexes();
 
 const familyPalette = [
@@ -4808,6 +4809,74 @@ function buildPersonDetailModel(p) {
     isTemporaryRoot: !rootIds.length && temporaryRootId === p.id
   };
 }
+function personDataQualityHints(p) {
+  if (!p) return [];
+  const hints = [];
+  if (!String(p.born || '').trim()) {
+    hints.push({
+      id: 'born',
+      message: 'Geburtsdatum oder ungefähres Geburtsjahr fehlt.',
+      fieldId: 'born'
+    });
+  }
+  const surname = String(p.lastName || p.birthName || '').trim();
+  if (!surname || /^(unbekannt|ohne nachname|n\.?\s*n\.?)$/i.test(surname)) {
+    hints.push({
+      id: 'surname',
+      message: 'Nachname ist nicht eindeutig dokumentiert.',
+      fieldId: 'lastName'
+    });
+  }
+  const parents = uniqueIds(p.parents || []);
+  if (parents.length === 1) {
+    hints.push({
+      id: 'single-parent',
+      message: 'Bisher ist nur ein Elternteil verknüpft.',
+      fieldId: 'relationship'
+    });
+  }
+  return hints;
+}
+function hideDataQualityHint() {
+  pendingDataQualityHints = [];
+  $('dataQualityHint')?.classList.add('hidden');
+  if ($('dataQualityHintList')) $('dataQualityHintList').innerHTML = '';
+}
+function showDataQualityHintsFor(p) {
+  pendingDataQualityHints = personDataQualityHints(p);
+  const container = $('dataQualityHint');
+  const list = $('dataQualityHintList');
+  if (!container || !list || !pendingDataQualityHints.length) {
+    hideDataQualityHint();
+    return false;
+  }
+  list.innerHTML = pendingDataQualityHints
+    .map(hint => `<li>${esc(hint.message)}</li>`)
+    .join('');
+  container.classList.remove('hidden');
+  setTimeout(() => $('dataQualityComplete')?.focus(), 0);
+  return true;
+}
+function completeFirstDataQualityHint() {
+  const hint = pendingDataQualityHints[0];
+  const targetId = selected;
+  if (!hint || !targetId || !person(targetId)) return false;
+  hideDataQualityHint();
+  openPersonEdit(targetId);
+  setTimeout(() => {
+    if (hint.fieldId === 'relationship') {
+      const toggle = $('formSectionRelations')?.previousElementSibling;
+      if (toggle) toggle.setAttribute('aria-expanded', 'true');
+      if ($('formSectionRelations')) $('formSectionRelations').hidden = false;
+      $('quickParents')?.focus();
+      return;
+    }
+    const field = $(hint.fieldId);
+    revealFormSectionFor(field);
+    field?.focus();
+  }, 0);
+  return true;
+}
 
 function renderPersonDetails(p) {
   const details = $('personDetails');
@@ -4912,6 +4981,10 @@ function setPersonSheetView(mode, p) {
 function focusPersonSheet(mode, focusTarget = '') {
   setTimeout(() => {
     if (!$('sheet').classList.contains('open') || personSheetMode !== mode) return;
+    if (mode === 'detail' && !$('dataQualityHint')?.classList.contains('hidden')) {
+      $('dataQualityComplete')?.focus();
+      return;
+    }
     if (focusTarget === 'editButton') $('personEditBtn')?.focus();
     else if (mode === 'edit' || mode === 'create') {
       const active = document.activeElement;
@@ -4922,6 +4995,7 @@ function focusPersonSheet(mode, focusTarget = '') {
 }
 
 function openSheet(id, { mode = '', focus = '' } = {}) {
+  hideDataQualityHint();
   selected = id;
   const p = person(id);
   const nextMode = p ? (mode === 'edit' ? 'edit' : 'detail') : 'create';
@@ -4982,6 +5056,7 @@ async function closeSheet(force = false, trigger = document.activeElement) {
   searchReturnScrollTop = 0;
   selected = closingPersonId || null;
   personSheetMode = 'closed';
+  hideDataQualityHint();
   clearPersonSheetDraft();
   setDialogVisibility($('sheet'), false);
   showBackdrop(false);
@@ -5096,6 +5171,7 @@ async function saveSheet() {
     updateRootButton();
     sheetSnapshot = formSnapshot();
     openSheet(p.id, { mode: 'detail', focus: 'editButton' });
+    showDataQualityHintsFor(p);
     setTimeout(maybeOpenRequiredRootSelection, 0);
   });
   return true;
@@ -6174,6 +6250,11 @@ $('personEditView')?.addEventListener('submit', e => {
 $('closeBtn').addEventListener('click', event => { closeSheet(false, event.currentTarget); });
 $('personEditBtn')?.addEventListener('click', () => selected && openPersonEdit(selected));
 $('personEditBack')?.addEventListener('click', event => { returnToPersonDetail(false, event.currentTarget); });
+$('dataQualityComplete')?.addEventListener('click', completeFirstDataQualityHint);
+$('dataQualityLater')?.addEventListener('click', () => {
+  hideDataQualityHint();
+  $('personEditBtn')?.focus();
+});
 $('chooseImageBtn')?.addEventListener('click', () => {
   if (!(editMode || !person(selected))) return;
   $('personImageInput').click();
@@ -6663,6 +6744,7 @@ if (window.location?.search?.includes('ux-debug=1')) {
       analyzeDeletionImpact(dataset, targetId, roots),
     wouldCreateParentCycle,
     validateRelationshipChoice,
+    personDataQualityHints,
     getDataSnapshot: () => cloneCommandValue({
       people: data.people,
       rootIds,
