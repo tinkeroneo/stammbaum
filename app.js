@@ -131,6 +131,8 @@ let mainNavFocusReturnTarget = null;
 let helpQueue = [];
 let helpFocusReturnTarget = null;
 let helpWasExplicitlyOpened = false;
+let decisionResolver = null;
+let decisionFocusReturnTarget = null;
 rebuildDataIndexes();
 
 const familyPalette = [
@@ -4254,13 +4256,23 @@ function hasUnsavedSheetChanges() {
     && formSnapshot() !== sheetSnapshot;
 }
 
-function confirmDiscardSheetChanges() {
+async function confirmDiscardSheetChanges(trigger = document.activeElement) {
   if (!hasUnsavedSheetChanges()) return true;
-  if (confirm('Änderungen speichern?')) {
-    saveSheet();
+  const decision = await openDecisionDialog({
+    title: 'Änderungen verwerfen?',
+    message: 'Deine nicht gespeicherten Änderungen an dieser Person gehen beim Verwerfen verloren.',
+    confirmLabel: 'Änderungen verwerfen',
+    cancelLabel: 'Weiter bearbeiten',
+    secondaryLabel: 'Änderungen speichern',
+    confirmClass: 'danger',
+    secondaryClass: 'primary',
+    trigger
+  });
+  if (decision === 'secondary') {
+    await saveSheet();
     return false;
   }
-  return confirm('Ohne Speichern schließen?');
+  return decision === 'confirm';
 }
 
 function relationButtons(items, relationKey, relationLabel) {
@@ -4453,10 +4465,10 @@ function openPersonEdit(id) {
   return true;
 }
 
-function returnToPersonDetail(force = false) {
+async function returnToPersonDetail(force = false, trigger = document.activeElement) {
   const id = selected;
   if (!person(id)) return false;
-  if (!force && !confirmDiscardSheetChanges()) return false;
+  if (!force && hasUnsavedSheetChanges() && !(await confirmDiscardSheetChanges(trigger))) return false;
   clearPersonSheetDraft();
   openSheet(id, { mode: 'detail', focus: 'editButton' });
   return true;
@@ -4473,8 +4485,8 @@ function focusSelectedPersonCard(id) {
   else returnFocusToMainNavTarget();
 }
 
-function closeSheet(force = false) {
-  if (!force && !confirmDiscardSheetChanges()) return false;
+async function closeSheet(force = false, trigger = document.activeElement) {
+  if (!force && hasUnsavedSheetChanges() && !(await confirmDiscardSheetChanges(trigger))) return false;
   const returnMode = listReturnMode;
   const reopenSearch = searchReturnMode;
   const reopenQuery = searchReturnQuery;
@@ -4517,7 +4529,8 @@ function resetGeneratedLayout() {
   clearGeneratedLayoutState();
 }
 
-function saveSheet() {
+async function saveSheet() {
+  const saveTrigger = document.activeElement;
   let p = person(selected);
   const firstName = $('firstName').value.trim();
   const birthName = $('birthName').value.trim();
@@ -4564,7 +4577,14 @@ function saveSheet() {
   if (!showFormValidationErrors(validationErrors)) return false;
   if (p && keepBranchInPool && !p.pool) {
     const branchSize = poolBranchIds(p.id).size;
-    if (!confirm(`${branchSize} Person(en) dieses Zweigs in den Vorrat verschieben?\n\nDie Verknüpfungen bleiben erhalten, der Zweig verschwindet aber aus der normalen Anzeige.`)) return false;
+    const decision = await openDecisionDialog({
+      title: 'Zweig in den Vorrat verschieben?',
+      message: `${branchSize} Person(en) dieses Zweigs werden aus der normalen Baumansicht ausgeblendet. Die Personen und ihre Verknüpfungen bleiben erhalten.`,
+      confirmLabel: 'In Vorrat verschieben',
+      cancelLabel: 'Im Stammbaum lassen',
+      trigger: saveTrigger
+    });
+    if (decision !== 'confirm') return false;
   }
 
   if (!p) {
@@ -4694,6 +4714,50 @@ function showBackdrop(visible){
   const back = $('backdrop');
   back.classList.toggle('show', visible);
   back.setAttribute('aria-hidden', visible ? 'false' : 'true');
+}
+function settleDecisionDialog(result) {
+  const layer = $('decisionLayer');
+  const dialog = $('decisionDialog');
+  if (!decisionResolver || !layer || !dialog) return;
+  layer.classList.add('hidden');
+  dialog.setAttribute('aria-hidden', 'true');
+  const resolve = decisionResolver;
+  const focusTarget = decisionFocusReturnTarget;
+  decisionResolver = null;
+  decisionFocusReturnTarget = null;
+  focusTarget?.focus({ preventScroll: true });
+  resolve(result);
+}
+function openDecisionDialog({
+  title,
+  message,
+  confirmLabel,
+  cancelLabel,
+  secondaryLabel = '',
+  confirmClass = 'primary',
+  secondaryClass = '',
+  trigger = document.activeElement
+}) {
+  if (decisionResolver) settleDecisionDialog('cancel');
+  const layer = $('decisionLayer');
+  const dialog = $('decisionDialog');
+  const cancelButton = $('decisionCancel');
+  const secondaryButton = $('decisionSecondary');
+  const confirmButton = $('decisionConfirm');
+  $('decisionTitle').textContent = title;
+  $('decisionMessage').textContent = message;
+  cancelButton.textContent = cancelLabel;
+  secondaryButton.textContent = secondaryLabel;
+  secondaryButton.className = `pill${secondaryClass ? ` ${secondaryClass}` : ''}${secondaryLabel ? '' : ' hidden'}`;
+  confirmButton.textContent = confirmLabel;
+  confirmButton.className = `pill${confirmClass ? ` ${confirmClass}` : ''}`;
+  decisionFocusReturnTarget = trigger instanceof HTMLElement ? trigger : null;
+  layer.classList.remove('hidden');
+  dialog.setAttribute('aria-hidden', 'false');
+  setTimeout(() => cancelButton.focus(), 0);
+  return new Promise(resolve => {
+    decisionResolver = resolve;
+  });
 }
 function openOverview(trigger = overviewButton) {
   if (!overviewSheet || !overviewMap) return false;
@@ -5365,6 +5429,19 @@ function renderListEditor(){
   });
 }
 // -- UI event wiring ----------------------------------------------------
+$('decisionCancel')?.addEventListener('click', () => settleDecisionDialog('cancel'));
+$('decisionSecondary')?.addEventListener('click', () => settleDecisionDialog('secondary'));
+$('decisionConfirm')?.addEventListener('click', () => settleDecisionDialog('confirm'));
+$('decisionLayer')?.addEventListener('click', event => {
+  event.stopPropagation();
+  if (event.target === $('decisionLayer')) settleDecisionDialog('cancel');
+});
+$('decisionLayer')?.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return;
+  event.preventDefault();
+  event.stopPropagation();
+  settleDecisionDialog('cancel');
+});
 document.querySelectorAll('.formSectionToggle').forEach(button => {
   const body = $(button.getAttribute('aria-controls'));
   if (!body) return;
@@ -5382,14 +5459,14 @@ $('parent1').addEventListener('change', () => {
   $('parent2').value = old;
 });
 
-$('saveBtn').addEventListener('click', saveSheet);
+$('saveBtn').addEventListener('click', () => { saveSheet(); });
 $('personEditView')?.addEventListener('submit', e => {
   e.preventDefault();
   saveSheet();
 });
-$('closeBtn').addEventListener('click', closeSheet);
+$('closeBtn').addEventListener('click', event => { closeSheet(false, event.currentTarget); });
 $('personEditBtn')?.addEventListener('click', () => selected && openPersonEdit(selected));
-$('personEditBack')?.addEventListener('click', () => returnToPersonDetail());
+$('personEditBack')?.addEventListener('click', event => { returnToPersonDetail(false, event.currentTarget); });
 $('chooseImageBtn')?.addEventListener('click', () => {
   if (!(editMode || !person(selected))) return;
   $('personImageInput').click();
@@ -5495,8 +5572,8 @@ window.addEventListener('keydown', e => {
   if (e.key === '0' || e.key === 'Home') { fitAll(); e.preventDefault(); }
   if (editMode && e.key === 'Delete' && $('sheet').classList.contains('open') && selected) { $('deleteBtn').click(); e.preventDefault(); }
 });
-$('modeBtn').addEventListener('click', () => {
-  if (!confirmDiscardSheetChanges()) return;
+$('modeBtn').addEventListener('click', async event => {
+  if (hasUnsavedSheetChanges() && !(await confirmDiscardSheetChanges(event.currentTarget))) return;
   editMode = !editMode;
   updateModeUI();
   render();
@@ -5596,11 +5673,17 @@ $('rootSelectionBtn')?.addEventListener('click', () => {
   closeSettingsMenu();
   openRootSelection({ trigger: $('settingsBtn'), required: false });
 });
-$('autoBtn').addEventListener('click', async () => {
-  if (confirm('Automatische kompakte Anordnung anwenden? Aktuelle Positionen werden überschrieben.')) {
-    await runBusy('Auto-Anordnung läuft …', async () => { autoLayout(); });
-  }
+$('autoBtn').addEventListener('click', async event => {
+  const decision = await openDecisionDialog({
+    title: 'Stammbaum automatisch neu anordnen?',
+    message: 'Die aktuellen Kartenpositionen werden durch eine kompakte automatische Anordnung ersetzt. Personendaten und Beziehungen bleiben unverändert.',
+    confirmLabel: 'Neu anordnen',
+    cancelLabel: 'Positionen behalten',
+    trigger: event.currentTarget
+  });
+  if (decision !== 'confirm') return;
   closeSettingsMenu();
+  await runBusy('Auto-Anordnung läuft …', async () => { autoLayout(); });
 });
 $('collapseAllBtn').addEventListener('click', () => {
   const anyOpen = data.people.some(p=>hasChildren(p.id) && !collapsed.has(p.id));
@@ -5626,10 +5709,18 @@ $('helpBtn')?.addEventListener('click', event => {
 });
 $('helpHintClose')?.addEventListener('click', dismissCurrentHelpHint);
 
-$('resetBtn').addEventListener('click', async () => {
+$('resetBtn').addEventListener('click', async event => {
+  const decision = await openDecisionDialog({
+    title: 'Beispieldaten zurücksetzen?',
+    message: 'Der aktuelle lokale Datenstand wird durch die ursprünglichen Beispieldaten ersetzt. Nicht exportierte Änderungen gehen verloren.',
+    confirmLabel: 'Beispiel zurücksetzen',
+    cancelLabel: 'Aktuelle Daten behalten',
+    confirmClass: 'danger',
+    trigger: event.currentTarget
+  });
+  if (decision !== 'confirm') return;
   closeSettingsMenu();
-  if (confirm('Beispiel wirklich zurücksetzen?')) {
-    await runBusy('Beispiel wird zurückgesetzt …', async () => {
+  await runBusy('Beispiel wird zurückgesetzt …', async () => {
       localStorage.removeItem(storeKey);
       localStorage.removeItem(storeKey + '-collapsed');
       await clearPersistedJson();
@@ -5650,8 +5741,7 @@ $('resetBtn').addEventListener('click', async () => {
       updateFocusButton();
       updateRootButton();
       await loadDefaultData({ saveResult: true, fitResult: true });
-    });
-  }
+  });
 });
 
 function exportData(includeImages = true) {

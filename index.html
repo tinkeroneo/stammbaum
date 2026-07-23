@@ -302,6 +302,22 @@
                 </div>
             </div>
             <div class="backdrop" id="backdrop" aria-hidden="true"></div>
+            <div class="decisionLayer hidden" id="decisionLayer" data-testid="decision-layer">
+                <section class="decisionDialog" id="decisionDialog" role="dialog" aria-modal="true"
+                    aria-hidden="true" aria-labelledby="decisionTitle" aria-describedby="decisionMessage"
+                    data-testid="decision-dialog">
+                    <h2 id="decisionTitle"></h2>
+                    <p id="decisionMessage"></p>
+                    <div class="decisionActions">
+                        <button type="button" class="pill" id="decisionCancel"
+                            data-testid="decision-cancel">Abbrechen</button>
+                        <button type="button" class="pill hidden" id="decisionSecondary"
+                            data-testid="decision-secondary"></button>
+                        <button type="button" class="pill" id="decisionConfirm"
+                            data-testid="decision-confirm"></button>
+                    </div>
+                </section>
+            </div>
             <aside class="overviewSheet" id="overviewSheet" data-testid="overview-sheet" role="dialog"
                 aria-modal="true" aria-hidden="true" aria-labelledby="overviewTitle">
                 <div class="overviewTop">
