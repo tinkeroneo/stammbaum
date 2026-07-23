@@ -204,16 +204,6 @@
                     </section>
                     <section class="settingsSection">
                         <h2 class="settingsSectionTitle">Entdecken</h2>
-                        <button type="button" class="settingsItem" id="poolBtn" aria-label="Personenvorrat öffnen">
-                            <span class="settingsItemIcon poolToolbarBtn" aria-hidden="true">
-                                <svg viewBox="0 0 24 24"><path d="M4 6h12v8H4z"/><path d="M16 6h4v3"/><path d="M18 9h2v12H6"/><path d="M6 18h12"/></svg>
-                            </span>
-                            <span class="settingsBadge" aria-live="polite" aria-hidden="true"></span>
-                            <span class="settingsItemContent">
-                                <span class="settingsItemTitle">Personenvorrat</span>
-                                <span class="settingsItemDescription">Vorratspersonen filtern und öffnen.</span>
-                            </span>
-                        </button>
                         <button type="button" class="settingsItem" id="scrollBtn" aria-label="Scrollbare Stammbaumansicht öffnen">
                             <span class="settingsItemIcon" aria-hidden="true">
                                 <svg viewBox="0 0 24 24"><path d="M3 3h18"/><path d="M3 21h18"/><path d="M7 7h10v10H7z"/><path d="M12 17v4M12 21v4"/><path d="M7 17h6"/></svg>
@@ -464,22 +454,36 @@
                 </form>
             </section>
 
-            <section class="listSheet" id="listSheet" role="dialog" aria-modal="true" aria-hidden="true">
+            <section class="listSheet" id="listSheet" role="dialog" aria-modal="true" aria-hidden="true"
+                aria-labelledby="listTitle" data-testid="people-directory">
                 <div class="listTop">
-                    <h2 id="listTitle">Listeneditor</h2>
+                    <h2 id="listTitle">Personenverzeichnis</h2>
                     <button type="button" class="pill" id="listAddBtn" aria-label="Neue Person hinzufügen">+
                         Person</button>
                     <button type="button" class="pill" id="listCloseBtn"
-                        aria-label="Listeneditor schließen">Schließen</button>
+                        aria-label="Personenverzeichnis schließen">Schließen</button>
+                </div>
+                <div class="listTabs" role="tablist" aria-label="Personenbereich">
+                    <button type="button" class="listTab" id="listTreeTab" role="tab" aria-selected="true"
+                        data-list-view="tree" data-testid="directory-tree-tab">Im Stammbaum <span id="listTreeCount"></span></button>
+                    <button type="button" class="listTab" id="listPoolTab" role="tab" aria-selected="false"
+                        data-list-view="pool" data-testid="directory-pool-tab">Vorrat <span id="listPoolCount"></span></button>
                 </div>
                 <input class="listSearch" id="listSearch" placeholder="Suchen nach Name, Geburtsname, Jahr, Notiz …"
-                    aria-label="Liste durchsuchen" />
-                <div class="listRows" id="listRows"></div>
-                <div class="listFooter">
-                    <button type="button" class="pill" id="listSortNameBtn">Name</button>
-                    <button type="button" class="pill" id="listSortBirthBtn">Geburt</button>
-                    <button type="button" class="pill" id="listSortFamilyBtn">Familie</button>
+                    aria-label="Personenverzeichnis durchsuchen" data-testid="directory-search" />
+                <div class="listControls">
+                    <p class="listSummary" id="listSummary" aria-live="polite" data-testid="directory-summary"></p>
+                    <div class="listSortGroup" role="group" aria-labelledby="listSortLabel">
+                        <span class="listSortLabel" id="listSortLabel">Sortierung</span>
+                        <button type="button" class="listSortBtn" id="listSortNameBtn" data-sort="name"
+                            aria-pressed="false">Name</button>
+                        <button type="button" class="listSortBtn" id="listSortBirthBtn" data-sort="birth"
+                            aria-pressed="false">Geburt</button>
+                        <button type="button" class="listSortBtn" id="listSortFamilyBtn" data-sort="family"
+                            aria-pressed="true">Familie</button>
+                    </div>
                 </div>
+                <div class="listRows" id="listRows" data-testid="directory-rows"></div>
             </section>
 
         </main>

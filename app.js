@@ -4721,7 +4721,7 @@ function openMoreFromNavigation(button) {
 }
 function openListEditor(mode = 'tree'){
   listViewMode = mode;
-  $('listTitle').textContent = mode === 'pool' ? 'Personenvorrat' : 'Listeneditor';
+  $('listTitle').textContent = 'Personenverzeichnis';
   $('listAddBtn').textContent = mode === 'pool' ? '+ Vorratsperson' : '+ Person';
   $('listSheet').classList.remove('hidden');
   setDialogVisibility($('listSheet'), true);
@@ -5123,10 +5123,27 @@ function comparePeopleForList(a,b){
 }
 function renderListEditor(){
   const q = ($('listSearch')?.value || '').trim().toLowerCase();
-  const rows = [...data.people]
-    .filter(p => listViewMode === 'pool' ? p.pool : !p.pool)
+  const treePeople = data.people.filter(p => !p.pool);
+  const poolPeople = data.people.filter(p => p.pool);
+  const scopedPeople = listViewMode === 'pool' ? poolPeople : treePeople;
+  const rows = [...scopedPeople]
     .filter(p => !q || personSearchText(p).includes(q))
     .sort(comparePeopleForList);
+
+  $('listAddBtn').textContent = listViewMode === 'pool' ? '+ Vorratsperson' : '+ Person';
+  $('listTreeCount').textContent = `(${treePeople.length})`;
+  $('listPoolCount').textContent = `(${poolPeople.length})`;
+  document.querySelectorAll('[data-list-view]').forEach(tab => {
+    const active = tab.dataset.listView === listViewMode;
+    tab.setAttribute('aria-selected', String(active));
+    tab.tabIndex = active ? 0 : -1;
+  });
+  document.querySelectorAll('[data-sort]').forEach(button => {
+    button.setAttribute('aria-pressed', String(button.dataset.sort === listSortMode));
+  });
+  $('listSummary').textContent = q
+    ? `${rows.length} Treffer von ${scopedPeople.length} · ${data.people.length} gesamt`
+    : `${scopedPeople.length} ${scopedPeople.length === 1 ? 'Person' : 'Personen'} · ${data.people.length} gesamt`;
 
   $('listRows').innerHTML = rows.map(p => {
     const parents = (p.parents||[]).map(id=>person(id)?.name||id).filter(Boolean).join(' + ');
@@ -5136,41 +5153,35 @@ function renderListEditor(){
     const confidence = confidenceText(p);
     const extra = [p.occupation, p.religion, p.location].filter(Boolean).join(' · ');
     return `
-      <div class="listRow${p.pool ? ' poolRow' : ''}" tabindex="0" data-id="${esc(p.id)}">
-        <div>
-          <div class="listName">${esc(p.name)}</div>
+      <div class="listRow${p.pool ? ' poolRow' : ''}" data-id="${esc(p.id)}" data-testid="directory-row-${esc(p.id)}">
+        <div class="listIdentity">
+          <div class="listName">${esc(p.name)}${p.pool ? '<span class="listPoolBadge">Vorrat</span>' : ''}</div>
           <div class="listMeta">${esc([dates, birth.trim(), confidence].filter(Boolean).join(' · ')) || 'Lebensdaten offen'}</div>
           ${extra ? `<div class="listMeta">${esc(extra)}</div>` : ''}
           <div class="listMeta">${partner ? 'Partner/in: '+esc(partner) : ''}${parents ? (partner ? ' · ' : '') + 'Eltern: '+esc(parents) : ''}</div>
         </div>
         <div class="listActions">
-          <button type="button" class="miniBtn" data-act="edit" data-id="${esc(p.id)}">Edit</button>
-          ${p.pool ? `<button type="button" class="miniBtn" data-act="activate" data-id="${esc(p.id)}">Zweig eingliedern</button>` : ''}
-          <button type="button" class="miniBtn" data-act="child" data-id="${esc(p.id)}">+Kind</button>
-          <button type="button" class="miniBtn" data-act="partner" data-id="${esc(p.id)}">+Partner</button>
+          <button type="button" class="pill primary listOpenBtn" data-act="open" data-id="${esc(p.id)}"
+            data-testid="directory-open-${esc(p.id)}">Öffnen</button>
+          <details class="listRowMenu">
+            <summary aria-label="Weitere Aktionen für ${esc(p.name)}">Weitere</summary>
+            <div class="listRowMenuItems">
+              ${p.pool ? `<button type="button" data-act="activate" data-id="${esc(p.id)}">In den Stammbaum eingliedern</button>` : ''}
+              <button type="button" data-act="child" data-id="${esc(p.id)}">Kind hinzufügen</button>
+              <button type="button" data-act="partner" data-id="${esc(p.id)}">Partner hinzufügen</button>
+            </div>
+          </details>
         </div>
       </div>
     `;
   }).join('');
 
-  $('listRows').querySelectorAll('.listRow').forEach(row => {
-    row.addEventListener('click', e => {
-      if(e.target.closest('button')) return;
-      openSheetFromList(row.dataset.id);
-    });
-    row.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        row.click();
-      }
-    });
-  });
   $('listRows').querySelectorAll('button[data-act]').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
       const id = btn.dataset.id;
       const act = btn.dataset.act;
-      if(act === 'edit') {
+      if(act === 'open') {
         openSheetFromList(id);
         return;
       }
@@ -5537,9 +5548,37 @@ $('listAddBtn').addEventListener('click', () => {
   $('inPool').checked = addToPool;
 });
 $('listSearch').addEventListener('input', renderListEditor);
-$('listSortNameBtn').addEventListener('click', () => { listSortMode='name'; renderListEditor(); });
-$('listSortBirthBtn').addEventListener('click', () => { listSortMode='birth'; renderListEditor(); });
-$('listSortFamilyBtn').addEventListener('click', () => { listSortMode='family'; renderListEditor(); });
+document.querySelectorAll('[data-list-view]').forEach(tab => {
+  tab.addEventListener('click', () => {
+    listViewMode = tab.dataset.listView;
+    renderListEditor();
+    tab.focus();
+  });
+  tab.addEventListener('keydown', event => {
+    if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+    event.preventDefault();
+    const nextMode = listViewMode === 'tree' ? 'pool' : 'tree';
+    const nextTab = document.querySelector(`[data-list-view="${nextMode}"]`);
+    listViewMode = nextMode;
+    renderListEditor();
+    nextTab?.focus();
+  });
+});
+document.querySelectorAll('[data-sort]').forEach(button => {
+  button.addEventListener('click', () => {
+    listSortMode = button.dataset.sort;
+    renderListEditor();
+  });
+});
+$('listRows').addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return;
+  const menu = event.target.closest('details[open]');
+  if (!menu) return;
+  event.preventDefault();
+  event.stopPropagation();
+  menu.open = false;
+  menu.querySelector('summary')?.focus();
+});
 $('importBtn').addEventListener('click', () => {
   closeFileMenu();
   $('fileInput').click();
