@@ -2831,6 +2831,7 @@ function zoomClass() {
 function updateZoomClass() {
   world.classList.toggle('zoomMini', view.s < 0.12);
   world.classList.toggle('zoomCompactLevel', view.s >= 0.12 && view.s < 0.32);
+  world.style.setProperty('--inverse-view-scale', String(1 / Math.max(view.s, 0.01)));
 }
 function updateFocusButton() {
   const btn = $('focusBtn');
@@ -3179,14 +3180,6 @@ function render() {
         selected = member?.dataset.memberId || anchor.id;
         openSheet(selected);
       });
-      el.addEventListener('touchend', e => {
-        if (Date.now() < suppressOpenUntil) return;
-        e.preventDefault();
-        e.stopPropagation();
-        const member = e.target.closest('[data-member-id]');
-        selected = member?.dataset.memberId || anchor.id;
-        openSheet(selected);
-      }, { passive:false });
       const cb = el.querySelector('.collapseBtn');
       if(cb){
         const toggleCollapse = ev => {
@@ -3199,9 +3192,8 @@ function render() {
           render();
           fit();
         };
-        cb.addEventListener('pointerdown', ev=>{ev.preventDefault();ev.stopPropagation();}, {passive:false});
+        cb.addEventListener('pointerdown', ev => ev.stopPropagation());
         cb.addEventListener('click', toggleCollapse);
-        cb.addEventListener('touchend', toggleCollapse, {passive:false});
       }
       nodes.appendChild(el);
       continue;
@@ -3227,16 +3219,6 @@ function render() {
       selected = p.id;
       openSheet(p.id);
     });
-    el.addEventListener('touchend', e => {
-      if (Date.now() < suppressOpenUntil) return;
-      if (!drag || (drag.id === p.id && !drag.moved)) {
-        e.preventDefault();
-        e.stopPropagation();
-        drag = null;
-        selected = p.id;
-        openSheet(p.id);
-      }
-    }, { passive:false });
     const cb = el.querySelector('.collapseBtn');
     if(cb){
       const toggleCollapse = ev => {
@@ -3250,9 +3232,8 @@ function render() {
         render();
         fit();
       };
-      cb.addEventListener('pointerdown', ev=>{ev.preventDefault();ev.stopPropagation();}, {passive:false});
+      cb.addEventListener('pointerdown', ev => ev.stopPropagation());
       cb.addEventListener('click', toggleCollapse);
-      cb.addEventListener('touchend', toggleCollapse, {passive:false});
     }
     nodes.appendChild(el);
   }
@@ -3415,9 +3396,11 @@ function onNodePointerDown(e) {
 
 window.addEventListener('pointermove', e => {
   if (!drag) return;
-  const dx = (e.clientX - drag.sx) / view.s;
-  const dy = (e.clientY - drag.sy) / view.s;
-  if (Math.abs(dx) + Math.abs(dy) > 7) drag.moved = true;
+  const screenDx = e.clientX - drag.sx;
+  const screenDy = e.clientY - drag.sy;
+  const dx = screenDx / view.s;
+  const dy = screenDy / view.s;
+  if (Math.hypot(screenDx, screenDy) >= 10) drag.moved = true;
   if (drag.moved) {
     drag.positions.forEach((position, id) => {
       const member = person(id);
@@ -3432,7 +3415,6 @@ window.addEventListener('pointermove', e => {
 window.addEventListener('pointerup', e => {
   if (!drag) return;
   const dragState = drag;
-  const id = dragState.id;
   const moved = dragState.moved;
   drag = null;
   nodes.querySelectorAll('.branchDragging').forEach(el => el.classList.remove('branchDragging'));
@@ -3446,8 +3428,6 @@ window.addEventListener('pointerup', e => {
     suppressOpenUntil = Date.now() + 450;
     return;
   }
-  selected = id;
-  openSheet(id);
 });
 
 const interactiveSelector = '.person,.sheet,.sideNav,.searchSheet,.checkSheet,.birthdaySheet,.scrollSheet,.listSheet,button,input,select,textarea,label';
@@ -3516,26 +3496,7 @@ window.addEventListener('pointerup', e => {
     pan = null;
     return;
   }
-  if (!drag) {
-    pan = null;
-    return;
-  }
-  const dragState = drag;
-  const id = dragState.id;
-  const moved = dragState.moved;
-  drag = null;
-  if (moved) {
-    if (renderFrame) {
-      cancelAnimationFrame(renderFrame);
-      renderFrame = null;
-    }
-    commitDataCommand(dragState.branch ? 'Zweig verschieben' : 'Person verschieben', dragState.commandBefore);
-    render();
-    suppressOpenUntil = Date.now() + 450;
-    return;
-  }
-  selected = id;
-  openSheet(id);
+  pan = null;
 });
 window.addEventListener('pointercancel', e => {
   clearTimeout(longPressTimer);
