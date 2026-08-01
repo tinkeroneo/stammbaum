@@ -15,7 +15,7 @@
   --panel:var(--surface-1);
   --ink:var(--text);
   --muted:var(--text-muted);
-  --accent2:#c9895e;
+  --accent2:#8A4F32;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 .srOnly{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
@@ -35,9 +35,9 @@ header{display:flex;gap:10px;align-items:center;padding:12px max(12px,env(safe-a
 .danger{background:var(--danger);color:white}
 .ghost{background:transparent;box-shadow:none;border:1px dashed rgba(0,0,0,.2)}
 .modeToggle{display:inline-flex;align-items:center;justify-content:center;gap:4px;line-height:1.1;padding:9px 10px;min-width:0;white-space:nowrap}
-.modeSegment{display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;line-height:1.1;padding:2px 3px;border-radius:999px;opacity:.62}
+.modeSegment{display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;line-height:1.1;padding:2px 3px;border-radius:999px;opacity:.9}
 .modeSegment.is-active{background:rgba(255,255,255,.26);color:var(--ink);opacity:1}
-.modeSegmentDivider{font-size:13px;font-weight:700;line-height:1.1;opacity:.35}
+.modeSegmentDivider{font-size:13px;font-weight:700;line-height:1.1;opacity:.75}
 .commandBar{display:flex;align-items:center;gap:6px}
 .commandButton{min-height:44px;padding:8px 10px;font-size:12px;font-weight:800;box-shadow:none}
 .commandButton:disabled{cursor:not-allowed;opacity:.48}
@@ -75,12 +75,12 @@ svg.lines{position:absolute;inset:0;width:100%;height:100%;overflow:visible;poin
 .person.rootPerson{outline:4px solid rgba(111,136,182,.55)}
 .person.branchDragging{outline:4px solid rgba(201,137,94,.64);filter:brightness(1.04)}
 .person.directPerson{box-shadow:0 12px 34px rgba(107,143,113,.24),var(--shadow)}
-.person.affiliatePerson{opacity:.76}
-.person.sidePerson{opacity:.42}
-.person.familyMuted{opacity:.34}
+.person.affiliatePerson{border-style:dashed;filter:saturate(.62)}
+.person.sidePerson{border-style:dotted;filter:saturate(.25);box-shadow:0 4px 14px rgba(45,35,22,.1)}
+.person.familyMuted{border-style:dashed;filter:grayscale(.82);box-shadow:none}
 .person.spotlight{animation:spotlightPulse 1.8s ease both}
 @keyframes spotlightPulse{0%,100%{filter:none;transform:translate(-50%,-50%) scale(1)}35%{filter:brightness(1.08);transform:translate(-50%,-50%) scale(1.08);outline:6px solid rgba(201,137,94,.45)}}
-.avatar{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,color-mix(in srgb,var(--family-color,#6b8f71) 68%,#fff),var(--family-color,#6b8f71));display:grid;place-items:center;font-weight:800;color:white;float:left;margin-right:9px}
+.avatar{width:38px;height:38px;border-radius:50%;background:var(--family-color,#3f6f4c);display:grid;place-items:center;font-weight:800;color:white;float:left;margin-right:9px}
 .avatar img,.detailAvatar img,.scrollAvatar img,.imagePreview img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
 .person h3{font-size:15px;margin:0 0 4px;line-height:1.1}
 .person .meta{font-size:11px;color:var(--muted);line-height:1.25}
@@ -91,7 +91,7 @@ svg.lines{position:absolute;inset:0;width:100%;height:100%;overflow:visible;poin
 .coupleMembers{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .coupleMember{min-width:0;padding:4px 8px 4px 4px;border-radius:14px;cursor:pointer}
 .coupleMember + .coupleMember{border-left:1px solid rgba(78,54,30,.13);padding-left:10px}
-.coupleMember.affiliateMember{opacity:.76}
+.coupleMember.affiliateMember{border-style:dashed;filter:saturate(.55)}
 .coupleMember .avatar{width:34px;height:34px;font-size:13px;margin-right:8px}
 .coupleMember h3{font-size:14px;overflow:hidden;text-overflow:ellipsis}
 .coupleMember .meta{font-size:10.5px}
@@ -277,7 +277,7 @@ textarea{min-height:70px;resize:vertical}
 .decisionActions button{min-height:44px}
 .relationshipFormSummary{margin:0 0 10px;color:var(--muted);font-size:13px;line-height:1.45}
 .relationshipLayer{position:absolute;inset:0;z-index:72;display:grid;place-items:center;padding:16px;background:rgba(39,35,30,.48)}
-.relationshipDialog{width:min(620px,100%);max-height:calc(100dvh - 32px);overflow:auto;padding:18px;border:1px solid rgba(78,54,30,.16);border-radius:20px;background:var(--panel);box-shadow:0 24px 70px rgba(0,0,0,.34);display:grid;gap:14px}
+.relationshipDialog{width:min(40rem,100%);max-height:calc(100dvh - 32px);overflow:auto;padding:18px;border:1px solid rgba(78,54,30,.16);border-radius:20px;background:var(--panel);box-shadow:0 24px 70px rgba(0,0,0,.34);display:grid;gap:14px}
 .relationshipTop{display:flex;align-items:flex-start;gap:12px}
 .relationshipTop > div{min-width:0;flex:1}
 .relationshipTop h2{margin:0;font-size:20px;line-height:1.2}
@@ -302,7 +302,7 @@ textarea{min-height:70px;resize:vertical}
 .relationshipSummary strong{display:block;margin-bottom:5px;font-size:16px}
 .relationshipError{padding:10px 12px;border:1px solid color-mix(in srgb,var(--danger) 48%,transparent);border-radius:12px;background:color-mix(in srgb,var(--danger) 8%,#fff);color:var(--danger)!important;font-weight:800}
 .exportLayer{position:absolute;inset:0;z-index:69;display:grid;place-items:center;padding:16px;background:rgba(39,35,30,.42)}
-.exportDialog{width:min(620px,100%);max-height:calc(100dvh - 32px);overflow:auto;padding:18px;border:1px solid rgba(78,54,30,.16);border-radius:20px;background:var(--panel);box-shadow:0 24px 70px rgba(0,0,0,.32);display:grid;gap:14px}
+.exportDialog{width:min(40rem,100%);max-height:calc(100dvh - 32px);overflow:auto;padding:18px;border:1px solid rgba(78,54,30,.16);border-radius:20px;background:var(--panel);box-shadow:0 24px 70px rgba(0,0,0,.32);display:grid;gap:14px}
 .exportTop{display:flex;align-items:flex-start;gap:12px}
 .exportTop > div{min-width:0;flex:1}
 .exportTop h2{margin:0;font-size:20px;line-height:1.2}
@@ -400,10 +400,10 @@ textarea{min-height:70px;resize:vertical}
   color:var(--muted);
 }
 .hidden{display:none!important}
-.sideNav,.searchSheet,.checkSheet,.birthdaySheet,.scrollSheet{position:absolute;left:0;top:0;bottom:0;width:min(420px,94vw);z-index:31;background:var(--panel);box-shadow:16px 0 44px rgba(0,0,0,.2);padding:14px max(14px,env(safe-area-inset-left)) max(14px,env(safe-area-inset-bottom));display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:10px;transform:translateX(-110%);transition:.22s ease;min-height:0;overflow:hidden;touch-action:pan-y}
+.sideNav,.searchSheet,.checkSheet,.birthdaySheet,.scrollSheet{position:absolute;left:0;top:0;bottom:0;width:min(30rem,94vw);z-index:31;background:var(--panel);box-shadow:16px 0 44px rgba(0,0,0,.2);padding:14px max(14px,env(safe-area-inset-left)) max(14px,env(safe-area-inset-bottom));display:grid;grid-template-rows:auto auto minmax(0,1fr);gap:10px;transform:translateX(-110%);transition:.22s ease;min-height:0;overflow:hidden;touch-action:pan-y}
 .sideNav.open,.searchSheet.open,.checkSheet.open,.birthdaySheet.open,.scrollSheet.open{transform:translateX(0)}
 .birthdaySheet,.scrollSheet{grid-template-rows:auto minmax(0,1fr)}
-.sideTop{display:flex;gap:8px;align-items:center}
+.sideTop{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .sideTop h2{font-size:18px;margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sideTop .pill{flex:0 0 auto}
 .navSearch{width:100%;border:1px solid rgba(0,0,0,.14);border-radius:14px;padding:11px;background:#fff;color:var(--ink)}
@@ -448,7 +448,7 @@ textarea{min-height:70px;resize:vertical}
   .person{width:190px}
   .couplePerson{width:320px}
   .toolbar{left:22px;right:22px;width:calc(100vw - 44px);max-width:none}
-  .sheet{left:auto;width:420px;border-radius:24px 0 0 24px;top:0;bottom:0;transform:translateX(110%);max-height:none}
+  .sheet{left:auto;width:min(30rem,calc(100vw - 16px));border-radius:24px 0 0 24px;top:0;bottom:0;transform:translateX(110%);max-height:none}
   .sheet.open{transform:translateX(0)}
 }
 @media (max-width:759px){
@@ -530,7 +530,7 @@ textarea{min-height:70px;resize:vertical}
 .listRowMenuItems button{min-height:44px;padding:8px 10px;border-radius:9px;background:transparent;color:var(--ink);box-shadow:none;text-align:left;font-size:12px}
 .listRowMenuItems button:hover,.listRowMenuItems button:focus-visible{background:rgba(71,106,80,.1)}
 @media (min-width:760px){
-  .listSheet{left:auto;width:min(460px,calc(100vw - 16px));top:0;bottom:0;border-radius:24px 0 0 24px;transform:translateX(110%)}
+  .listSheet{left:auto;width:min(32rem,calc(100vw - 16px));top:0;bottom:0;border-radius:24px 0 0 24px;transform:translateX(110%)}
   .listSheet.open{transform:translateX(0)}
 }
 @media (max-width:980px){

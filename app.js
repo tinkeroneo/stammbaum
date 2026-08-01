@@ -153,8 +153,8 @@ let canvasFocusRestoreRequested = false;
 rebuildDataIndexes();
 
 const familyPalette = [
-  '#6b8f71', '#c9895e', '#6f88b6', '#b86b77', '#8f7ab8',
-  '#5d9a9a', '#b39a4d', '#7b8d57', '#b0709b', '#8a765f'
+  '#3f6f4c', '#925438', '#526f9e', '#944c5a', '#705b9a',
+  '#397575', '#7b681d', '#586b35', '#8a4b76', '#6a5745'
 ];
 const personFieldSettingsKey = storeKey + '-person-fields';
 const optionalPersonFields = [
