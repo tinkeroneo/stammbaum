@@ -2396,6 +2396,41 @@ function hiddenIds(){
 function hasChildren(id){
   return childrenOfPerson(id).length > 0;
 }
+function branchTogglePresentation(id) {
+  const target = person(id);
+  if (!target || !hasChildren(id)) return null;
+  const isCollapsed = collapsed.has(id);
+  const directChildren = childrenOfPerson(id).length;
+  const childLabel = directChildren === 1 ? '1 direktes Kind' : `${directChildren} direkte Kinder`;
+  const name = fullName(target) || target.name || 'dieser Person';
+  const action = isCollapsed ? 'ausklappen' : 'einklappen';
+  return {
+    isCollapsed,
+    symbol: isCollapsed ? '+' : '−',
+    text: isCollapsed ? 'Ast ausklappen' : 'Ast einklappen',
+    label: `Ast von ${name} ${action}, ${childLabel}`,
+    hint: isCollapsed
+      ? `${childLabel} und ihre nachfolgenden Generationen sind ausgeblendet.`
+      : `${childLabel} und ihre nachfolgenden Generationen werden ausgeblendet.`
+  };
+}
+function branchToggleButtonHtml(id) {
+  const state = branchTogglePresentation(id);
+  if (!state) return '';
+  return `<button type="button" class="collapseBtn" data-collapse-id="${esc(id)}"
+    data-testid="branch-toggle-${esc(id)}" aria-label="${esc(state.label)}"
+    aria-expanded="${String(!state.isCollapsed)}" title="${esc(state.label)}"><span aria-hidden="true">${state.symbol}</span></button>`;
+}
+function toggleBranchCollapsed(id, { restoreCanvasFocus = false } = {}) {
+  if (!person(id) || !hasChildren(id)) return false;
+  if (collapsed.has(id)) collapsed.delete(id);
+  else collapsed.add(id);
+  saveCollapsed();
+  if (restoreCanvasFocus) requestCanvasFocusAfterRender(id);
+  render();
+  updatePersonBranchAction(person(selected));
+  return true;
+}
 function poolBranchIds(id) {
   const ids = new Set();
   const queue = [id];
@@ -2767,6 +2802,7 @@ function zoomClass() {
 function updateZoomClass() {
   world.classList.toggle('zoomMini', view.s < 0.12);
   world.classList.toggle('zoomCompactLevel', view.s >= 0.12 && view.s < 0.32);
+  world.classList.toggle('zoomBranchActionsHidden', view.s < 0.55);
   world.style.setProperty('--inverse-view-scale', String(1 / Math.max(view.s, 0.01)));
 }
 function updateFocusButton() {
@@ -2793,6 +2829,20 @@ function updateFocusButton() {
     quickBtn.setAttribute('aria-label', focusMode ? text : 'Nahbereich für diese Person zeigen');
     quickBtn.setAttribute('aria-pressed', String(focusMode));
   }
+}
+function updatePersonBranchAction(p = person(selected)) {
+  const wrapper = $('personBranchAction');
+  const button = $('personBranchToggle');
+  const hint = $('personBranchHint');
+  const state = p ? branchTogglePresentation(p.id) : null;
+  if (!wrapper || !button || !hint) return;
+  wrapper.classList.toggle('hidden', !state);
+  if (!state) return;
+  button.textContent = state.text;
+  button.setAttribute('aria-label', state.label);
+  button.setAttribute('aria-expanded', String(!state.isCollapsed));
+  button.title = state.label;
+  hint.textContent = state.hint;
 }
 function preferredLandingPersonId() {
   const activePeople = nonPoolPeople;
@@ -3033,14 +3083,9 @@ function bindCanvasCard(el, { draggable = false } = {}) {
     event.stopPropagation();
     drag = null;
     suppressOpenUntil = Date.now() + 500;
-    const collapseId = el.dataset.collapseId;
+    const collapseId = collapseButton.dataset.collapseId || el.dataset.collapseId;
     if (!collapseId) return;
-    if (collapsed.has(collapseId)) collapsed.delete(collapseId);
-    else collapsed.add(collapseId);
-    saveCollapsed();
-    requestCanvasFocusAfterRender(collapseId);
-    render();
-    fit();
+    toggleBranchCollapsed(collapseId, { restoreCanvasFocus: true });
   });
 }
 
@@ -3149,7 +3194,7 @@ function render() {
       const memberHtml = members.length > 2
         ? `${personTileContent(anchor, memberClass(anchor))}<div class="partnerStack">${members.filter(member => member.id !== anchor.id).map(member => personTileContent(member, memberClass(member))).join('')}</div>`
         : members.map(member => personTileContent(member, memberClass(member))).join('');
-      const html = `<div class="coupleMembers">${memberHtml}</div>${collapseId ? `<button class="collapseBtn" title="Ast ein-/ausklappen">${collapsed.has(collapseId)?'+' : '−'}</button>` : ''}`;
+      const html = `<div class="coupleMembers">${memberHtml}</div>${collapseId ? branchToggleButtonHtml(collapseId) : ''}`;
       const renderKey = `couple:${members.map(member => member.id).sort().join('|')}`;
       const signature = JSON.stringify([className, left, top, familyColorValue, partnerColorValue, anchor.id, collapseId, html]);
       let el = existingCards.get(renderKey);
@@ -3175,7 +3220,7 @@ function render() {
     const familyMuted = activeFamily && !matchesFamily(p, activeFamily);
     const sideLine = rootIds.length && !directIds.has(p.id) && !affiliateIds.has(p.id);
     const className = 'person' + zClass + (compactMode ? ' compact' : '') + (selected === p.id ? ' selected' : '') + (focusMode && focusId === p.id ? ' focusRoot' : '') + (isMainRoot(p.id) ? ' rootPerson' : '') + (directIds.has(p.id) ? ' directPerson' : '') + (affiliateIds.has(p.id) ? ' affiliatePerson' : '') + (sideLine ? ' sidePerson' : '') + (spotlightId === p.id ? ' spotlight' : '') + (familyMuted ? ' familyMuted' : '') + (drag?.branch && drag.positions?.has(p.id) ? ' branchDragging' : '') + (collapsed.has(p.id) ? ' collapsed' : '');
-    const html = `${personTileContent(p)}${canCollapse ? `<button class="collapseBtn" title="Ast ein-/ausklappen">${collapsed.has(p.id)?'+' : '−'}</button>` : ''}`;
+    const html = `${personTileContent(p)}${canCollapse ? branchToggleButtonHtml(p.id) : ''}`;
     const renderKey = `person:${p.id}`;
     const signature = JSON.stringify([className, p.x, p.y, familyColor(key), p.id, canCollapse ? p.id : '', editMode, html]);
     let el = existingCards.get(renderKey);
@@ -4982,6 +5027,7 @@ function setPersonSheetView(mode, p) {
     : (mode === 'edit' ? 'Person bearbeiten' : 'Neue Person');
   $('quickFocus').style.display = p ? '' : 'none';
   updateFocusButton();
+  updatePersonBranchAction(mode === 'detail' ? p : null);
   $('personEditBtn').style.display = p ? '' : 'none';
   $('quickChild').style.display = p && mode === 'edit' ? '' : 'none';
   $('quickPartner').style.display = p && mode === 'edit' ? '' : 'none';
@@ -6570,6 +6616,9 @@ $('focusBtn')?.addEventListener('click', () => {
 $('quickFocus').addEventListener('click', () => {
   if (focusMode) setFocusMode(false);
   else if (selected) setFocusMode(true, selected);
+});
+$('personBranchToggle')?.addEventListener('click', () => {
+  if (selected) toggleBranchCollapsed(selected);
 });
 [$('quickChild'), $('quickPartner'), $('quickParents')].filter(Boolean).forEach(button => {
   button.addEventListener('click', event => {
