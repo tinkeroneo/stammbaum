@@ -164,7 +164,7 @@ let minimapRenderSignature = '';
 let relationshipRenderSignature = '';
 let generationRenderSignature = '';
 let searchPeopleSorted = [];
-let searchTextByPersonId = new Map();
+let searchDocumentByPersonId = new Map();
 rebuildDataIndexes();
 
 const familyPalette = [
@@ -784,10 +784,10 @@ function rebuildDataIndexes() {
   relationComponentIds = buildRelationComponentIds();
   const searchIndex = buildSearchIndex(nonPoolPeople, {
     nameOf: fullName,
-    textOf: personSearchText
+    textOf: personSearchDocument
   });
   searchPeopleSorted = searchIndex.sorted;
-  searchTextByPersonId = searchIndex.textById;
+  searchDocumentByPersonId = searchIndex.textById;
 }
 function buildRelationComponentIds() {
   const ids = nonPoolPeople.map(p => p.id);
@@ -1424,17 +1424,57 @@ function setRelationshipError(message = '') {
   element.textContent = message;
   element.classList.toggle('hidden', !message);
 }
+function relationshipSuggestedCandidates() {
+  if (!relationshipEditorState || relationshipEditorState.type !== 'parent') return [];
+  const source = person(relationshipEditorState.sourceId);
+  const parents = uniqueIds(source?.parents || []).map(person).filter(Boolean);
+  if (parents.length !== 1) return [];
+  const existingParent = parents[0];
+  return partnerIds(existingParent)
+    .map(person)
+    .filter(Boolean)
+    .filter(candidate => validateRelationshipChoice(source.id, 'parent', candidate.id).valid)
+    .map(candidate => ({
+      candidate,
+      explanation: `Partner/in von ${fullName(existingParent) || existingParent.name}`
+    }));
+}
+function renderRelationshipSuggestions() {
+  const section = $('relationshipSuggestions');
+  const container = $('relationshipSuggestionRows');
+  if (!section || !container || !relationshipEditorState) return;
+  const suggestions = relationshipSuggestedCandidates();
+  section.classList.toggle('hidden', suggestions.length === 0);
+  container.innerHTML = suggestions.map(({ candidate, explanation }) => {
+    const selectedTarget = relationshipEditorState.targetId === candidate.id;
+    const meta = [candidate.born, candidate.location, explanation].filter(Boolean).join(' · ');
+    return `<button type="button" class="relationshipResult" data-relationship-target="${esc(candidate.id)}"
+      data-testid="relationship-suggestion-${esc(candidate.id)}" aria-pressed="${selectedTarget ? 'true' : 'false'}">
+      <span><strong>${esc(fullName(candidate) || candidate.name)}</strong><small>${esc(meta)}</small></span>
+      <span class="relationshipResultState">${selectedTarget ? 'Ausgewählt' : 'Vorschlag wählen'}</span>
+    </button>`;
+  }).join('');
+}
 function renderRelationshipResults() {
   const container = $('relationshipResults');
   if (!container || !relationshipEditorState) return;
-  const query = String($('relationshipSearch')?.value || '').trim().toLowerCase();
-  const rows = data.people
-    .filter(entry => entry.id !== relationshipEditorState.sourceId)
-    .filter(entry => !query || searchText(entry).includes(query))
-    .sort((a, b) => fullName(a).localeCompare(fullName(b), 'de'))
-    .slice(0, 40);
-  container.innerHTML = rows.length
-    ? rows.map(entry => {
+  const query = String($('relationshipSearch')?.value || '').trim();
+  const queryContext = createSearchQueryContext(query);
+  const matches = [];
+  if (queryContext.tokens.length) {
+    for (const entry of data.people) {
+      if (entry.id === relationshipEditorState.sourceId) continue;
+      const match = personSearchMatch(entry, queryContext);
+      if (match) matches.push({ entry, ...match });
+    }
+    matches.sort((a, b) => b.score - a.score || fullName(a.entry).localeCompare(fullName(b.entry), 'de'));
+  }
+  const rows = matches.slice(0, 40);
+  renderRelationshipSuggestions();
+  container.innerHTML = !queryContext.tokens.length
+    ? '<p class="small">Gib einen Namen, ein Jahr oder einen Ort ein.</p>'
+    : rows.length
+    ? rows.map(({ entry }) => {
       const selectedTarget = relationshipEditorState.targetId === entry.id;
       const meta = [entry.born, entry.location, entry.pool ? 'Vorrat' : ''].filter(Boolean).join(' · ');
       return `<button type="button" class="relationshipResult" data-relationship-target="${esc(entry.id)}"
@@ -2654,6 +2694,7 @@ function updateModeUI() {
     btn.classList.add('primary');
   }
   $('addBtn')?.classList.toggle('hidden', !editMode);
+  updateLayoutButton();
 }
 function currentViewPreset() {
   if (compactMode && nameMode === 'initials') return 'initials';
@@ -2684,12 +2725,26 @@ function updateNameModeButton() {
 }
 function updateLayoutButton() {
   const labels = { classic: 'Klassisch', tree: 'Baum', radial: 'Radial' };
-  const btn = $('layoutBtn');
-  if (btn) {
-    const title = btn.querySelector('.settingsItemTitle');
-    const text = `Layout: ${labels[layoutMode]}`;
-    if (title) title.textContent = text;
-    else btn.textContent = text;
+  document.querySelectorAll('[data-layout-mode]').forEach(button => {
+    const active = button.dataset.layoutMode === layoutMode;
+    button.setAttribute('aria-pressed', String(active));
+    button.disabled = !editMode;
+    button.title = editMode
+      ? `Anordnung „${labels[button.dataset.layoutMode]}“ wählen`
+      : 'Zum Ändern der Anordnung den Bearbeitungsmodus aktivieren.';
+  });
+  const hint = $('layoutModeHint');
+  if (hint) {
+    hint.textContent = editMode
+      ? `Aktiv: ${labels[layoutMode]}. Änderungen können rückgängig gemacht werden.`
+      : `Aktiv: ${labels[layoutMode]}. Zum Ändern „Bearbeiten“ aktivieren.`;
+  }
+  const autoButton = $('autoBtn');
+  if (autoButton) {
+    autoButton.disabled = !editMode;
+    autoButton.title = editMode
+      ? 'Klassische Kartenpositionen automatisch neu anordnen'
+      : 'Zum automatischen Aufräumen den Bearbeitungsmodus aktivieren.';
   }
 }
 function updatePoolButton() {
@@ -3026,7 +3081,10 @@ function applyRadialLayout() {
     }
   }
 }
-function setLayoutMode(next) {
+function setLayoutMode(next, { allowInView = false } = {}) {
+  if (!['classic', 'tree', 'radial'].includes(next)) return false;
+  if (!editMode && !allowInView) return false;
+  if (next === layoutMode) return false;
   const commandBefore = captureCommandState();
   if (next !== 'classic') {
     captureClassicPositions();
@@ -3040,10 +3098,20 @@ function setLayoutMode(next) {
   commitDataCommand(`Layout ${next === 'classic' ? 'Klassisch' : next === 'tree' ? 'Baum' : 'Radial'}`, commandBefore);
   render();
   fit();
+  return true;
 }
-function cycleLayoutMode() {
-  const order = ['classic', 'tree', 'radial'];
-  setLayoutMode(order[(order.indexOf(layoutMode) + 1) % order.length]);
+function applyAutomaticClassicLayout() {
+  if (!editMode) return false;
+  const commandBefore = captureCommandState();
+  if (layoutMode !== 'classic') restoreClassicPositions();
+  layoutMode = 'classic';
+  savedClassicPositions = null;
+  autoLayout(false);
+  updateLayoutButton();
+  commitDataCommand('Positionen automatisch aufräumen', commandBefore);
+  render();
+  fit();
+  return true;
 }
 function personTileContent(p, className = '') {
   const dates = [p.born, p.died && '– ' + p.died].filter(Boolean).join(' ');
@@ -5776,7 +5844,7 @@ function renderRootSelectionResults() {
   const rowsEl = $('rootSelectionRows');
   const searchEl = $('rootSelectionSearch');
   if (!rowsEl || !searchEl) return;
-  const q = searchEl.value.trim().toLowerCase();
+  const q = normalizeSearchValue(searchEl.value);
   const rows = [...nonPoolPeople]
     .filter(p => !q || personSearchText(p).includes(q))
     .sort((a, b) => fullName(a).localeCompare(fullName(b)))
@@ -6132,42 +6200,165 @@ function jumpToPerson(id) {
   applyView();
   showSpotlight(id);
 }
-function escapeSearchText(value) {
-  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function normalizeSearchValue(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+function searchQueryTokens(value) {
+  const normalized = normalizeSearchValue(value);
+  return normalized ? normalized.split(' ').filter(Boolean) : [];
+}
+function createSearchQueryContext(value) {
+  const normalized = normalizeSearchValue(value);
+  return {
+    normalized,
+    tokens: normalized ? normalized.split(' ').filter(Boolean) : []
+  };
+}
+function personSearchDocument(p) {
+  const mentions = cleanMentions(p.mentions)
+    .map(item => [item.title, item.date, item.link].filter(Boolean).join(' '))
+    .join(' ');
+  const fields = [
+    ['Name', fullName(p) || p.name],
+    ['Geburtsname', p.birthName],
+    ['Spitzname', p.nickname],
+    ['Geburtsangabe', p.born],
+    ['Sterbeangabe', p.died],
+    ['Ort', p.location],
+    ['Beruf', p.occupation],
+    ['Glaubensrichtung', p.religion],
+    ['Notiz', p.note],
+    ['Quelle', p.link],
+    ['Erwähnung', mentions],
+    ['Datenstatus', confidenceText(p)]
+  ].map(([label, value]) => ({ label, value: String(value || ''), normalized: normalizeSearchValue(value) }))
+    .filter(field => field.normalized);
+  const primary = normalizeSearchValue([
+    fullName(p), p.name, p.firstName, p.lastName, p.birthName, p.nickname
+  ].filter(Boolean).join(' '));
+  return {
+    name: normalizeSearchValue(fullName(p) || p.name),
+    primary,
+    fields,
+    all: fields.map(field => field.normalized).join(' ')
+  };
+}
+function personSearchText(p) {
+  return (searchDocumentByPersonId.get(p.id) || personSearchDocument(p)).all;
+}
+function personSearchMatch(p, query) {
+  const context = typeof query === 'string' ? createSearchQueryContext(query) : query;
+  const tokens = context?.tokens || [];
+  if (!tokens.length) return null;
+  const document = searchDocumentByPersonId.get(p.id) || personSearchDocument(p);
+  if (!tokens.every(token => document.all.includes(token))) return null;
+  const normalizedQuery = context.normalized;
+  const nameWords = document.name.split(' ').filter(Boolean);
+  let score = 400;
+  if (document.name === normalizedQuery) score = 1000;
+  else if (document.name.startsWith(normalizedQuery)) score = 900;
+  else if (tokens.every(token => nameWords.some(word => word.startsWith(token)))) score = 820;
+  else if (tokens.every(token => document.primary.includes(token))) score = 740;
+  else if (tokens.some(token => document.name.includes(token))) score = 620;
+  const reasons = [];
+  tokens.forEach(token => {
+    const field = document.fields.find(entry => entry.normalized.includes(token));
+    if (field && !reasons.includes(field.label)) reasons.push(field.label);
+  });
+  return { score, reasons };
 }
 function highlightSearchMatch(value, query) {
   const text = String(value || '');
-  const normalized = String(query || '').trim();
-  if (!normalized) return esc(text);
-  return esc(text).replace(
-    new RegExp(escapeSearchText(normalized), 'gi'),
-    match => `<mark class="searchMatch">${match}</mark>`
-  );
+  const tokens = searchQueryTokens(query);
+  if (!tokens.length || !text) return esc(text);
+  let normalized = '';
+  const sourceOffsets = [];
+  let sourceOffset = 0;
+  for (const character of text) {
+    const chunk = character
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/ß/g, 'ss')
+      .replace(/[^a-z0-9]/g, ' ');
+    for (const normalizedCharacter of chunk) {
+      normalized += normalizedCharacter;
+      sourceOffsets.push({ start: sourceOffset, end: sourceOffset + character.length });
+    }
+    sourceOffset += character.length;
+  }
+  const ranges = [];
+  tokens.forEach(token => {
+    let from = 0;
+    while (from < normalized.length) {
+      const index = normalized.indexOf(token, from);
+      if (index < 0) break;
+      const start = sourceOffsets[index]?.start;
+      const end = sourceOffsets[index + token.length - 1]?.end;
+      if (Number.isInteger(start) && Number.isInteger(end)) ranges.push([start, end]);
+      from = index + Math.max(1, token.length);
+    }
+  });
+  if (!ranges.length) return esc(text);
+  ranges.sort((a, b) => a[0] - b[0]);
+  const merged = [];
+  ranges.forEach(range => {
+    const previous = merged[merged.length - 1];
+    if (previous && range[0] <= previous[1]) previous[1] = Math.max(previous[1], range[1]);
+    else merged.push([...range]);
+  });
+  let cursor = 0;
+  return merged.map(([start, end]) => {
+    const prefix = esc(text.slice(cursor, start));
+    const marked = `<mark class="searchMatch">${esc(text.slice(start, end))}</mark>`;
+    cursor = end;
+    return prefix + marked;
+  }).join('') + esc(text.slice(cursor));
 }
 function renderSearchResults(){
   const query = ($('personSearch')?.value || '').trim();
-  const q = query.toLowerCase();
-  const rows = searchPeopleSorted
-    .filter(p => !q || searchTextByPersonId.get(p.id)?.includes(q))
-    .slice(0, 80);
-
-  const hasQuery = !!q;
-  const emptyState = hasQuery && rows.length === 0;
+  const queryContext = createSearchQueryContext(query);
+  const hasQuery = queryContext.tokens.length > 0;
+  const matches = [];
+  if (hasQuery) {
+    for (const p of searchPeopleSorted) {
+      const match = personSearchMatch(p, queryContext);
+      if (match) matches.push({ p, ...match });
+    }
+    matches.sort((a, b) => b.score - a.score
+      || fullName(a.p).localeCompare(fullName(b.p), 'de')
+      || String(a.p.born || '').localeCompare(String(b.p.born || ''), 'de'));
+  }
+  const total = matches.length;
+  const rows = matches.slice(0, 80);
+  const emptyState = hasQuery && total === 0;
   if ($('searchSummary')) {
     $('searchSummary').textContent = hasQuery
-      ? (rows.length ? `${rows.length} Treffer für „${query}“` : `Keine Treffer für „${query}“`)
-      : '';
+      ? (total
+        ? `${total} Treffer für „${query}“${total > rows.length ? ` · erste ${rows.length} angezeigt` : ''}`
+        : `Keine Treffer für „${query}“`)
+      : 'Gib einen Namen, ein Jahr oder einen Ort ein.';
   }
   $('searchEmptyState')?.classList.toggle('hidden', !emptyState);
   const searchRows = $('searchRows');
   if (!searchRows) return;
-  searchRows.innerHTML = rows.map(p => {
+  searchRows.innerHTML = rows.map(result => {
+    const p = result.p;
     const dates = [p.born, p.died && '- '+p.died].filter(Boolean).join(' ');
     const extra = [birthNameDiffers(p) && 'geb. '+p.birthName, p.occupation, p.religion, p.location].filter(Boolean).join(' · ');
+    const reason = result.reasons.length ? `Treffer: ${result.reasons.join(' + ')}` : '';
+    const details = [dates, extra, reason].filter(Boolean).join(' · ') || 'Lebensdaten offen';
     return `
       <button type="button" class="searchRow" data-id="${esc(p.id)}" data-testid="person-search-result-${esc(p.id)}">
         <span class="swatch" style="background:${esc(familyColor(familyKey(p)))}"></span>
-        <span><strong>${highlightSearchMatch(fullName(p) || p.name, query)}</strong><small>${highlightSearchMatch([dates, extra].filter(Boolean).join(' · ') || 'Lebensdaten offen', query)}</small></span>
+        <span><strong>${highlightSearchMatch(fullName(p) || p.name, query)}</strong><small>${highlightSearchMatch(details, query)}</small></span>
       </button>
     `;
   }).join('');
@@ -6303,12 +6494,6 @@ function renderNavigator(){
     row.addEventListener('click', () => jumpToFamily(row.dataset.family || ''));
   });
 }
-function personSearchText(p){
-  const parentNames = (p.parents||[]).map(id=>person(id)?.name||'').join(' ');
-  const partnerName = partnerIds(p).map(id => person(id)?.name || '').join(' ');
-  const mentions = cleanMentions(p.mentions).map(item => [item.title, item.date, item.link].join(' ')).join(' ');
-  return [p.name,p.birthName,p.born,p.died,p.occupation,p.religion,p.location,p.link,mentions,p.note,confidenceText(p),parentNames,partnerName].join(' ').toLowerCase();
-}
 function comparePeopleForList(a,b){
   if(listSortMode === 'name'){
     return String(a.name).localeCompare(String(b.name));
@@ -6325,7 +6510,7 @@ function comparePeopleForList(a,b){
   return af.localeCompare(bf) || String(a.name).localeCompare(String(b.name));
 }
 function renderListEditor(){
-  const q = ($('listSearch')?.value || '').trim().toLowerCase();
+  const q = normalizeSearchValue($('listSearch')?.value || '');
   const treePeople = data.people.filter(p => !p.pool);
   const poolPeople = data.people.filter(p => p.pool);
   const scopedPeople = listViewMode === 'pool' ? poolPeople : treePeople;
@@ -6444,19 +6629,22 @@ $('relationshipLayer')?.addEventListener('click', event => {
 $('relationshipType')?.addEventListener('change', event => {
   if (!relationshipEditorState) return;
   relationshipEditorState.type = event.target.value;
+  relationshipEditorState.targetId = '';
   updateRelationshipModeView();
 });
 document.querySelectorAll('input[name="relationshipMode"]').forEach(input => {
   input.addEventListener('change', updateRelationshipModeView);
 });
 $('relationshipSearch')?.addEventListener('input', renderRelationshipResults);
-$('relationshipResults')?.addEventListener('click', event => {
+function selectRelationshipTarget(event) {
   const button = event.target.closest('[data-relationship-target]');
   if (!button || !relationshipEditorState) return;
   relationshipEditorState.targetId = button.dataset.relationshipTarget;
   setRelationshipError('');
   renderRelationshipResults();
-});
+}
+$('relationshipResults')?.addEventListener('click', selectRelationshipTarget);
+$('relationshipSuggestionRows')?.addEventListener('click', selectRelationshipTarget);
 $('relationshipStep1Next')?.addEventListener('click', () => {
   if (!relationshipEditorState) return;
   relationshipEditorState.type = $('relationshipType').value;
@@ -6681,16 +6869,17 @@ $('rootSelectionBtn')?.addEventListener('click', () => {
   openRootSelection({ trigger: $('settingsBtn'), required: false });
 });
 $('autoBtn').addEventListener('click', async event => {
+  if (!editMode) return;
   const decision = await openDecisionDialog({
-    title: 'Stammbaum automatisch neu anordnen?',
-    message: 'Die aktuellen Kartenpositionen werden durch eine kompakte automatische Anordnung ersetzt. Personendaten und Beziehungen bleiben unverändert.',
-    confirmLabel: 'Neu anordnen',
+    title: 'Kartenpositionen automatisch aufräumen?',
+    message: 'Die klassische Ansicht wird kompakt neu angeordnet. Personendaten und Beziehungen bleiben unverändert; die Änderung kann rückgängig gemacht werden.',
+    confirmLabel: 'Positionen aufräumen',
     cancelLabel: 'Positionen behalten',
     trigger: event.currentTarget
   });
   if (decision !== 'confirm') return;
   closeSettingsMenu();
-  await runBusy('Auto-Anordnung läuft …', async () => { autoLayout(); });
+  await runBusy('Auto-Anordnung läuft …', async () => { applyAutomaticClassicLayout(); });
 });
 $('collapseAllBtn').addEventListener('click', () => {
   const anyOpen = data.people.some(p=>hasChildren(p.id) && !collapsed.has(p.id));
@@ -6789,9 +6978,12 @@ $('navBtn').addEventListener('click', () => { closeSettingsMenu(); openNavigator
 $('navCloseBtn').addEventListener('click', closeNavigator);
 $('navClearBtn').addEventListener('click', () => jumpToFamily(''));
 $('navSearch').addEventListener('input', renderNavigator);
-$('layoutBtn').addEventListener('click', () => {
-  cycleLayoutMode();
-  closeSettingsMenu();
+document.querySelectorAll('[data-layout-mode]').forEach(button => {
+  button.addEventListener('click', () => {
+    if (!editMode) return;
+    setLayoutMode(button.dataset.layoutMode);
+    closeSettingsMenu();
+  });
 });
 $('nameModeBtn').addEventListener('click', () => {
   cycleViewPreset();
@@ -7028,7 +7220,7 @@ if (window.location?.search?.includes('ux-debug=1')) {
       if (deleted) render();
       return deleted;
     },
-    setLayoutModeForTest: mode => setLayoutMode(mode)
+    setLayoutModeForTest: mode => setLayoutMode(mode, { allowInView: true })
   };
 }
 computeStartupStateNow();

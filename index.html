@@ -164,14 +164,28 @@
                         </button>
                     </section>
                     <section class="settingsSection">
-                        <h2 class="settingsSectionTitle">Ansicht</h2>
-                        <button type="button" class="settingsItem" id="layoutBtn" aria-label="Layoutansicht umschalten">
+                        <h2 class="settingsSectionTitle">Ansicht &amp; Anordnung</h2>
+                        <div class="settingsGroup layoutSettings" id="layoutGroup" role="group"
+                            aria-labelledby="layoutGroupTitle" aria-describedby="layoutModeHint">
+                            <p class="settingsGroupTitle" id="layoutGroupTitle">Anordnung</p>
+                            <div class="layoutChoices">
+                                <button type="button" class="layoutChoice" data-layout-mode="classic"
+                                    data-testid="layout-classic" aria-pressed="true">Klassisch</button>
+                                <button type="button" class="layoutChoice" data-layout-mode="tree"
+                                    data-testid="layout-tree" aria-pressed="false">Baum</button>
+                                <button type="button" class="layoutChoice" data-layout-mode="radial"
+                                    data-testid="layout-radial" aria-pressed="false">Radial</button>
+                            </div>
+                            <p class="settingsSectionHint" id="layoutModeHint">Zum Ändern der Anordnung „Bearbeiten“ aktivieren.</p>
+                        </div>
+                        <button type="button" class="settingsItem" id="autoBtn" data-testid="layout-auto"
+                            aria-label="Positionen automatisch aufräumen">
                             <span class="settingsItemIcon" aria-hidden="true">
-                                <svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>
+                                <svg viewBox="0 0 24 24"><path d="M6 7h11"/><path d="M6 12h11"/><path d="M6 17h7"/><path d="M20 4l-6 16"/><path d="M18 17l2 1"/><path d="M18 17l2-1"/></svg>
                             </span>
                             <span class="settingsItemContent">
-                                <span class="settingsItemTitle">Layout: Klassisch</span>
-                                <span class="settingsItemDescription">Klassisch, Baum oder radial.</span>
+                                <span class="settingsItemTitle">Positionen automatisch aufräumen</span>
+                                <span class="settingsItemDescription">Ordnet die klassische Ansicht kompakt neu an. Rückgängig ist möglich.</span>
                             </span>
                         </button>
                         <button type="button" class="settingsItem" id="nameModeBtn" aria-label="Ansicht umschalten">
@@ -273,15 +287,6 @@
                                 <span class="settingsItemDescription">Tipps zu Navigation, Suche und Bearbeiten erneut anzeigen.</span>
                             </span>
                         </button>
-                        <button type="button" class="settingsItem editOnly" id="autoBtn" aria-label="Automatische Anordnung ausführen">
-                            <span class="settingsItemIcon" aria-hidden="true">
-                                <svg viewBox="0 0 24 24"><path d="M6 7h11"/><path d="M6 12h11"/><path d="M6 17h7"/><path d="M20 4l-6 16"/><path d="M18 17l2 1"/><path d="M18 17l2-1"/></svg>
-                            </span>
-                            <span class="settingsItemContent">
-                                <span class="settingsItemTitle">Auto-Layout</span>
-                                <span class="settingsItemDescription">Automatisch Layout neu verteilen.</span>
-                            </span>
-                        </button>
                         <button type="button" class="settingsItem editOnly" id="imageBtn" aria-label="Bildexport öffnen">
                             <span class="settingsItemIcon" aria-hidden="true">
                                 <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 16l-4.35-4.35a1.2 1.2 0 0 0-1.7 0L11 15.6l-1.95-1.95a1.2 1.2 0 0 0-1.7 0L3 18"/></svg>
@@ -365,6 +370,11 @@
                                 Neue Person</label>
                         </fieldset>
                         <div id="relationshipExistingFields">
+                            <section class="relationshipSuggestions hidden" id="relationshipSuggestions"
+                                aria-labelledby="relationshipSuggestionsTitle" data-testid="relationship-suggestions">
+                                <p class="relationshipSuggestionEyebrow" id="relationshipSuggestionsTitle">Passender Vorschlag</p>
+                                <div id="relationshipSuggestionRows"></div>
+                            </section>
                             <label for="relationshipSearch">Person suchen</label>
                             <input id="relationshipSearch" data-testid="relationship-search"
                                 placeholder="Name, Jahr oder Ort" autocomplete="off" />

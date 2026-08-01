@@ -60,6 +60,20 @@ const searchTree = {
       parents: ['dup-hamburg'],
       x: 700,
       y: 260
+    },
+    {
+      id: 'umlaut-person',
+      name: 'Georg Müller',
+      firstName: 'Georg',
+      lastName: 'Müller',
+      born: '1919',
+      died: '',
+      location: 'Regensburg',
+      partner: '',
+      partners: [],
+      parents: [],
+      x: 850,
+      y: 260
     }
   ]
 };
@@ -112,7 +126,7 @@ test('Suche liefert Treffer mit Trefferzahl, öffnet Ergebnis und markiert Treff
   await page.getByTestId('person-search-open').click();
 
   await page.getByTestId('person-search').fill('Anna');
-  await expect(page.getByTestId('person-search-summary')).toContainText('4 Treffer für „Anna“');
+  await expect(page.getByTestId('person-search-summary')).toContainText('2 Treffer für „Anna“');
   await expect(page.getByTestId('person-search-result-dup-berlin')).toBeVisible();
   await expect(page.getByTestId('person-search-result-dup-hamburg')).toBeVisible();
 
@@ -144,6 +158,37 @@ test('Jahres- und Ortsuche funktionieren', async ({ page }) => {
   await expect(page.getByTestId('person-search-summary')).toContainText('2 Treffer für „Berlin“');
   await expect(page.getByTestId('person-search-result-dup-berlin')).toBeVisible();
   await expect(page.getByTestId('person-search-result-loc-person')).toBeVisible();
+});
+
+test('Suche kombiniert Begriffe und normalisiert Umlaute', async ({ page }) => {
+  await openTree(page, searchTree);
+  await page.getByTestId('person-search-open').click();
+
+  await page.getByTestId('person-search').fill('Anna 1985');
+  await expect(page.getByTestId('person-search-summary')).toContainText('1 Treffer für „Anna 1985“');
+  await expect(page.getByTestId('person-search-result-dup-hamburg')).toBeVisible();
+
+  await page.getByTestId('person-search').fill('Muller');
+  await expect(page.getByTestId('person-search-summary')).toContainText('1 Treffer für „Muller“');
+  await expect(page.getByTestId('person-search-result-umlaut-person')).toBeVisible();
+  await expect(page.getByTestId('person-search-result-umlaut-person').locator('mark')).toContainText('Müller');
+});
+
+test('Leere Suche zeigt Anleitung statt beliebiger Personen', async ({ page }) => {
+  await openTree(page, searchTree);
+  await page.getByTestId('person-search-open').click();
+
+  await expect(page.getByTestId('person-search-summary')).toContainText('Gib einen Namen');
+  await expect(page.getByTestId('person-search-results').locator('.searchRow')).toHaveCount(0);
+});
+
+test('Trefferzahl bleibt vor dem Anzeigelimit vollständig', async ({ page }) => {
+  await openTree(page, buildManyPersonsTree(90));
+  await page.getByTestId('person-search-open').click();
+  await page.getByTestId('person-search').fill('Anna');
+
+  await expect(page.getByTestId('person-search-summary')).toContainText('90 Treffer für „Anna“ · erste 80 angezeigt');
+  await expect(page.getByTestId('person-search-results').locator('.searchRow')).toHaveCount(80);
 });
 
 test('Kein Treffer zeigt klare Empty-State inkl. Personenliste-Öffnung', async ({ page }) => {

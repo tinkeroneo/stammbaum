@@ -67,7 +67,7 @@ test('Auto-Layout lässt sich sicher abbrechen und bestätigt ausführen', async
   await page.getByTestId('main-nav-more').click();
   const auto = page.locator('#autoBtn');
   await auto.click();
-  await expect(page.getByTestId('decision-dialog')).toContainText('Stammbaum automatisch neu anordnen?');
+  await expect(page.getByTestId('decision-dialog')).toContainText('Kartenpositionen automatisch aufräumen?');
   await expect(page.getByTestId('decision-cancel')).toHaveText('Positionen behalten');
   await page.keyboard.press('Escape');
   await expect(auto).toBeFocused();
@@ -75,6 +75,30 @@ test('Auto-Layout lässt sich sicher abbrechen und bestätigt ausführen', async
   await auto.click();
   await page.getByTestId('decision-confirm').click();
   await expect.poll(async () => page.evaluate(() => window.__uxDebug.getPerson('current'))).not.toEqual(before);
+  await expect.poll(async () => page.evaluate(() => window.__uxDebug.getDataSnapshot().layoutMode)).toBe('classic');
+  await expect.poll(async () => page.evaluate(() => window.__uxDebug.getCommandHistoryState().undoLabel))
+    .toBe('Positionen automatisch aufräumen');
+});
+
+test('Anordnung ist sichtbar, aber nur im Bearbeitungsmodus veränderbar', async ({ page }) => {
+  await openTree(page);
+  await page.getByTestId('main-nav-more').click();
+
+  await expect(page.getByTestId('layout-classic')).toBeVisible();
+  await expect(page.getByTestId('layout-tree')).toBeDisabled();
+  await expect(page.getByTestId('layout-radial')).toBeDisabled();
+  await expect(page.getByTestId('layout-auto')).toBeDisabled();
+  await expect(page.locator('#layoutModeHint')).toContainText('Bearbeiten');
+  await page.keyboard.press('Escape');
+
+  await page.getByTestId('app-mode-toggle').click();
+  await page.getByTestId('main-nav-more').click();
+  await expect(page.getByTestId('layout-tree')).toBeEnabled();
+  await page.getByTestId('layout-tree').click();
+
+  await expect.poll(async () => page.evaluate(() => window.__uxDebug.getDataSnapshot().layoutMode)).toBe('tree');
+  await expect.poll(async () => page.evaluate(() => window.__uxDebug.getCommandHistoryState().undoLabel))
+    .toBe('Layout Baum');
 });
 
 test('Vorratverschiebung nennt die Folge und kehrt bei Abbruch zu Speichern zurück', async ({ page }) => {

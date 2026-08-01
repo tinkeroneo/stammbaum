@@ -14,11 +14,11 @@ const tree = {
   ]
 };
 
-async function openEditForm(page) {
+async function openEditForm(page, treeData = tree) {
   await page.addInitScript(({ key, value, seenKey }) => {
     localStorage.setItem(key, JSON.stringify(value));
     localStorage.setItem(seenKey, JSON.stringify(['pan-zoom', 'search', 'edit']));
-  }, { key: storeKey, value: tree, seenKey: helpSeenKey });
+  }, { key: storeKey, value: treeData, seenKey: helpSeenKey });
   await page.goto('/?ux-debug=1');
   await page.getByTestId('welcome-continue').click();
   await page.getByTestId('person-search-open').click();
@@ -27,6 +27,39 @@ async function openEditForm(page) {
   await page.getByTestId('app-mode-toggle').click();
   await page.getByTestId('form-section-relations').click();
 }
+
+test('Partner des vorhandenen Elternteils wird als zweites Elternteil vorgeschlagen', async ({ page }) => {
+  const suggestionTree = {
+    rootIds: ['source'],
+    people: [
+      { id: 'source', name: 'Quelle Person', firstName: 'Quelle', lastName: 'Person', x: 600, y: 500, parents: ['known-parent'], partners: [] },
+      { id: 'known-parent', name: 'Elisabeth Reil', firstName: 'Elisabeth', lastName: 'Reil', x: 500, y: 220, parents: [], partners: ['suggested-parent'], partner: 'suggested-parent' },
+      { id: 'suggested-parent', name: 'Johann Adam Reil', firstName: 'Johann Adam', lastName: 'Reil', born: '1870', x: 750, y: 220, parents: [], partners: ['known-parent'], partner: 'known-parent' },
+      { id: 'unrelated', name: 'Andere Person', firstName: 'Andere', lastName: 'Person', x: 950, y: 400, parents: [], partners: [] }
+    ]
+  };
+  await openEditForm(page, suggestionTree);
+  await page.locator('#quickParents').click();
+  await page.locator('#relationshipStep1Next').click();
+
+  const suggestions = page.getByTestId('relationship-suggestions');
+  await expect(suggestions).toBeVisible();
+  await expect(suggestions).toContainText('Johann Adam Reil');
+  await expect(suggestions).toContainText('Partner/in von Elisabeth Reil');
+  await expect(page.getByTestId('relationship-results').locator('.relationshipResult')).toHaveCount(0);
+
+  await page.getByTestId('relationship-suggestion-suggested-parent').click();
+  await page.locator('#relationshipStep2Next').click();
+  await expect(page.getByTestId('relationship-summary')).toContainText(
+    'Johann Adam Reil wird als Elternteil von Quelle Person gespeichert'
+  );
+  await page.getByTestId('relationship-confirm').click();
+
+  const parents = await page.evaluate(() =>
+    window.__uxDebug.getDataSnapshot().people.find(person => person.id === 'source').parents
+  );
+  expect(parents).toEqual(['known-parent', 'suggested-parent']);
+});
 
 async function chooseExistingPerson(page, id, query) {
   await page.locator('#relationshipStep1Next').click();
