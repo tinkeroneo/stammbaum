@@ -3,6 +3,7 @@ test.pdf
 !Bodensteiner.json
 !package.json
 !package-lock.json
+!docs/performance-results.json
 *.tmp
 *.log
 extract_yumpu_familybook.py

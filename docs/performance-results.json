@@ -1,0 +1,331 @@
+{
+  "generatedAt": "2026-08-01T18:00:08.651Z",
+  "environment": {
+    "platform": "win32 10.0.26200 x64",
+    "cpu": "13th Gen Intel(R) Core(TM) i7-1360P",
+    "logicalCpuCount": 16,
+    "memoryGiB": 31.7,
+    "node": "v24.12.0",
+    "browser": "Chrome/Chromium 150.0.7871.188",
+    "viewport": "1440x900",
+    "mode": "headless, cold context per trial"
+  },
+  "budgets": {
+    "interactionP95Ms": 100,
+    "searchMs": 150,
+    "longestTask385Ms": 200
+  },
+  "datasets": [
+    {
+      "people": 385,
+      "runs": [
+        {
+          "run": 1,
+          "initialMs": 1287.9526,
+          "panZoomMs": 38.5,
+          "searchMs": 16.399999976158142,
+          "detailMs": 316.10000002384186,
+          "longTasksMs": [
+            164,
+            74,
+            89,
+            167
+          ],
+          "domElements": 5828,
+          "renderedCards": 385,
+          "renderedLines": 767
+        },
+        {
+          "run": 2,
+          "initialMs": 835.4862,
+          "panZoomMs": 31.600000023841858,
+          "searchMs": 251.89999997615814,
+          "detailMs": 209.69999992847443,
+          "longTasksMs": [
+            86,
+            86,
+            78,
+            86,
+            165
+          ],
+          "domElements": 5828,
+          "renderedCards": 385,
+          "renderedLines": 767
+        },
+        {
+          "run": 3,
+          "initialMs": 806.5115,
+          "panZoomMs": 31.399999976158142,
+          "searchMs": 265.10000002384186,
+          "detailMs": 203.29999995231628,
+          "longTasksMs": [
+            85,
+            77,
+            75,
+            83,
+            160
+          ],
+          "domElements": 5828,
+          "renderedCards": 385,
+          "renderedLines": 767
+        }
+      ],
+      "summary": {
+        "initial": {
+          "medianMs": 835.5,
+          "worstMs": 1288,
+          "samplesMs": [
+            1288,
+            835.5,
+            806.5
+          ]
+        },
+        "panZoom": {
+          "medianMs": 31.6,
+          "worstMs": 38.5,
+          "samplesMs": [
+            38.5,
+            31.6,
+            31.4
+          ]
+        },
+        "search": {
+          "medianMs": 251.9,
+          "worstMs": 265.1,
+          "samplesMs": [
+            16.4,
+            251.9,
+            265.1
+          ]
+        },
+        "detail": {
+          "medianMs": 209.7,
+          "worstMs": 316.1,
+          "samplesMs": [
+            316.1,
+            209.7,
+            203.3
+          ]
+        },
+        "longestTaskMs": 167,
+        "domElementsMedian": 5828,
+        "renderedCardsMedian": 385,
+        "renderedLinesMedian": 767
+      }
+    },
+    {
+      "people": 1200,
+      "runs": [
+        {
+          "run": 1,
+          "initialMs": 1042.6998,
+          "panZoomMs": 112.79999995231628,
+          "searchMs": 318.2000000476837,
+          "detailMs": 830.1000000238419,
+          "longTasksMs": [
+            202,
+            216,
+            70,
+            126,
+            85,
+            80,
+            471,
+            351
+          ],
+          "domElements": 16810,
+          "renderedCards": 1200,
+          "renderedLines": 2398
+        },
+        {
+          "run": 2,
+          "initialMs": 1083.9511,
+          "panZoomMs": 105.79999995231628,
+          "searchMs": 195.5,
+          "detailMs": 841.5,
+          "longTasksMs": [
+            64,
+            143,
+            210,
+            74,
+            122,
+            85,
+            90,
+            528,
+            307
+          ],
+          "domElements": 16810,
+          "renderedCards": 1200,
+          "renderedLines": 2398
+        },
+        {
+          "run": 3,
+          "initialMs": 1046.2922,
+          "panZoomMs": 102.89999997615814,
+          "searchMs": 171.30000007152557,
+          "detailMs": 738.8999999761581,
+          "longTasksMs": [
+            62,
+            155,
+            214,
+            71,
+            112,
+            83,
+            79,
+            423,
+            307
+          ],
+          "domElements": 16810,
+          "renderedCards": 1200,
+          "renderedLines": 2398
+        }
+      ],
+      "summary": {
+        "initial": {
+          "medianMs": 1046.3,
+          "worstMs": 1084,
+          "samplesMs": [
+            1042.7,
+            1084,
+            1046.3
+          ]
+        },
+        "panZoom": {
+          "medianMs": 105.8,
+          "worstMs": 112.8,
+          "samplesMs": [
+            112.8,
+            105.8,
+            102.9
+          ]
+        },
+        "search": {
+          "medianMs": 195.5,
+          "worstMs": 318.2,
+          "samplesMs": [
+            318.2,
+            195.5,
+            171.3
+          ]
+        },
+        "detail": {
+          "medianMs": 830.1,
+          "worstMs": 841.5,
+          "samplesMs": [
+            830.1,
+            841.5,
+            738.9
+          ]
+        },
+        "longestTaskMs": 528,
+        "domElementsMedian": 16810,
+        "renderedCardsMedian": 1200,
+        "renderedLinesMedian": 2398
+      }
+    },
+    {
+      "people": 5000,
+      "runs": [
+        {
+          "run": 1,
+          "initialMs": 1871.3508,
+          "panZoomMs": 119.10000002384186,
+          "searchMs": 181.20000004768372,
+          "detailMs": 264.60000002384186,
+          "longTasksMs": [
+            442,
+            596,
+            293,
+            125,
+            82,
+            92,
+            95
+          ],
+          "domElements": 3617,
+          "renderedCards": 118,
+          "renderedLines": 0
+        },
+        {
+          "run": 2,
+          "initialMs": 1871.9351,
+          "panZoomMs": 104.5,
+          "searchMs": 202.39999997615814,
+          "detailMs": 257.2999999523163,
+          "longTasksMs": [
+            483,
+            600,
+            294,
+            131,
+            80,
+            82,
+            111,
+            53
+          ],
+          "domElements": 3617,
+          "renderedCards": 118,
+          "renderedLines": 0
+        },
+        {
+          "run": 3,
+          "initialMs": 1968.1717,
+          "panZoomMs": 86.60000002384186,
+          "searchMs": 148.10000002384186,
+          "detailMs": 232.10000002384186,
+          "longTasksMs": [
+            527,
+            629,
+            288,
+            120,
+            67,
+            78,
+            94
+          ],
+          "domElements": 3617,
+          "renderedCards": 118,
+          "renderedLines": 0
+        }
+      ],
+      "summary": {
+        "initial": {
+          "medianMs": 1871.9,
+          "worstMs": 1968.2,
+          "samplesMs": [
+            1871.4,
+            1871.9,
+            1968.2
+          ]
+        },
+        "panZoom": {
+          "medianMs": 104.5,
+          "worstMs": 119.1,
+          "samplesMs": [
+            119.1,
+            104.5,
+            86.6
+          ]
+        },
+        "search": {
+          "medianMs": 181.2,
+          "worstMs": 202.4,
+          "samplesMs": [
+            181.2,
+            202.4,
+            148.1
+          ]
+        },
+        "detail": {
+          "medianMs": 257.3,
+          "worstMs": 264.6,
+          "samplesMs": [
+            264.6,
+            257.3,
+            232.1
+          ]
+        },
+        "longestTaskMs": 629,
+        "domElementsMedian": 3617,
+        "renderedCardsMedian": 118,
+        "renderedLinesMedian": 0
+      }
+    }
+  ]
+}

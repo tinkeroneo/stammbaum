@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "test": "playwright test",
-    "test:smoke": "playwright test tests/smoke.spec.js"
+    "test:smoke": "playwright test tests/smoke.spec.js",
+    "profile": "node scripts/performance-profile.cjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1"
