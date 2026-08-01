@@ -102,6 +102,12 @@ let editMode = false;
 let nameMode = 'full';
 let layoutMode = 'classic';
 let savedClassicPositions = null;
+let layoutVisibleIds = null;
+let layoutGenerationById = new Map();
+let layoutDistanceById = new Map();
+let layoutEdges = [];
+let layoutFocusId = '';
+let layoutCenter = { x: 1800, y: 1500 };
 let rootIds = [...(data.rootIds || [])];
 let temporaryRootId = '';
 let rootSelectionDeferredForDataset = false;
@@ -863,6 +869,13 @@ async function runBusy(label, task) {
 function applyLoadedData(imported, { fitResult = true } = {}) {
   clearCommandHistory();
   data = imported;
+  layoutMode = 'classic';
+  savedClassicPositions = null;
+  layoutVisibleIds = null;
+  layoutGenerationById = new Map();
+  layoutDistanceById = new Map();
+  layoutEdges = [];
+  layoutFocusId = '';
   rebuildDataIndexes();
   const preferFocus = nonPoolPeople.length > 1200;
   focusMode = preferFocus;
@@ -1042,10 +1055,20 @@ function computeStartupStateNow() {
   updateHeaderMeta();
   return startupState;
 }
+function dataWithClassicPositions() {
+  if (!savedClassicPositions) return data;
+  return {
+    ...data,
+    people: data.people.map(entry => {
+      const classic = savedClassicPositions.get(entry.id);
+      return classic ? { ...entry, x: classic.x, y: classic.y } : entry;
+    })
+  };
+}
 function save() {
   rebuildDataIndexes();
   data.rootIds = rootIds.filter(id => person(id)).slice(0, 2);
-  const json = serializeTree(data, 2);
+  const json = serializeTree(dataWithClassicPositions(), 2);
   const revision = ++persistenceRevision;
   const metadata = {
     treeName: guessTreeName(),
@@ -1805,6 +1828,10 @@ function offscreenIndicatorLabel(group) {
 }
 function updateOffscreenIndicators() {
   if (!offscreenIndicators) return;
+  if (layoutMode !== 'classic') {
+    offscreenIndicators.replaceChildren();
+    return;
+  }
   if (!selected || !person(selected) || !main.clientWidth || !main.clientHeight) {
     offscreenIndicators.innerHTML = '';
     return;
@@ -2006,6 +2033,17 @@ function addLine(x1, y1, x2, y2, cls, color = '') {
   const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   const mid = (y1 + y2) / 2;
   path.setAttribute('d', `M ${x1} ${y1} C ${x1} ${mid}, ${x2} ${mid}, ${x2} ${y2}`);
+  path.setAttribute('class', cls);
+  if (color) path.style.setProperty('--line-color', color);
+  lines.appendChild(path);
+}
+function addRadialLine(a, b, cls, color = '') {
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  const midX = (a.x + b.x) / 2;
+  const midY = (a.y + b.y) / 2;
+  const controlX = midX + (layoutCenter.x - midX) * 0.24;
+  const controlY = midY + (layoutCenter.y - midY) * 0.24;
+  path.setAttribute('d', `M ${a.x} ${a.y} Q ${controlX} ${controlY} ${b.x} ${b.y}`);
   path.setAttribute('class', cls);
   if (color) path.style.setProperty('--line-color', color);
   lines.appendChild(path);
@@ -2436,6 +2474,37 @@ function hiddenIds(){
 function hasChildren(id){
   return childrenOfPerson(id).length > 0;
 }
+function renderRadialRelationshipLines(visible, visiblePeople) {
+  const radii = new Map();
+  for (const entry of visiblePeople) {
+    const depth = layoutDistanceById.get(entry.id) || 0;
+    if (!depth) continue;
+    radii.set(depth, Math.max(radii.get(depth) || 0, Math.hypot(entry.x - layoutCenter.x, entry.y - layoutCenter.y)));
+  }
+  for (const [depth, radius] of [...radii.entries()].sort((a, b) => a[0] - b[0])) {
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', layoutCenter.x);
+    circle.setAttribute('cy', layoutCenter.y);
+    circle.setAttribute('r', Math.round(radius));
+    circle.setAttribute('class', 'radialGuideRing');
+    lines.appendChild(circle);
+    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    label.setAttribute('x', layoutCenter.x + 18);
+    label.setAttribute('y', layoutCenter.y - radius + 38);
+    label.setAttribute('class', 'radialRingLabel');
+    label.textContent = `${depth} Schritt${depth > 1 ? 'e' : ''}`;
+    lines.appendChild(label);
+  }
+  for (const edge of layoutEdges) {
+    if (!visible.has(edge.from) || !visible.has(edge.to)) continue;
+    const from = person(edge.from);
+    const to = person(edge.to);
+    if (!from || !to) continue;
+    const emphasis = edge.from === layoutFocusId || edge.to === layoutFocusId ? ' radialDirectLine' : ' radialPathLine';
+    if (edge.kind === 1) addRadialLine(from, to, `line partner radialPartnerLine${emphasis}`);
+    else addRadialLine(from, to, `line childLine lineageLine radialRelationLine${emphasis}`, lineageColorFor([from, to]));
+  }
+}
 function branchTogglePresentation(id) {
   const target = person(id);
   if (!target || !hasChildren(id)) return null;
@@ -2623,10 +2692,13 @@ function focusNeighborhood(id) {
   return ids;
 }
 function visibleIds() {
-  const hidden = hiddenIds();
+  const hidden = layoutMode === 'classic' ? hiddenIds() : new Set();
   const focused = focusMode && focusId ? focusNeighborhood(focusId) : null;
   return new Set(data.people
-    .filter(p => !p.pool && !hidden.has(p.id) && (!focused || focused.has(p.id)))
+    .filter(p => !p.pool
+      && !hidden.has(p.id)
+      && (!focused || focused.has(p.id))
+      && (!layoutVisibleIds || layoutVisibleIds.has(p.id)))
     .map(p => p.id));
 }
 function directLineIds(id) {
@@ -2724,20 +2796,23 @@ function updateNameModeButton() {
   }
 }
 function updateLayoutButton() {
-  const labels = { classic: 'Klassisch', tree: 'Baum', radial: 'Radial' };
+  const labels = { classic: 'Klassisch', tree: 'Generationen', radial: 'Verwandtschaftskreis' };
+  document.body.classList.toggle('treeLayout', layoutMode === 'tree');
+  document.body.classList.toggle('radialLayout', layoutMode === 'radial');
   document.querySelectorAll('[data-layout-mode]').forEach(button => {
     const active = button.dataset.layoutMode === layoutMode;
     button.setAttribute('aria-pressed', String(active));
-    button.disabled = !editMode;
-    button.title = editMode
-      ? `Anordnung „${labels[button.dataset.layoutMode]}“ wählen`
-      : 'Zum Ändern der Anordnung den Bearbeitungsmodus aktivieren.';
+    button.disabled = false;
+    button.title = button.dataset.layoutMode === 'classic'
+      ? 'Gespeicherte Kartenpositionen anzeigen'
+      : `${labels[button.dataset.layoutMode]} als fokussierte Leseansicht anzeigen`;
   });
   const hint = $('layoutModeHint');
   if (hint) {
-    hint.textContent = editMode
-      ? `Aktiv: ${labels[layoutMode]}. Änderungen können rückgängig gemacht werden.`
-      : `Aktiv: ${labels[layoutMode]}. Zum Ändern „Bearbeiten“ aktivieren.`;
+    const focus = person(layoutFocusId);
+    hint.textContent = layoutMode === 'classic'
+      ? 'Klassisch zeigt die gespeicherten, bearbeitbaren Kartenpositionen.'
+      : `${labels[layoutMode]} zeigt ${layoutVisibleIds?.size || 0} Personen rund um ${focus ? visibleName(focus) : 'die gewählte Person'} (maximal ${layoutMode === 'radial' ? 2 : 3} Beziehungsschritte).`;
   }
   const autoButton = $('autoBtn');
   if (autoButton) {
@@ -2950,154 +3025,224 @@ function restoreClassicPositions() {
   }
 }
 function relationComponents() {
-  return [...relationComponentIds].sort((a,b) => {
+  return [...relationComponentIds].sort((a, b) => {
     const ax = Math.min(...a.map(id => person(id)?.x ?? 0));
     const bx = Math.min(...b.map(id => person(id)?.x ?? 0));
     return ax - bx;
   });
 }
-function componentDepths(ids) {
-  const idSet = new Set(ids);
-  const byId = new Map(data.people.map(p => [p.id, p]));
-  const depths = new Map();
-  let roots = ids
-    .map(id => byId.get(id))
-    .filter(Boolean)
-    .filter(p => !(p.parents || []).some(pid => idSet.has(pid)));
-
-  if (!roots.length) {
-    roots = ids
-      .map(id => byId.get(id))
-      .filter(Boolean)
-      .sort((a,b) => (a.x - b.x) || fullName(a).localeCompare(fullName(b)))
-      .slice(0, 1);
-  }
-
-  const queue = [];
-  for (const root of roots) {
-    depths.set(root.id, 0);
-    queue.push(root.id);
-    for (const partnerId of partnerIds(root)) {
-      if (idSet.has(partnerId) && !depths.has(partnerId)) {
-        depths.set(partnerId, 0);
-        queue.push(partnerId);
-      }
-    }
-  }
-
-  while (queue.length) {
-    const id = queue.shift();
-    const p = byId.get(id);
-    const depth = depths.get(id) || 0;
-    if (!p) continue;
-
-    for (const partnerId of partnerIds(p)) {
-      if (idSet.has(partnerId) && (!depths.has(partnerId) || depths.get(partnerId) > depth)) {
-        depths.set(partnerId, depth);
-        queue.push(partnerId);
-      }
-    }
-
-    for (const child of data.people) {
-      if (!idSet.has(child.id) || !(child.parents || []).includes(id)) continue;
-      const nextDepth = depth + 1;
-      if (!depths.has(child.id) || depths.get(child.id) > nextDepth) {
-        depths.set(child.id, nextDepth);
-        queue.push(child.id);
-      }
-    }
-  }
-
-  for (const id of ids) {
-    if (!depths.has(id)) depths.set(id, 0);
-  }
-  return depths;
+function clearDerivedLayoutState() {
+  layoutVisibleIds = null;
+  layoutGenerationById = new Map();
+  layoutDistanceById = new Map();
+  layoutEdges = [];
+  layoutFocusId = '';
 }
-function applyTreeLayout() {
-  autoLayout(false);
-  const activePeople = data.people.filter(p => !p.pool);
-  if (!activePeople.length) return;
-
-  const top = 130;
-  const ys = activePeople.map(p => p.y);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  for (const p of activePeople) {
-    p.y = Math.round(top + (maxY - p.y) + (minY - top));
+function layoutFocusPersonId(preferredId = selected) {
+  return person(preferredId) && !person(preferredId).pool
+    ? preferredId
+    : rootIds.find(id => person(id) && !person(id).pool)
+      || preferredLandingPersonId()
+      || nonPoolPeople[0]?.id
+      || '';
+}
+function layoutRelationEntries(id) {
+  const current = person(id);
+  if (!current) return [];
+  const entries = [];
+  (current.parents || []).forEach(parentId => entries.push({ id: parentId, delta: -1, kind: 0 }));
+  partnerIds(current).forEach(partnerId => entries.push({ id: partnerId, delta: 0, kind: 1 }));
+  activeChildrenOfPerson(id).forEach(child => entries.push({ id: child.id, delta: 1, kind: 2 }));
+  return entries
+    .filter(entry => person(entry.id) && !person(entry.id).pool)
+    .sort((a, b) => a.kind - b.kind
+      || (birthSortValue(person(a.id)) ?? Infinity) - (birthSortValue(person(b.id)) ?? Infinity)
+      || fullName(person(a.id)).localeCompare(fullName(person(b.id))));
+}
+function focusedLayoutGraph(focusId, maxPeople, maxDistance = 3) {
+  const ids = new Set([focusId]);
+  const distance = new Map([[focusId, 0]]);
+  const generation = new Map([[focusId, 0]]);
+  const firstBranch = new Map([[focusId, focusId]]);
+  const edges = [];
+  const queue = [focusId];
+  while (queue.length && ids.size < maxPeople) {
+    const currentId = queue.shift();
+    const currentDistance = distance.get(currentId) || 0;
+    if (currentDistance >= maxDistance) continue;
+    for (const relation of layoutRelationEntries(currentId)) {
+      if (ids.has(relation.id)) continue;
+      ids.add(relation.id);
+      distance.set(relation.id, currentDistance + 1);
+      generation.set(relation.id, (generation.get(currentId) || 0) + relation.delta);
+      firstBranch.set(relation.id, currentId === focusId ? relation.id : firstBranch.get(currentId));
+      edges.push({ from: currentId, to: relation.id, kind: relation.kind });
+      queue.push(relation.id);
+      if (ids.size >= maxPeople) break;
+    }
+  }
+  return { ids, distance, generation, firstBranch, edges };
+}
+function prepareFocusedLayout(focusId, maxPeople, maxDistance = 3) {
+  const graph = focusedLayoutGraph(focusId, maxPeople, maxDistance);
+  layoutVisibleIds = graph.ids;
+  layoutDistanceById = graph.distance;
+  layoutGenerationById = graph.generation;
+  layoutEdges = graph.edges;
+  layoutFocusId = focusId;
+  return graph;
+}
+function applyTreeLayout(focusId) {
+  const graph = prepareFocusedLayout(focusId, 48, 3);
+  const rows = new Map();
+  for (const id of graph.ids) {
+    const generation = graph.generation.get(id) || 0;
+    if (!rows.has(generation)) rows.set(generation, []);
+    rows.get(generation).push(person(id));
+  }
+  const branchOrder = new Map(
+    layoutRelationEntries(focusId).map((entry, index) => [entry.id, index])
+  );
+  const generations = [...rows.keys()].sort((a, b) => a - b);
+  const minGeneration = Math.min(...generations);
+  const centerX = 1800;
+  const rowGap = 300;
+  const cardGap = 310;
+  layoutCenter = { x: centerX, y: 560 + (0 - minGeneration) * rowGap };
+  for (const generation of generations) {
+    const people = rows.get(generation).sort((a, b) => {
+      if (a.id === focusId) return -1;
+      if (b.id === focusId) return 1;
+      const branchA = branchOrder.get(graph.firstBranch.get(a.id)) ?? 999;
+      const branchB = branchOrder.get(graph.firstBranch.get(b.id)) ?? 999;
+      return branchA - branchB
+        || (birthSortValue(a) ?? Infinity) - (birthSortValue(b) ?? Infinity)
+        || fullName(a).localeCompare(fullName(b));
+    });
+    let startX = centerX - ((people.length - 1) * cardGap) / 2;
+    const focusIndex = people.findIndex(entry => entry.id === focusId);
+    if (focusIndex >= 0) startX = centerX - focusIndex * cardGap;
+    people.forEach((entry, index) => {
+      entry.x = Math.round(startX + index * cardGap);
+      entry.y = Math.round(560 + (generation - minGeneration) * rowGap);
+    });
   }
 }
-function applyRadialLayout() {
-  autoLayout(false);
-  const byId = new Map(data.people.map(p => [p.id, p]));
-  const components = relationComponents();
-  const packed = [];
-  const maxRowWidth = 4200;
-  let cursorX = 520;
-  let cursorY = 520;
-  let rowHeight = 0;
-
-  for (const ids of components) {
-    const depths = componentDepths(ids);
-    const rings = new Map();
-    for (const id of ids) {
-      const depth = depths.get(id) || 0;
-      if (!rings.has(depth)) rings.set(depth, []);
-      rings.get(depth).push(byId.get(id));
-    }
-
-    let maxRadius = 180;
-    for (const [depth, people] of rings.entries()) {
-      const ringRadius = depth === 0
-        ? (people.length > 1 ? Math.max(70, people.length * 28) : 0)
-        : Math.max(170 + depth * 230, people.length * 46);
-      maxRadius = Math.max(maxRadius, ringRadius);
-    }
-
-    const size = maxRadius * 2 + 260;
-    if (packed.length && cursorX + size > maxRowWidth) {
-      cursorX = 520;
-      cursorY += rowHeight + 320;
-      rowHeight = 0;
-    }
-    packed.push({ ids, depths, rings, cx: cursorX + size / 2, cy: cursorY + maxRadius + 130, size, maxRadius });
-    cursorX += size + 300;
-    rowHeight = Math.max(rowHeight, size);
+function applyRadialLayout(focusId) {
+  const graph = prepareFocusedLayout(focusId, 28, 2);
+  const rings = new Map();
+  for (const id of graph.ids) {
+    const depth = graph.distance.get(id) || 0;
+    if (!rings.has(depth)) rings.set(depth, []);
+    rings.get(depth).push(person(id));
   }
-
-  for (const island of packed) {
-    const ringEntries = [...island.rings.entries()].sort((a,b) => a[0] - b[0]);
-    for (const [depth, people] of ringEntries) {
-      people.sort((a,b) => (a.x - b.x) || fullName(a).localeCompare(fullName(b)));
-      const radius = depth === 0
-        ? (people.length > 1 ? Math.max(70, people.length * 28) : 0)
-        : Math.max(170 + depth * 230, people.length * 46);
-      const start = -Math.PI / 2;
-      people.forEach((p, i) => {
-        if (!p) return;
-        const angle = start + (Math.PI * 2 * i / Math.max(1, people.length));
-        p.x = Math.round(island.cx + Math.cos(angle) * radius);
-        p.y = Math.round(island.cy + Math.sin(angle) * radius);
+  layoutCenter = { x: 1800, y: 1500 };
+  const branchOrder = new Map(
+    layoutRelationEntries(focusId).map((entry, index) => [entry.id, index])
+  );
+  const branchIds = [...(rings.get(1) || [])]
+    .map(entry => entry.id)
+    .sort((a, b) => (branchOrder.get(a) ?? 999) - (branchOrder.get(b) ?? 999));
+  const branchWeights = new Map(branchIds.map(id => [id, Math.max(1,
+    [...graph.ids].filter(candidateId => graph.firstBranch.get(candidateId) === id).length - 1
+  )]));
+  const totalWeight = [...branchWeights.values()].reduce((sum, weight) => sum + weight, 0) || 1;
+  const firstExtent = branchIds.length ? Math.PI * 2 * branchWeights.get(branchIds[0]) / totalWeight : Math.PI * 2;
+  let sectorCursor = -Math.PI / 2 - firstExtent / 2;
+  const branchSectors = new Map();
+  for (const branchId of branchIds) {
+    const extent = Math.PI * 2 * branchWeights.get(branchId) / totalWeight;
+    branchSectors.set(branchId, { start: sectorCursor, end: sectorCursor + extent });
+    sectorCursor += extent;
+  }
+  const minimumSectorRadius = Math.ceil(totalWeight * 230 / (Math.PI * 2));
+  let previousRadius = 0;
+  for (const [depth, people] of [...rings.entries()].sort((a, b) => a[0] - b[0])) {
+    people.sort((a, b) => {
+      const generationA = graph.generation.get(a.id) || 0;
+      const generationB = graph.generation.get(b.id) || 0;
+      const branchA = branchOrder.get(graph.firstBranch.get(a.id)) ?? 999;
+      const branchB = branchOrder.get(graph.firstBranch.get(b.id)) ?? 999;
+      return branchA - branchB || generationA - generationB
+        || (birthSortValue(a) ?? Infinity) - (birthSortValue(b) ?? Infinity)
+        || fullName(a).localeCompare(fullName(b));
+    });
+    if (depth === 0) {
+      const focus = people[0];
+      focus.x = layoutCenter.x;
+      focus.y = layoutCenter.y;
+      continue;
+    }
+    const radius = depth === 1
+      ? Math.max(470, minimumSectorRadius)
+      : Math.max(depth * 470, previousRadius + 420, Math.ceil(people.length * 230 / (Math.PI * 2)));
+    previousRadius = radius;
+    const grouped = new Map();
+    for (const entry of people) {
+      const branchId = graph.firstBranch.get(entry.id) || entry.id;
+      if (!grouped.has(branchId)) grouped.set(branchId, []);
+      grouped.get(branchId).push(entry);
+    }
+    for (const branchId of branchIds) {
+      const group = grouped.get(branchId) || [];
+      const sector = branchSectors.get(branchId);
+      if (!group.length || !sector) continue;
+      const padding = Math.min(0.12, (sector.end - sector.start) * 0.12);
+      const usableStart = sector.start + padding;
+      const usableEnd = sector.end - padding;
+      group.forEach((entry, index) => {
+        const angle = group.length === 1
+          ? (sector.start + sector.end) / 2
+          : usableStart + (usableEnd - usableStart) * index / (group.length - 1);
+        entry.x = Math.round(layoutCenter.x + Math.cos(angle) * radius);
+        entry.y = Math.round(layoutCenter.y + Math.sin(angle) * radius);
       });
     }
   }
 }
+function fitDerivedLayout() {
+  fitAll();
+  const readableFloor = main.clientWidth < 700 ? 0.42 : 0.38;
+  if (view.s >= readableFloor) return;
+  const focus = person(layoutFocusId);
+  view.s = readableFloor;
+  view.x = -(focus?.x ?? layoutCenter.x) * view.s;
+  view.y = -(focus?.y ?? layoutCenter.y) * view.s;
+  applyView();
+}
 function setLayoutMode(next, { allowInView = false } = {}) {
   if (!['classic', 'tree', 'radial'].includes(next)) return false;
-  if (!editMode && !allowInView) return false;
-  if (next === layoutMode) return false;
-  const commandBefore = captureCommandState();
-  if (next !== 'classic') {
-    captureClassicPositions();
-    restoreClassicPositions();
+  const nextFocusId = layoutFocusPersonId();
+  if (next === layoutMode && (next === 'classic' || nextFocusId === layoutFocusId)) return false;
+  if (focusMode) {
+    restoreFocusLayoutPositions();
+    focusMode = false;
+    focusId = null;
+    updateFocusButton();
   }
+  if (savedClassicPositions) restoreClassicPositions();
+  if (next !== 'classic' && !savedClassicPositions) captureClassicPositions();
   layoutMode = next;
-  if (layoutMode === 'classic') restoreClassicPositions();
-  if (layoutMode === 'tree') applyTreeLayout();
-  if (layoutMode === 'radial') applyRadialLayout();
+  if (layoutMode === 'classic') {
+    savedClassicPositions = null;
+    clearDerivedLayoutState();
+  } else {
+    selected = nextFocusId;
+    if (editMode) {
+      editMode = false;
+      updateModeUI();
+    }
+    if (layoutMode === 'tree') applyTreeLayout(nextFocusId);
+    if (layoutMode === 'radial') applyRadialLayout(nextFocusId);
+  }
   updateLayoutButton();
-  commitDataCommand(`Layout ${next === 'classic' ? 'Klassisch' : next === 'tree' ? 'Baum' : 'Radial'}`, commandBefore);
   render();
-  fit();
+  if (layoutMode === 'classic') {
+    if (nextFocusId) jumpToPerson(nextFocusId);
+    else fit();
+  } else {
+    fitDerivedLayout();
+  }
   return true;
 }
 function applyAutomaticClassicLayout() {
@@ -3106,6 +3251,7 @@ function applyAutomaticClassicLayout() {
   if (layoutMode !== 'classic') restoreClassicPositions();
   layoutMode = 'classic';
   savedClassicPositions = null;
+  clearDerivedLayoutState();
   autoLayout(false);
   updateLayoutButton();
   commitDataCommand('Positionen automatisch aufräumen', commandBefore);
@@ -3180,7 +3326,7 @@ function render() {
   renderVirtualizationActive = shouldVirtualizePeople(visiblePeople);
   const renderedPeople = renderVirtualizationActive ? viewportPeopleSlice(visiblePeople) : visiblePeople;
   const renderedIds = new Set(renderedPeople.map(p => p.id));
-  const showGenerationBands = !renderVirtualizationActive && visiblePeople.length <= 600;
+  const showGenerationBands = layoutMode !== 'radial' && !renderVirtualizationActive && visiblePeople.length <= 600;
   updateMinimap(worldBounds.maxX, worldBounds.maxY, minimapSamplePeople(visiblePeople));
   const directIds = mainLineIds();
   const affiliateIds = new Set();
@@ -3196,21 +3342,25 @@ function render() {
     });
   }
   const zClass = zoomClass();
-  const relationshipSignature = `${editMode}:${renderedPeople.map(p =>
+  const relationshipSignature = `${layoutMode}:${editMode}:${renderedPeople.map(p =>
     `${p.id},${p.x},${p.y},${familyKey(p)},${(p.parents || []).join('.')},${partnerIds(p).join('.')}`
   ).join(';')}`;
   if (relationshipSignature !== relationshipRenderSignature) {
     relationshipRenderSignature = relationshipSignature;
     lines.replaceChildren();
-    for (const p of visiblePeople) {
-      if (!editMode) continue;
-      for (const partnerId of partnerIds(p)) {
-        if (!(p.id < partnerId) || !renderedIds.has(partnerId) || !renderedIds.has(p.id)) continue;
-        const q = person(partnerId);
-        if (q && renderedIds.has(q.id)) addLine(p.x, p.y, q.x, q.y, 'line partner');
+    if (layoutMode === 'radial') {
+      renderRadialRelationshipLines(renderedIds, renderedPeople);
+    } else {
+      for (const p of visiblePeople) {
+        if (!editMode && layoutMode === 'classic') continue;
+        for (const partnerId of partnerIds(p)) {
+          if (!(p.id < partnerId) || !renderedIds.has(partnerId) || !renderedIds.has(p.id)) continue;
+          const q = person(partnerId);
+          if (q && renderedIds.has(q.id)) addLine(p.x, p.y, q.x, q.y, 'line partner');
+        }
       }
+      renderFamilyLines(renderedIds, renderedPeople);
     }
-    renderFamilyLines(renderedIds, renderedPeople);
   }
 
   const existingCards = new Map([...nodes.children].map(card => [card.dataset.renderKey, card]));
@@ -3235,8 +3385,8 @@ function render() {
   };
   for (const p of renderedPeople) {
     if (renderedCoupleMembers.has(p.id)) continue;
-    const cluster = !editMode ? partnerCluster(p) : [p];
-    const isCouple = !editMode && cluster.length > 1;
+    const cluster = !editMode && layoutMode === 'classic' ? partnerCluster(p) : [p];
+    const isCouple = !editMode && layoutMode === 'classic' && cluster.length > 1;
     if (isCouple) {
       cluster.forEach(member => renderedCoupleMembers.add(member.id));
       const members = [...cluster].sort((a,b) =>
@@ -3283,7 +3433,7 @@ function render() {
       desiredCards.push(el);
       continue;
     }
-    const canCollapse = hasChildren(p.id);
+    const canCollapse = layoutMode === 'classic' && hasChildren(p.id);
     const key = familyKey(p);
     const familyMuted = activeFamily && !matchesFamily(p, activeFamily);
     const sideLine = rootIds.length && !directIds.has(p.id) && !affiliateIds.has(p.id);
@@ -3302,9 +3452,9 @@ function render() {
       el.dataset.collapseId = canCollapse ? p.id : '';
       el.dataset.renderKey = renderKey;
       el.dataset.renderSignature = signature;
-      if (editMode) el.title = 'Ziehen: Person bewegen · Shift + Ziehen: gesamten Ast bewegen';
+      if (editMode && layoutMode === 'classic') el.title = 'Ziehen: Person bewegen · Shift + Ziehen: gesamten Ast bewegen';
       el.innerHTML = html;
-      bindCanvasCard(el, { draggable: true });
+      bindCanvasCard(el, { draggable: editMode && layoutMode === 'classic' });
     }
     desiredCards.push(el);
   }
@@ -3406,7 +3556,16 @@ function renderGenerationBands(visiblePeople) {
   generationBands.innerHTML = rows
     .map((row, index) => {
       const y = row.values.sort((a,b) => a - b)[Math.floor(row.values.length / 2)];
-      return `<div class="generationBand" style="top:${Math.round(y - 76)}px"><span>Ebene ${index + 1}</span></div>`;
+      const matching = visiblePeople.find(personEntry => Math.abs(personEntry.y - y) <= 8);
+      const generation = matching ? layoutGenerationById.get(matching.id) : null;
+      const label = layoutMode === 'tree' && Number.isFinite(generation)
+        ? generation === 0
+          ? 'Fokusgeneration'
+          : generation < 0
+            ? `${Math.abs(generation)} Generation${generation < -1 ? 'en' : ''} davor`
+            : `${generation} Generation${generation > 1 ? 'en' : ''} danach`
+        : `Ebene ${index + 1}`;
+      return `<div class="generationBand" style="top:${Math.round(y - 76)}px"><span>${label}</span></div>`;
     }).join('');
 }
 
@@ -3440,7 +3599,7 @@ nodes.addEventListener('keydown', event => {
 
 function onNodePointerDown(e) {
   e.stopPropagation();
-  if (!editMode) return;
+  if (!editMode || layoutMode !== 'classic') return;
   const id = e.currentTarget.dataset.id;
   const p = person(id);
   if (!p) return;
@@ -5213,6 +5372,7 @@ async function closeSheet(force = false, trigger = document.activeElement) {
 function clearGeneratedLayoutState() {
   layoutMode = 'classic';
   savedClassicPositions = null;
+  clearDerivedLayoutState();
   updateLayoutButton();
 }
 function resetGeneratedLayout() {
@@ -6186,6 +6346,16 @@ function jumpToPerson(id) {
   const p = person(id);
   if (!p) return;
   selected = id;
+  if (layoutMode !== 'classic' && layoutFocusId !== id) {
+    if (savedClassicPositions) restoreClassicPositions();
+    if (layoutMode === 'tree') applyTreeLayout(id);
+    if (layoutMode === 'radial') applyRadialLayout(id);
+    updateLayoutButton();
+    render();
+    fitDerivedLayout();
+    showSpotlight(id);
+    return;
+  }
   if (focusMode && focusId !== id) {
     focusId = id;
     applyFocusLayout(id);
@@ -6780,6 +6950,7 @@ window.addEventListener('keydown', e => {
 });
 $('modeBtn').addEventListener('click', async event => {
   if (hasUnsavedSheetChanges() && !(await confirmDiscardSheetChanges(event.currentTarget))) return;
+  if (!editMode && layoutMode !== 'classic') setLayoutMode('classic');
   editMode = !editMode;
   updateModeUI();
   render();
@@ -6794,6 +6965,7 @@ $('modeBtn').addEventListener('click', async event => {
 $('addBtn').addEventListener('click', () => { selected = null; pendingNewPos = null; openSheet(null); });
 $('focusBtn')?.addEventListener('click', () => {
   closeSettingsMenu();
+  if (layoutMode !== 'classic') setLayoutMode('classic');
   if (focusMode) {
     setFocusMode(false);
     return;
@@ -6802,6 +6974,7 @@ $('focusBtn')?.addEventListener('click', () => {
   if (id) setFocusMode(true, id);
 });
 $('quickFocus').addEventListener('click', () => {
+  if (layoutMode !== 'classic') setLayoutMode('classic');
   if (focusMode) setFocusMode(false);
   else if (selected) setFocusMode(true, selected);
 });
@@ -6941,7 +7114,7 @@ $('resetBtn').addEventListener('click', async event => {
 });
 
 function exportData(includeImages = true, privacyOptions = {}) {
-  return createPrivacyExport(data, { includeImages, ...privacyOptions }).data;
+  return createPrivacyExport(dataWithClassicPositions(), { includeImages, ...privacyOptions }).data;
 }
 async function exportTreeJson({ includeImages = false, filename = 'stammbaum.json', privacyOptions = {} } = {}) {
   const blob = new Blob([JSON.stringify(exportData(includeImages, privacyOptions), null, 2)], { type: 'application/json' });
@@ -6980,7 +7153,6 @@ $('navClearBtn').addEventListener('click', () => jumpToFamily(''));
 $('navSearch').addEventListener('input', renderNavigator);
 document.querySelectorAll('[data-layout-mode]').forEach(button => {
   button.addEventListener('click', () => {
-    if (!editMode) return;
     setLayoutMode(button.dataset.layoutMode);
     closeSettingsMenu();
   });
@@ -7195,6 +7367,7 @@ if (window.location?.search?.includes('ux-debug=1')) {
       rootIds,
       layoutMode
     }),
+    getExportDataForTest: () => cloneCommandValue(exportData(true)),
     updatePersonForTest: (id, patch, label = 'Person testen') => {
       const target = person(id);
       if (!target || !patch || typeof patch !== 'object') return false;

@@ -44,7 +44,7 @@ test('Speichern im Personenformular erzeugt einen rückgängig machbaren Command
   expect(repeated.note).toBe('Command gespeichert');
 });
 
-test('zehn gemischte Commands lassen sich exakt zurück und wieder vorwärts ausführen', async ({ page }) => {
+test('Daten-Commands bleiben unabhängig von reinen Layoutansichten exakt rückgängig', async ({ page }) => {
   await openTree(page);
   const sequence = await page.evaluate(() => {
     const debug = window.__uxDebug;
@@ -64,6 +64,7 @@ test('zehn gemischte Commands lassen sich exakt zurück und wieder vorwärts aus
     debug.setPoolForTest(childId, true);
     debug.setPoolForTest(childId, false);
     debug.setLayoutModeForTest('tree');
+    debug.setLayoutModeForTest('classic');
     debug.updatePersonForTest(childId, { note: 'Kind ergänzt' }, 'Kind ergänzen');
     debug.deletePersonForTest(partnerId);
 
@@ -86,10 +87,10 @@ test('zehn gemischte Commands lassen sich exakt zurück und wieder vorwärts aus
     };
   });
 
-  expect(sequence.historyAfterCommands.length).toBe(10);
-  expect(sequence.historyAfterCommands.index).toBe(10);
-  expect(sequence.undoLabels).toHaveLength(10);
-  expect(sequence.redoLabels).toHaveLength(10);
+  expect(sequence.historyAfterCommands.length).toBe(9);
+  expect(sequence.historyAfterCommands.index).toBe(9);
+  expect(sequence.undoLabels).toHaveLength(9);
+  expect(sequence.redoLabels).toHaveLength(9);
   expect(sequence.undone).toEqual(sequence.initial);
   expect(sequence.redone).toEqual(sequence.final);
   expect(sequence.historyAfterRedo.canRedo).toBe(false);

@@ -55,6 +55,12 @@ svg.lines{position:absolute;inset:0;width:100%;height:100%;overflow:visible;poin
 .line{stroke:var(--line-color,var(--line));stroke-width:4;fill:none;stroke-linecap:round;opacity:.58}
 .childLine{opacity:.64}
 .lineageLine{opacity:.7}
+.radialRelationLine{stroke-width:2.8;opacity:.48}
+.radialPartnerLine{stroke-width:2.6;stroke-dasharray:11 9;opacity:.58}
+.radialPathLine{opacity:.34}
+.radialDirectLine{stroke-width:3.4;opacity:.62}
+.radialGuideRing{fill:none;stroke:rgba(107,143,113,.26);stroke-width:2;stroke-dasharray:8 12}
+.radialRingLabel{fill:rgba(47,42,36,.6);font-size:30px;font-weight:800;paint-order:stroke;stroke:rgba(255,250,240,.92);stroke-width:8px;stroke-linejoin:round}
 .familyStem{opacity:.46}
 .stemBridge{stroke-dasharray:10 12;stroke-width:3;opacity:.36}
 .singleParentLine{stroke-dasharray:4 9;opacity:.46}

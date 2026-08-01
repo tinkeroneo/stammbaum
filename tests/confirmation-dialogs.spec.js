@@ -80,25 +80,20 @@ test('Auto-Layout lässt sich sicher abbrechen und bestätigt ausführen', async
     .toBe('Positionen automatisch aufräumen');
 });
 
-test('Anordnung ist sichtbar, aber nur im Bearbeitungsmodus veränderbar', async ({ page }) => {
+test('Leseansichten sind direkt verfügbar, Auto-Anordnung bleibt im Bearbeitungsmodus', async ({ page }) => {
   await openTree(page);
   await page.getByTestId('main-nav-more').click();
 
   await expect(page.getByTestId('layout-classic')).toBeVisible();
-  await expect(page.getByTestId('layout-tree')).toBeDisabled();
-  await expect(page.getByTestId('layout-radial')).toBeDisabled();
-  await expect(page.getByTestId('layout-auto')).toBeDisabled();
-  await expect(page.locator('#layoutModeHint')).toContainText('Bearbeiten');
-  await page.keyboard.press('Escape');
-
-  await page.getByTestId('app-mode-toggle').click();
-  await page.getByTestId('main-nav-more').click();
   await expect(page.getByTestId('layout-tree')).toBeEnabled();
+  await expect(page.getByTestId('layout-radial')).toBeEnabled();
+  await expect(page.getByTestId('layout-auto')).toBeDisabled();
+  await expect(page.locator('#layoutModeHint')).toContainText('gespeicherten');
   await page.getByTestId('layout-tree').click();
 
   await expect.poll(async () => page.evaluate(() => window.__uxDebug.getDataSnapshot().layoutMode)).toBe('tree');
-  await expect.poll(async () => page.evaluate(() => window.__uxDebug.getCommandHistoryState().undoLabel))
-    .toBe('Layout Baum');
+  await expect.poll(async () => page.evaluate(() => window.__uxDebug.getCommandHistoryState().length)).toBe(0);
+  await expect(page.getByTestId('app-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('Vorratverschiebung nennt die Folge und kehrt bei Abbruch zu Speichern zurück', async ({ page }) => {
