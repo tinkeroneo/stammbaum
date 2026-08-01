@@ -88,3 +88,89 @@ export function normalizeTreeData(input, { fallback = { people: [] } } = {}) {
   delete data.rootId;
   return data;
 }
+
+export const presumedLivingAgeLimit = 110;
+
+function yearFromLifeDate(value) {
+  const match = String(value || '').match(/(?:^|\D)(\d{4})(?:\D|$)/);
+  return match ? Number(match[1]) : null;
+}
+
+export function classifyPresumedLiving(person, { asOfYear = new Date().getUTCFullYear() } = {}) {
+  if (String(person?.died || '').trim()) {
+    return { presumedLiving: false, reason: 'death-recorded', birthYear: yearFromLifeDate(person?.born) };
+  }
+  const birthYear = yearFromLifeDate(person?.born);
+  if (birthYear && asOfYear - birthYear >= presumedLivingAgeLimit) {
+    return { presumedLiving: false, reason: 'age-at-least-110', birthYear };
+  }
+  return {
+    presumedLiving: true,
+    reason: birthYear ? 'younger-than-110-no-death' : 'birth-unknown-no-death',
+    birthYear
+  };
+}
+
+export function createPrivacyExport(source, {
+  includeImages = true,
+  privacyEnabled = false,
+  shortenLifeDates = true,
+  removeNotesAndSources = true,
+  removeImagesForLiving = true,
+  asOfYear = new Date().getUTCFullYear()
+} = {}) {
+  const output = structuredClone(source);
+  const preview = {
+    asOfYear,
+    totalPeople: output.people?.length || 0,
+    presumedLiving: 0,
+    affectedPeople: 0,
+    shortenedDates: 0,
+    removedNotes: 0,
+    removedSources: 0,
+    removedLinks: 0,
+    removedImages: 0
+  };
+  output.people = (output.people || []).map(person => {
+    const classification = classifyPresumedLiving(person, { asOfYear });
+    if (classification.presumedLiving) preview.presumedLiving += 1;
+    let affected = false;
+    if (privacyEnabled && classification.presumedLiving) {
+      if (shortenLifeDates && person.born && person.born !== String(classification.birthYear || '')) {
+        person.born = classification.birthYear ? String(classification.birthYear) : '';
+        preview.shortenedDates += 1;
+        affected = true;
+      }
+      if (removeNotesAndSources) {
+        if (String(person.note || '').trim()) {
+          person.note = '';
+          preview.removedNotes += 1;
+          affected = true;
+        }
+        if (Array.isArray(person.mentions) && person.mentions.length) {
+          preview.removedSources += person.mentions.length;
+          person.mentions = [];
+          affected = true;
+        }
+        if (String(person.link || '').trim()) {
+          person.link = '';
+          preview.removedLinks += 1;
+          affected = true;
+        }
+      }
+      if (removeImagesForLiving && person.image) {
+        person.image = '';
+        preview.removedImages += 1;
+        affected = true;
+      }
+    }
+    if (!includeImages && person.image) {
+      person.image = '';
+      preview.removedImages += 1;
+      affected = true;
+    }
+    if (affected) preview.affectedPeople += 1;
+    return person;
+  });
+  return { data: output, preview };
+}

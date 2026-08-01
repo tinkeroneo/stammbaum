@@ -421,6 +421,22 @@
                     <div class="exportOptions" id="exportJsonOptions">
                         <label class="exportCheck"><input type="checkbox" id="exportIncludeImages" checked />
                             Personenbilder einschließen</label>
+                        <label class="exportCheck"><input type="checkbox" id="exportPrivacyEnabled"
+                                data-testid="export-privacy-enabled" />
+                            Datenschutzfilter für vermutlich lebende Personen</label>
+                        <fieldset class="exportPrivacyOptions" id="exportPrivacyOptions" disabled>
+                            <legend>Welche Angaben werden geschützt?</legend>
+                            <label class="exportCheck"><input type="checkbox" id="exportPrivacyDates" checked />
+                                Geburtsdatum auf das Jahr kürzen</label>
+                            <label class="exportCheck"><input type="checkbox" id="exportPrivacyContent" checked />
+                                Private Freitexte, Quellen und Personenlink entfernen</label>
+                            <label class="exportCheck"><input type="checkbox" id="exportPrivacyImages" checked />
+                                Personenbild entfernen</label>
+                        </fieldset>
+                        <p class="exportPrivacyRule" id="exportPrivacyRule">
+                            Als vermutlich lebend gilt: kein Sterbedatum und entweder kein Geburtsjahr oder noch
+                            keine 110 Jahre alt. Fehlende Daten werden vorsichtshalber geschützt.
+                        </p>
                     </div>
                     <div class="exportOptions hidden" id="exportImageOptions">
                         <label for="exportImageFormat">Bildformat
@@ -443,6 +459,8 @@
                         <div><dt>Personen</dt><dd id="exportPersonCount"></dd></div>
                         <div><dt>Bilder</dt><dd id="exportImageCount"></dd></div>
                         <div><dt>Notizen / Quellen</dt><dd id="exportContentCount"></dd></div>
+                        <div><dt>Vermutlich lebend</dt><dd id="exportLivingCount" data-testid="export-living-count"></dd></div>
+                        <div><dt>Datenschutzänderungen</dt><dd id="exportPrivacyCount" data-testid="export-privacy-count"></dd></div>
                         <div><dt>Geschätzte Größe</dt><dd id="exportEstimatedSize"></dd></div>
                     </dl>
                     <label class="exportFilename" for="exportFilename">Dateiname

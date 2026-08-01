@@ -27,7 +27,10 @@ test('öffentliche Leaf-Module sind unabhängig importierbar', async ({ page }) 
   expect(exportsByModule).toEqual({
     'app-shell': ['startApp'],
     commands: ['cloneCommandValue'],
-    'data-model': ['normalizeImportedPositions', 'normalizeTreeData', 'uniqueIds'],
+    'data-model': [
+      'classifyPresumedLiving', 'createPrivacyExport', 'normalizeImportedPositions',
+      'normalizeTreeData', 'presumedLivingAgeLimit', 'uniqueIds'
+    ],
     dialogs: ['dialogFocusableElements', 'dialogFocusableSelector'],
     layout: ['groupRowsByTolerance'],
     persistence: ['readJsonStorage', 'serializeTree'],

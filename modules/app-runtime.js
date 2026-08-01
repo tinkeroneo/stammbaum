@@ -1,4 +1,4 @@
-import { normalizeTreeData, uniqueIds } from './data-model.js';
+import { createPrivacyExport, normalizeTreeData, uniqueIds } from './data-model.js';
 import { buildSearchIndex, parseBirthValue } from './selectors.js';
 import { cloneCommandValue } from './commands.js';
 import { readJsonStorage, serializeTree } from './persistence.js';
@@ -152,6 +152,7 @@ let decisionResolver = null;
 let decisionFocusReturnTarget = null;
 let exportFocusReturnTarget = null;
 let exportFilenameTouched = false;
+let privacyExportAsOfYear = new Date().getUTCFullYear();
 let relationshipEditorState = null;
 let relationshipFocusReturnTarget = null;
 let pendingDataQualityHints = [];
@@ -5579,6 +5580,15 @@ function normalizeExportFilename(value, extension) {
   const base = clean.replace(/\.(json|png|svg)$/i, '') || (extension === 'json' ? 'stammbaum' : 'stammbaum-ansicht');
   return `${base}.${extension}`;
 }
+function currentPrivacyExportOptions() {
+  return {
+    privacyEnabled: !!$('exportPrivacyEnabled')?.checked,
+    shortenLifeDates: !!$('exportPrivacyDates')?.checked,
+    removeNotesAndSources: !!$('exportPrivacyContent')?.checked,
+    removeImagesForLiving: !!$('exportPrivacyImages')?.checked,
+    asOfYear: privacyExportAsOfYear
+  };
+}
 function updateExportDialog() {
   const kind = selectedExportKind();
   const format = $('exportImageFormat').value;
@@ -5587,14 +5597,25 @@ function updateExportDialog() {
   const noteCount = data.people.filter(p => String(p.note || '').trim()).length;
   const sourceCount = data.people.reduce((sum, p) => sum + cleanMentions(p.mentions).length, 0);
   const includeImages = imageCount > 0 && includeImagesControl.checked;
+  const privacyOptions = currentPrivacyExportOptions();
+  const privacyPreview = createPrivacyExport(data, {
+    ...privacyOptions,
+    includeImages: true
+  }).preview;
   $('exportIncludeImages').disabled = imageCount === 0;
   $('exportImageIncludeImages').disabled = imageCount === 0;
+  $('exportPrivacyOptions').disabled = !privacyOptions.privacyEnabled;
   $('exportJsonOptions').classList.toggle('hidden', kind !== 'json');
   $('exportImageOptions').classList.toggle('hidden', kind !== 'image');
   $('exportScaleField').classList.toggle('hidden', kind !== 'image' || format !== 'png');
   $('exportPersonCount').textContent = String(data.people.length);
   $('exportImageCount').textContent = imageCount ? `${imageCount}${includeImages ? ' enthalten' : ' ausgelassen'}` : 'keine';
   $('exportContentCount').textContent = `${noteCount} / ${sourceCount}`;
+  $('exportLivingCount').textContent = `${privacyPreview.presumedLiving} von ${privacyPreview.totalPeople}`;
+  $('exportPrivacyCount').textContent = kind !== 'json'
+    ? 'nur bei JSON'
+    : (privacyOptions.privacyEnabled ? `${privacyPreview.affectedPeople} Person(en)` : 'nicht aktiv');
+  $('exportPrivacyRule').textContent = `Regelstand ${privacyExportAsOfYear}: Ohne Sterbedatum gilt eine Person als vermutlich lebend, wenn das Geburtsjahr fehlt oder nach ${privacyExportAsOfYear - 110} liegt. Fehlende Daten werden vorsichtshalber geschützt.`;
   const extension = selectedExportExtension();
   if (!exportFilenameTouched) {
     $('exportFilename').value = extension === 'json' ? 'stammbaum.json' : `stammbaum-ansicht.${extension}`;
@@ -5603,7 +5624,7 @@ function updateExportDialog() {
   }
   let estimatedBytes = 0;
   if (kind === 'json') {
-    estimatedBytes = new Blob([JSON.stringify(exportData(includeImages), null, 2)]).size;
+    estimatedBytes = new Blob([JSON.stringify(exportData(includeImages, privacyOptions), null, 2)]).size;
   } else {
     const output = buildExportSvg({ includeImages });
     if (format === 'svg') estimatedBytes = output ? new Blob([output.svg]).size : 0;
@@ -5617,6 +5638,7 @@ function updateExportDialog() {
 function openExportDialog(kind = 'json', trigger = document.activeElement) {
   exportFocusReturnTarget = trigger instanceof HTMLElement ? trigger : null;
   exportFilenameTouched = false;
+  privacyExportAsOfYear = new Date().getUTCFullYear();
   const radio = document.querySelector(`input[name="exportKind"][value="${kind === 'image' ? 'image' : 'json'}"]`);
   if (radio) radio.checked = true;
   $('exportLayer').classList.remove('hidden');
@@ -5641,12 +5663,13 @@ async function submitExportDialog() {
   const includeImages = kind === 'json'
     ? $('exportIncludeImages').checked && !$('exportIncludeImages').disabled
     : $('exportImageIncludeImages').checked && !$('exportImageIncludeImages').disabled;
+  const privacyOptions = currentPrivacyExportOptions();
   button.disabled = true;
   button.textContent = 'Export wird erstellt …';
   try {
     let saved = false;
     if (kind === 'json') {
-      saved = await exportTreeJson({ includeImages, filename });
+      saved = await exportTreeJson({ includeImages, filename, privacyOptions });
     } else if (format === 'svg') {
       saved = await exportSvgView({ includeImages, filename });
     } else {
@@ -6679,15 +6702,11 @@ $('resetBtn').addEventListener('click', async event => {
   });
 });
 
-function exportData(includeImages = true) {
-  if (includeImages) return data;
-  return {
-    ...data,
-    people: data.people.map(p => ({ ...p, image: '' }))
-  };
+function exportData(includeImages = true, privacyOptions = {}) {
+  return createPrivacyExport(data, { includeImages, ...privacyOptions }).data;
 }
-async function exportTreeJson({ includeImages = false, filename = 'stammbaum.json' } = {}) {
-  const blob = new Blob([JSON.stringify(exportData(includeImages), null, 2)], { type: 'application/json' });
+async function exportTreeJson({ includeImages = false, filename = 'stammbaum.json', privacyOptions = {} } = {}) {
+  const blob = new Blob([JSON.stringify(exportData(includeImages, privacyOptions), null, 2)], { type: 'application/json' });
   return saveBlobAs(blob, filename, [{
     description: 'Stammbaum JSON',
     accept: { 'application/json': ['.json'] }
