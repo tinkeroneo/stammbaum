@@ -150,6 +150,11 @@ let dialogStack = [];
 let dialogIsolationState = [];
 let canvasFocusId = '';
 let canvasFocusRestoreRequested = false;
+let minimapRenderSignature = '';
+let relationshipRenderSignature = '';
+let generationRenderSignature = '';
+let searchPeopleSorted = [];
+let searchTextByPersonId = new Map();
 rebuildDataIndexes();
 
 const familyPalette = [
@@ -549,6 +554,7 @@ function recordDataCommand(label, before) {
 }
 function commitDataCommand(label, before) {
   const command = recordDataCommand(label, before);
+  if (command) rebuildDataIndexes();
   save();
   return command;
 }
@@ -855,6 +861,8 @@ function rebuildDataIndexes() {
     );
   }
   relationComponentIds = buildRelationComponentIds();
+  searchPeopleSorted = [...nonPoolPeople].sort((a, b) => fullName(a).localeCompare(fullName(b)));
+  searchTextByPersonId = new Map(nonPoolPeople.map(p => [p.id, personSearchText(p)]));
 }
 function buildRelationComponentIds() {
   const ids = nonPoolPeople.map(p => p.id);
@@ -1898,6 +1906,20 @@ function updateMinimap(maxX, maxY, visiblePeople = null) {
   const visible = visiblePeople ? new Set(visiblePeople.map(p => p.id)) : visibleIds();
   const sourcePeople = visiblePeople || data.people.filter(p => visible.has(p.id));
   const compactMinimap = sourcePeople.length > 1200;
+  const surfaceSize = [
+    minimapInner?.clientWidth || 0,
+    minimapInner?.clientHeight || 0,
+    overviewMap?.clientWidth || 0,
+    overviewMap?.clientHeight || 0
+  ].join(':');
+  const signature = `${maxX}:${maxY}:${surfaceSize}:${compactMinimap}:${sourcePeople.map(p =>
+    `${p.id},${p.x},${p.y},${(p.parents || []).join('.')},${partnerIds(p).join('.')}`
+  ).join(';')}`;
+  if (signature === minimapRenderSignature) {
+    updateMinimapViewport();
+    return;
+  }
+  minimapRenderSignature = signature;
 
   if (minimapInner && minimapSvg) {
     minimapState = renderMinimapSurface({
@@ -3080,6 +3102,60 @@ function personTileContent(p, className = '') {
 }
 
 // -- Rendering ---------------------------------------------------------
+function reconcileCanvasCards(desiredCards) {
+  const desired = new Set(desiredCards);
+  let cursor = nodes.firstElementChild;
+  for (const card of desiredCards) {
+    if (card === cursor) {
+      cursor = cursor.nextElementSibling;
+      continue;
+    }
+    nodes.insertBefore(card, cursor);
+  }
+  [...nodes.children].forEach(card => {
+    if (!desired.has(card)) card.remove();
+  });
+}
+
+function bindCanvasCard(el, { draggable = false } = {}) {
+  if (draggable) el.addEventListener('pointerdown', onNodePointerDown);
+  el.addEventListener('click', event => {
+    event.stopPropagation();
+    if (Date.now() < suppressOpenUntil) return;
+    const member = event.target.closest('[data-member-id]');
+    selected = member?.dataset.memberId || el.dataset.id;
+    openSheet(selected);
+  });
+  const collapseButton = el.querySelector('.collapseBtn');
+  if (!collapseButton) return;
+  collapseButton.addEventListener('pointerdown', event => event.stopPropagation());
+  collapseButton.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    drag = null;
+    suppressOpenUntil = Date.now() + 500;
+    const collapseId = el.dataset.collapseId;
+    if (!collapseId) return;
+    if (collapsed.has(collapseId)) collapsed.delete(collapseId);
+    else collapsed.add(collapseId);
+    saveCollapsed();
+    requestCanvasFocusAfterRender(collapseId);
+    render();
+    fit();
+  });
+}
+
+function updateCanvasSelectionState(id = selected) {
+  nodes.querySelectorAll('.person.selected').forEach(card => card.classList.remove('selected'));
+  nodes.querySelectorAll('[data-member-id][aria-current="true"]').forEach(member => {
+    member.setAttribute('aria-current', 'false');
+  });
+  if (!id) return;
+  const selectedMember = nodes.querySelector(`[data-member-id="${CSS.escape(id)}"]`);
+  selectedMember?.closest('.person')?.classList.add('selected');
+  selectedMember?.setAttribute('aria-current', 'true');
+}
+
 function render() {
   const activeCanvasCard = document.activeElement?.closest?.('[data-member-id]');
   const hadCanvasFocus = !!activeCanvasCard || canvasFocusRestoreRequested;
@@ -3108,21 +3184,25 @@ function render() {
     });
   }
   const zClass = zoomClass();
-  nodes.innerHTML = '';
-  lines.innerHTML = '';
-  if (generationBands) generationBands.innerHTML = '';
-
-  for (const p of visiblePeople) {
-    if (!editMode) continue;
-    for (const partnerId of partnerIds(p)) {
-      if (!(p.id < partnerId) || !renderedIds.has(partnerId) || !renderedIds.has(p.id)) continue;
-      const q = person(partnerId);
-      if (q && renderedIds.has(q.id)) addLine(p.x, p.y, q.x, q.y, 'line partner');
+  const relationshipSignature = `${editMode}:${renderedPeople.map(p =>
+    `${p.id},${p.x},${p.y},${familyKey(p)},${(p.parents || []).join('.')},${partnerIds(p).join('.')}`
+  ).join(';')}`;
+  if (relationshipSignature !== relationshipRenderSignature) {
+    relationshipRenderSignature = relationshipSignature;
+    lines.replaceChildren();
+    for (const p of visiblePeople) {
+      if (!editMode) continue;
+      for (const partnerId of partnerIds(p)) {
+        if (!(p.id < partnerId) || !renderedIds.has(partnerId) || !renderedIds.has(p.id)) continue;
+        const q = person(partnerId);
+        if (q && renderedIds.has(q.id)) addLine(p.x, p.y, q.x, q.y, 'line partner');
+      }
     }
+    renderFamilyLines(renderedIds, renderedPeople);
   }
 
-  renderFamilyLines(renderedIds, renderedPeople);
-
+  const existingCards = new Map([...nodes.children].map(card => [card.dataset.renderKey, card]));
+  const desiredCards = [];
   const renderedCoupleMembers = new Set();
   const partnerCluster = start => {
     const members = [];
@@ -3153,91 +3233,75 @@ function render() {
         a.id.localeCompare(b.id)
       );
       const anchor = members.find(member => directIds.has(member.id)) || members[0];
-      const el = document.createElement('div');
       const collapseId = members.find(member => hasChildren(member.id))?.id || '';
       const key = familyKey(anchor);
       const familyMuted = activeFamily && !members.some(member => matchesFamily(member, activeFamily));
       const sideLine = rootIds.length && !members.some(member => directIds.has(member.id) || affiliateIds.has(member.id));
-      el.className = 'person couplePerson' + (members.length > 2 ? ' multiPartnerCard' : '') + zClass + (compactMode ? ' compact' : '') + (members.some(member => selected === member.id) ? ' selected' : '') + (members.some(member => focusMode && focusId === member.id) ? ' focusRoot' : '') + (members.some(member => isMainRoot(member.id)) ? ' rootPerson' : '') + (members.some(member => directIds.has(member.id)) ? ' directPerson' : '') + (sideLine ? ' sidePerson' : '') + (members.some(member => spotlightId === member.id) ? ' spotlight' : '') + (familyMuted ? ' familyMuted' : '') + (collapseId && collapsed.has(collapseId) ? ' collapsed' : '');
+      const className = 'person couplePerson' + (members.length > 2 ? ' multiPartnerCard' : '') + zClass + (compactMode ? ' compact' : '') + (members.some(member => selected === member.id) ? ' selected' : '') + (members.some(member => focusMode && focusId === member.id) ? ' focusRoot' : '') + (members.some(member => isMainRoot(member.id)) ? ' rootPerson' : '') + (members.some(member => directIds.has(member.id)) ? ' directPerson' : '') + (sideLine ? ' sidePerson' : '') + (members.some(member => spotlightId === member.id) ? ' spotlight' : '') + (familyMuted ? ' familyMuted' : '') + (collapseId && collapsed.has(collapseId) ? ' collapsed' : '');
       const primaryPartner = person(anchor.partner) || members.find(member => member.id !== anchor.id);
       const positionMembers = members.length > 2 && primaryPartner
         ? [anchor, primaryPartner]
         : members;
-      el.style.left = Math.round(positionMembers.reduce((sum, member) => sum + member.x, 0) / positionMembers.length) + 'px';
-      el.style.top = Math.round(positionMembers.reduce((sum, member) => sum + member.y, 0) / positionMembers.length) + 'px';
-      el.style.setProperty('--family-color', familyColor(key));
-      el.style.setProperty('--partner-color', familyColor(familyKey(members[1])));
-      el.dataset.id = anchor.id;
+      const left = Math.round(positionMembers.reduce((sum, member) => sum + member.x, 0) / positionMembers.length) + 'px';
+      const top = Math.round(positionMembers.reduce((sum, member) => sum + member.y, 0) / positionMembers.length) + 'px';
+      const familyColorValue = familyColor(key);
+      const partnerColorValue = familyColor(familyKey(members[1]));
       const memberClass = member => `coupleMember${affiliateIds.has(member.id) ? ' affiliateMember' : ''}`;
       const memberHtml = members.length > 2
         ? `${personTileContent(anchor, memberClass(anchor))}<div class="partnerStack">${members.filter(member => member.id !== anchor.id).map(member => personTileContent(member, memberClass(member))).join('')}</div>`
         : members.map(member => personTileContent(member, memberClass(member))).join('');
-      el.innerHTML = `<div class="coupleMembers">${memberHtml}</div>${collapseId ? `<button class="collapseBtn" title="Ast ein-/ausklappen">${collapsed.has(collapseId)?'+' : '−'}</button>` : ''}`;
-      el.addEventListener('click', e => {
-        e.stopPropagation();
-        if (Date.now() < suppressOpenUntil) return;
-        const member = e.target.closest('[data-member-id]');
-        selected = member?.dataset.memberId || anchor.id;
-        openSheet(selected);
-      });
-      const cb = el.querySelector('.collapseBtn');
-      if(cb){
-        const toggleCollapse = ev => {
-          ev.preventDefault();
-          ev.stopPropagation();
-          suppressOpenUntil = Date.now() + 500;
-          if(collapsed.has(collapseId)) collapsed.delete(collapseId); else collapsed.add(collapseId);
-          saveCollapsed();
-          requestCanvasFocusAfterRender(collapseId);
-          render();
-          fit();
-        };
-        cb.addEventListener('pointerdown', ev => ev.stopPropagation());
-        cb.addEventListener('click', toggleCollapse);
+      const html = `<div class="coupleMembers">${memberHtml}</div>${collapseId ? `<button class="collapseBtn" title="Ast ein-/ausklappen">${collapsed.has(collapseId)?'+' : '−'}</button>` : ''}`;
+      const renderKey = `couple:${members.map(member => member.id).sort().join('|')}`;
+      const signature = JSON.stringify([className, left, top, familyColorValue, partnerColorValue, anchor.id, collapseId, html]);
+      let el = existingCards.get(renderKey);
+      if (!el || el.dataset.renderSignature !== signature) {
+        el = document.createElement('div');
+        el.className = className;
+        el.style.left = left;
+        el.style.top = top;
+        el.style.setProperty('--family-color', familyColorValue);
+        el.style.setProperty('--partner-color', partnerColorValue);
+        el.dataset.id = anchor.id;
+        el.dataset.collapseId = collapseId;
+        el.dataset.renderKey = renderKey;
+        el.dataset.renderSignature = signature;
+        el.innerHTML = html;
+        bindCanvasCard(el);
       }
-      nodes.appendChild(el);
+      desiredCards.push(el);
       continue;
     }
-    const el = document.createElement('div');
     const canCollapse = hasChildren(p.id);
     const key = familyKey(p);
     const familyMuted = activeFamily && !matchesFamily(p, activeFamily);
     const sideLine = rootIds.length && !directIds.has(p.id) && !affiliateIds.has(p.id);
-    el.className = 'person' + zClass + (compactMode ? ' compact' : '') + (selected === p.id ? ' selected' : '') + (focusMode && focusId === p.id ? ' focusRoot' : '') + (isMainRoot(p.id) ? ' rootPerson' : '') + (directIds.has(p.id) ? ' directPerson' : '') + (affiliateIds.has(p.id) ? ' affiliatePerson' : '') + (sideLine ? ' sidePerson' : '') + (spotlightId === p.id ? ' spotlight' : '') + (familyMuted ? ' familyMuted' : '') + (drag?.branch && drag.positions?.has(p.id) ? ' branchDragging' : '') + (collapsed.has(p.id) ? ' collapsed' : '');
-    el.style.left = p.x + 'px';
-    el.style.top = p.y + 'px';
-    el.style.setProperty('--family-color', familyColor(key));
-    el.dataset.id = p.id;
-    if (editMode) el.title = 'Ziehen: Person bewegen · Shift + Ziehen: gesamten Ast bewegen';
-
-    el.innerHTML = `${personTileContent(p)}${canCollapse ? `<button class="collapseBtn" title="Ast ein-/ausklappen">${collapsed.has(p.id)?'+' : '−'}</button>` : ''}`;
-
-    el.addEventListener('pointerdown', onNodePointerDown);
-    el.addEventListener('click', e => {
-      e.stopPropagation();
-      if (Date.now() < suppressOpenUntil) return;
-      selected = p.id;
-      openSheet(p.id);
-    });
-    const cb = el.querySelector('.collapseBtn');
-    if(cb){
-      const toggleCollapse = ev => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        drag = null;
-        suppressOpenUntil = Date.now() + 500;
-        if(collapsed.has(p.id)) collapsed.delete(p.id); else collapsed.add(p.id);
-        saveCollapsed();
-        requestCanvasFocusAfterRender(p.id);
-        render();
-        fit();
-      };
-      cb.addEventListener('pointerdown', ev => ev.stopPropagation());
-      cb.addEventListener('click', toggleCollapse);
+    const className = 'person' + zClass + (compactMode ? ' compact' : '') + (selected === p.id ? ' selected' : '') + (focusMode && focusId === p.id ? ' focusRoot' : '') + (isMainRoot(p.id) ? ' rootPerson' : '') + (directIds.has(p.id) ? ' directPerson' : '') + (affiliateIds.has(p.id) ? ' affiliatePerson' : '') + (sideLine ? ' sidePerson' : '') + (spotlightId === p.id ? ' spotlight' : '') + (familyMuted ? ' familyMuted' : '') + (drag?.branch && drag.positions?.has(p.id) ? ' branchDragging' : '') + (collapsed.has(p.id) ? ' collapsed' : '');
+    const html = `${personTileContent(p)}${canCollapse ? `<button class="collapseBtn" title="Ast ein-/ausklappen">${collapsed.has(p.id)?'+' : '−'}</button>` : ''}`;
+    const renderKey = `person:${p.id}`;
+    const signature = JSON.stringify([className, p.x, p.y, familyColor(key), p.id, canCollapse ? p.id : '', editMode, html]);
+    let el = existingCards.get(renderKey);
+    if (!el || el.dataset.renderSignature !== signature) {
+      el = document.createElement('div');
+      el.className = className;
+      el.style.left = p.x + 'px';
+      el.style.top = p.y + 'px';
+      el.style.setProperty('--family-color', familyColor(key));
+      el.dataset.id = p.id;
+      el.dataset.collapseId = canCollapse ? p.id : '';
+      el.dataset.renderKey = renderKey;
+      el.dataset.renderSignature = signature;
+      if (editMode) el.title = 'Ziehen: Person bewegen · Shift + Ziehen: gesamten Ast bewegen';
+      el.innerHTML = html;
+      bindCanvasCard(el, { draggable: true });
     }
-    nodes.appendChild(el);
+    desiredCards.push(el);
   }
+  reconcileCanvasCards(desiredCards);
   if (generationBands && showGenerationBands) renderGenerationBands(visiblePeople);
+  else if (generationBands?.childElementCount) {
+    generationBands.replaceChildren();
+    generationRenderSignature = '';
+  }
   configureCanvasCards(renderedPeople, {
     previousId: previousCanvasFocusId,
     restoreFocus: hadCanvasFocus
@@ -3321,6 +3385,9 @@ function renderGenerationBands(visiblePeople) {
   const ys = visiblePeople
     .map(p => p.y)
     .sort((a,b) => a - b);
+  const signature = ys.join(',');
+  if (signature === generationRenderSignature) return;
+  generationRenderSignature = signature;
 
   const rows = [];
   for (const y of ys) {
@@ -3642,6 +3709,8 @@ function shouldVirtualizePeople(people) {
 }
 function viewportPeopleSlice(people) {
   const bounds = viewportWorldBounds();
+  const centerX = (bounds.minX + bounds.maxX) / 2;
+  const centerY = (bounds.minY + bounds.maxY) / 2;
   const kept = people.filter(p =>
     p.x >= bounds.minX &&
     p.x <= bounds.maxX &&
@@ -3649,14 +3718,16 @@ function viewportPeopleSlice(people) {
     p.y <= bounds.maxY
   );
   if (!kept.length) {
-    const centerX = (bounds.minX + bounds.maxX) / 2;
-    const centerY = (bounds.minY + bounds.maxY) / 2;
-    return [...people]
+    const nearest = [...people]
       .sort((a, b) =>
         (Math.abs(a.x - centerX) + Math.abs(a.y - centerY)) -
         (Math.abs(b.x - centerX) + Math.abs(b.y - centerY))
       )
       .slice(0, Math.min(240, people.length));
+    if (canvasFocusId && people.some(p => p.id === canvasFocusId) && !nearest.some(p => p.id === canvasFocusId)) {
+      nearest.push(person(canvasFocusId));
+    }
+    return nearest;
   }
   const extraIds = new Set();
   kept.forEach(p => {
@@ -3664,9 +3735,18 @@ function viewportPeopleSlice(people) {
     mutualPartnerIds(p).forEach(id => extraIds.add(id));
   });
   if (canvasFocusId && people.some(p => p.id === canvasFocusId)) extraIds.add(canvasFocusId);
-  const sliced = people.filter(p => extraIds.has(p.id));
-  if (sliced.length < Math.min(80, people.length)) return people;
-  return sliced;
+  const minimum = Math.min(80, people.length);
+  if (extraIds.size < minimum) {
+    [...people]
+      .filter(p => !extraIds.has(p.id))
+      .sort((a, b) =>
+        (Math.abs(a.x - centerX) + Math.abs(a.y - centerY)) -
+        (Math.abs(b.x - centerX) + Math.abs(b.y - centerY))
+      )
+      .slice(0, minimum - extraIds.size)
+      .forEach(p => extraIds.add(p.id));
+  }
+  return people.filter(p => extraIds.has(p.id));
 }
 function minimapSamplePeople(people) {
   if (people.length <= 1200) return people;
@@ -5089,7 +5169,7 @@ function openSheet(id, { mode = '', focus = '' } = {}) {
   setPersonSheetView(nextMode, p);
   setDialogVisibility($('sheet'), true);
   showBackdrop(true);
-  render();
+  updateCanvasSelectionState(id);
   const initialFocus = nextMode === 'detail'
     ? (focus === 'editButton' ? '#personEditBtn' : '#sheetTitle')
     : '#firstName';
@@ -6127,10 +6207,11 @@ function renderBirthdays(){
 function showSpotlight(id) {
   spotlightId = id;
   clearTimeout(spotlightTimer);
-  render();
+  nodes.querySelectorAll('.person.spotlight').forEach(card => card.classList.remove('spotlight'));
+  nodes.querySelector(`[data-member-id="${CSS.escape(id)}"]`)?.closest('.person')?.classList.add('spotlight');
   spotlightTimer = setTimeout(() => {
+    nodes.querySelectorAll('.person.spotlight').forEach(card => card.classList.remove('spotlight'));
     spotlightId = null;
-    render();
   }, 1800);
 }
 function jumpToPerson(id) {
@@ -6166,9 +6247,8 @@ function highlightSearchMatch(value, query) {
 function renderSearchResults(){
   const query = ($('personSearch')?.value || '').trim();
   const q = query.toLowerCase();
-  const rows = [...nonPoolPeople]
-    .filter(p => !q || personSearchText(p).includes(q))
-    .sort((a,b) => fullName(a).localeCompare(fullName(b)))
+  const rows = searchPeopleSorted
+    .filter(p => !q || searchTextByPersonId.get(p.id)?.includes(q))
     .slice(0, 80);
 
   const hasQuery = !!q;

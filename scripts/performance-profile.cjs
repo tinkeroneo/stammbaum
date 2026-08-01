@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, '..');
 const port = 4174;
 const baseURL = `http://127.0.0.1:${port}`;
 const outputArg = process.argv.find(arg => arg.startsWith('--output='));
-const outputPath = path.resolve(root, outputArg?.slice('--output='.length) || 'docs/performance-results.json');
+const outputPath = path.resolve(root, outputArg?.slice('--output='.length) || 'docs/performance-results-current.json');
 const sizes = [385, 1200, 5000];
 const runsPerSize = 3;
 const storeKey = 'mobile-family-tree-v5-clean';
@@ -96,6 +96,8 @@ async function runTrial(browser, total, run) {
   await page.getByTestId('app-shell').waitFor({ state: 'visible' });
   await twoFrames(page);
   const initialMs = Number(process.hrtime.bigint() - initialStart) / 1e6;
+  await page.waitForTimeout(250);
+  const initialLongTasksMs = await page.evaluate(() => window.__profileLongTasks.splice(0));
 
   const panZoomMs = await page.evaluate(async () => {
     const main = document.querySelector('[data-testid="app-main"]');
@@ -113,6 +115,7 @@ async function runTrial(browser, total, run) {
   });
 
   await page.getByTestId('person-search-open').click();
+  await page.waitForTimeout(250);
   const searchMs = await page.evaluate(async () => {
     const input = document.querySelector('[data-testid="person-search"]');
     const start = performance.now();
@@ -142,7 +145,7 @@ async function runTrial(browser, total, run) {
 
   await context.close();
   if (pageErrors.length) throw new Error(`Page errors for ${total}/${run}: ${pageErrors.join('; ')}`);
-  return { run, initialMs, panZoomMs, searchMs, detailMs, ...diagnostics };
+  return { run, initialMs, initialLongTasksMs, panZoomMs, searchMs, detailMs, ...diagnostics };
 }
 
 async function main() {
@@ -166,6 +169,7 @@ async function main() {
         process.stdout.write('done\n');
       }
       const allLongTasks = runs.flatMap(run => run.longTasksMs);
+      const allInitialLongTasks = runs.flatMap(run => run.initialLongTasksMs);
       datasets.push({
         people: size,
         runs,
@@ -175,6 +179,7 @@ async function main() {
           search: summarize(runs, 'searchMs'),
           detail: summarize(runs, 'detailMs'),
           longestTaskMs: Number(Math.max(0, ...allLongTasks).toFixed(1)),
+          longestInitialTaskMs: Number(Math.max(0, ...allInitialLongTasks).toFixed(1)),
           domElementsMedian: median(runs.map(run => run.domElements)),
           renderedCardsMedian: median(runs.map(run => run.renderedCards)),
           renderedLinesMedian: median(runs.map(run => run.renderedLines))

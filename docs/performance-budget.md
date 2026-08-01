@@ -9,7 +9,9 @@ Messdaten: [`performance-results.json`](performance-results.json)
 npm run profile
 ```
 
-Das Script startet den lokalen statischen Testserver, öffnet für jeden Lauf einen kalten Browser-Kontext und erzeugt drei synthetische Datensätze mit 385, 1.200 und 5.000 Personen. Jede Größe wird dreimal gemessen. Der Bericht enthält alle Einzelwerte, Median, schlechtesten Wert, Long Tasks und DOM-Mengen.
+Das Script startet den lokalen statischen Testserver, öffnet für jeden Lauf einen kalten Browser-Kontext und erzeugt drei synthetische Datensätze mit 385, 1.200 und 5.000 Personen. Jede Größe wird dreimal gemessen. Der Bericht enthält alle Einzelwerte, Median, schlechtesten Wert, Long Tasks und DOM-Mengen. Standardziel ist die ignorierte Datei `docs/performance-results-current.json`; ein historischer Nachweis wird explizit mit `--output=...` erzeugt.
+
+Vor Pan/Zoom wartet das Script 250 ms auf verzögerte Startarbeit; vor der Suche wartet es 250 ms auf die geöffnete Sheet-Endposition. Long Tasks aus Start und Interaktionen werden getrennt erfasst. Dadurch misst ein Interaktionswert nicht versehentlich die 220-ms-Sheetanimation oder das verzögerte Start-`fit()`.
 
 Referenzgerät: Windows 10.0.26200 x64, Intel Core i7-1360P (16 logische CPUs), 31,7 GiB RAM, Node 24.12.0, Chrome/Chromium 150.0.7871.188, headless, 1440 × 900. Die Angaben werden bei jedem Lauf neu in die JSON-Datei geschrieben.
 
@@ -42,3 +44,23 @@ Bewertung: Das Long-Task-Budget für den normalen 385er-Datensatz und Pan/Zoom b
 5. Der Initialpfad erstellt Datenindizes und Beziehungskomponenten und führt danach denselben kompletten DOM-/SVG-Aufbau aus. Die Viewportvirtualisierung greift erst oberhalb des 1.200er-Falls.
 
 S4-06 enthält absichtlich keine Optimierung. Die Baseline dient als Vorhermessung für S4-07; neue Messungen müssen mit demselben Script und Referenzgerät erfolgen.
+
+## Ergebnis nach S4-07
+
+Messdaten: [`performance-results-after-s4-07.json`](performance-results-after-s4-07.json)
+
+| Personen | Initial Median / schlecht. | Pan/Zoom Median / schlecht. | Suche Median / schlecht. | Detail Median / schlecht. | längster Interaktions-/Starttask | DOM / Karten / Linien (Median) |
+|---:|---:|---:|---:|---:|---:|---:|
+| 385 | 668,7 / 1.385,3 ms | 23,5 / 23,5 ms | 66,9 / 71,4 ms | 69,3 / 109,9 ms | 0 / 172 ms | 5.828 / 385 / 767 |
+| 1.200 | 626,3 / 627,6 ms | 54,5 / 55,5 ms | 27,4 / 33,3 ms | 65,8 / 71,3 ms | 55 / 147 ms | 6.105 / 80 / 56 |
+| 5.000 | 533,9 / 581,2 ms | 46,6 / 48,2 ms | 31,3 / 31,6 ms | 62,6 / 62,7 ms | 0 / 168 ms | 3.617 / 118 / 0 |
+
+Die S4-06-Rohdatei bleibt unverändert erhalten; der Profiler wurde für die Nachhermessung um die beschriebenen Phasengrenzen ergänzt. Daher gelten absolute Vorher-/Nachherwerte als Trend und die finalen Budgetprüfungen als maßgeblich.
+
+- Suche erfüllt das 150-ms-Budget in allen neun Nachherläufen.
+- Pan/Zoom erfüllt das 100-ms-Interaktionsbudget in allen neun Nachherläufen.
+- Detail erfüllt das Budget bei 1.200 und 5.000 Personen; beim 385er-Datensatz liegt ein Kaltlauf mit 109,9 ms knapp darüber, Median 69,3 ms. Gegenüber der Baseline (Median 209,7 ms) ist das messbar verbessert; eine weitere Kaltlaufoptimierung ist P2.
+- Bei 385 Personen bleibt der längste Starttask mit 172 ms unter 200 ms; nach der Startphase wurde dort kein Long Task registriert.
+- Der frühere 1.200er-Fallback mit 1.200 Karten wurde auf 80 sichtbare beziehungsweise fokusrelevante Karten begrenzt. Fokus und Auswahl bleiben dabei erhalten.
+
+S4-07 trennt nun Datenindizes, Renderableitung und DOM-Patch: Suchtext und Sortierung werden bei Datenänderung abgeleitet, Karten werden über stabile Einzel-/Paar-Keys wiederverwendet, Beziehungen/Generationsbänder/Minimap nur bei geänderter Signatur aufgebaut und reine Detail-/Spotlight-Aktionen patchen nur ihren Zustand.

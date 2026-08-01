@@ -1,0 +1,304 @@
+{
+  "generatedAt": "2026-08-01T18:17:12.506Z",
+  "environment": {
+    "platform": "win32 10.0.26200 x64",
+    "cpu": "13th Gen Intel(R) Core(TM) i7-1360P",
+    "logicalCpuCount": 16,
+    "memoryGiB": 31.7,
+    "node": "v24.12.0",
+    "browser": "Chrome/Chromium 150.0.7871.188",
+    "viewport": "1440x900",
+    "mode": "headless, cold context per trial"
+  },
+  "budgets": {
+    "interactionP95Ms": 100,
+    "searchMs": 150,
+    "longestTask385Ms": 200
+  },
+  "datasets": [
+    {
+      "people": 385,
+      "runs": [
+        {
+          "run": 1,
+          "initialMs": 1385.2667,
+          "initialLongTasksMs": [
+            172,
+            77
+          ],
+          "panZoomMs": 23.299999952316284,
+          "searchMs": 66.90000009536743,
+          "detailMs": 109.89999997615814,
+          "longTasksMs": [],
+          "domElements": 5828,
+          "renderedCards": 385,
+          "renderedLines": 767
+        },
+        {
+          "run": 2,
+          "initialMs": 668.7331,
+          "initialLongTasksMs": [
+            122,
+            60
+          ],
+          "panZoomMs": 23.5,
+          "searchMs": 15.5,
+          "detailMs": 69.29999995231628,
+          "longTasksMs": [],
+          "domElements": 5828,
+          "renderedCards": 385,
+          "renderedLines": 767
+        },
+        {
+          "run": 3,
+          "initialMs": 623.4081,
+          "initialLongTasksMs": [
+            118,
+            61
+          ],
+          "panZoomMs": 23.5,
+          "searchMs": 71.39999997615814,
+          "detailMs": 63.89999997615814,
+          "longTasksMs": [],
+          "domElements": 5828,
+          "renderedCards": 385,
+          "renderedLines": 767
+        }
+      ],
+      "summary": {
+        "initial": {
+          "medianMs": 668.7,
+          "worstMs": 1385.3,
+          "samplesMs": [
+            1385.3,
+            668.7,
+            623.4
+          ]
+        },
+        "panZoom": {
+          "medianMs": 23.5,
+          "worstMs": 23.5,
+          "samplesMs": [
+            23.3,
+            23.5,
+            23.5
+          ]
+        },
+        "search": {
+          "medianMs": 66.9,
+          "worstMs": 71.4,
+          "samplesMs": [
+            66.9,
+            15.5,
+            71.4
+          ]
+        },
+        "detail": {
+          "medianMs": 69.3,
+          "worstMs": 109.9,
+          "samplesMs": [
+            109.9,
+            69.3,
+            63.9
+          ]
+        },
+        "longestTaskMs": 0,
+        "longestInitialTaskMs": 172,
+        "domElementsMedian": 5828,
+        "renderedCardsMedian": 385,
+        "renderedLinesMedian": 767
+      }
+    },
+    {
+      "people": 1200,
+      "runs": [
+        {
+          "run": 1,
+          "initialMs": 627.6393,
+          "initialLongTasksMs": [
+            137,
+            73
+          ],
+          "panZoomMs": 55.5,
+          "searchMs": 33.299999952316284,
+          "detailMs": 71.29999995231628,
+          "longTasksMs": [
+            55
+          ],
+          "domElements": 6105,
+          "renderedCards": 80,
+          "renderedLines": 56
+        },
+        {
+          "run": 2,
+          "initialMs": 622.4618,
+          "initialLongTasksMs": [
+            147,
+            50,
+            74
+          ],
+          "panZoomMs": 50.299999952316284,
+          "searchMs": 27.399999976158142,
+          "detailMs": 65.69999992847443,
+          "longTasksMs": [
+            50
+          ],
+          "domElements": 6105,
+          "renderedCards": 80,
+          "renderedLines": 56
+        },
+        {
+          "run": 3,
+          "initialMs": 626.3436,
+          "initialLongTasksMs": [
+            133,
+            74
+          ],
+          "panZoomMs": 54.5,
+          "searchMs": 14.100000023841858,
+          "detailMs": 65.80000007152557,
+          "longTasksMs": [],
+          "domElements": 6105,
+          "renderedCards": 80,
+          "renderedLines": 56
+        }
+      ],
+      "summary": {
+        "initial": {
+          "medianMs": 626.3,
+          "worstMs": 627.6,
+          "samplesMs": [
+            627.6,
+            622.5,
+            626.3
+          ]
+        },
+        "panZoom": {
+          "medianMs": 54.5,
+          "worstMs": 55.5,
+          "samplesMs": [
+            55.5,
+            50.3,
+            54.5
+          ]
+        },
+        "search": {
+          "medianMs": 27.4,
+          "worstMs": 33.3,
+          "samplesMs": [
+            33.3,
+            27.4,
+            14.1
+          ]
+        },
+        "detail": {
+          "medianMs": 65.8,
+          "worstMs": 71.3,
+          "samplesMs": [
+            71.3,
+            65.7,
+            65.8
+          ]
+        },
+        "longestTaskMs": 55,
+        "longestInitialTaskMs": 147,
+        "domElementsMedian": 6105,
+        "renderedCardsMedian": 80,
+        "renderedLinesMedian": 56
+      }
+    },
+    {
+      "people": 5000,
+      "runs": [
+        {
+          "run": 1,
+          "initialMs": 581.2065,
+          "initialLongTasksMs": [
+            168,
+            70
+          ],
+          "panZoomMs": 48.200000047683716,
+          "searchMs": 31.299999952316284,
+          "detailMs": 62.700000047683716,
+          "longTasksMs": [],
+          "domElements": 3617,
+          "renderedCards": 118,
+          "renderedLines": 0
+        },
+        {
+          "run": 2,
+          "initialMs": 529.6167,
+          "initialLongTasksMs": [
+            158,
+            66
+          ],
+          "panZoomMs": 46.60000002384186,
+          "searchMs": 31.09999990463257,
+          "detailMs": 62.60000002384186,
+          "longTasksMs": [],
+          "domElements": 3617,
+          "renderedCards": 118,
+          "renderedLines": 0
+        },
+        {
+          "run": 3,
+          "initialMs": 533.929,
+          "initialLongTasksMs": [
+            153,
+            67
+          ],
+          "panZoomMs": 43.60000002384186,
+          "searchMs": 31.600000023841858,
+          "detailMs": 59.799999952316284,
+          "longTasksMs": [],
+          "domElements": 3617,
+          "renderedCards": 118,
+          "renderedLines": 0
+        }
+      ],
+      "summary": {
+        "initial": {
+          "medianMs": 533.9,
+          "worstMs": 581.2,
+          "samplesMs": [
+            581.2,
+            529.6,
+            533.9
+          ]
+        },
+        "panZoom": {
+          "medianMs": 46.6,
+          "worstMs": 48.2,
+          "samplesMs": [
+            48.2,
+            46.6,
+            43.6
+          ]
+        },
+        "search": {
+          "medianMs": 31.3,
+          "worstMs": 31.6,
+          "samplesMs": [
+            31.3,
+            31.1,
+            31.6
+          ]
+        },
+        "detail": {
+          "medianMs": 62.6,
+          "worstMs": 62.7,
+          "samplesMs": [
+            62.7,
+            62.6,
+            59.8
+          ]
+        },
+        "longestTaskMs": 0,
+        "longestInitialTaskMs": 168,
+        "domElementsMedian": 3617,
+        "renderedCardsMedian": 118,
+        "renderedLinesMedian": 0
+      }
+    }
+  ]
+}

@@ -4,6 +4,7 @@ test.pdf
 !package.json
 !package-lock.json
 !docs/performance-results.json
+!docs/performance-results-after-s4-07.json
 *.tmp
 *.log
 extract_yumpu_familybook.py
