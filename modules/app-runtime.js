@@ -6,7 +6,7 @@ import { clampViewport } from './viewport.js';
 import { groupRowsByTolerance } from './layout.js';
 import { escapeHtml as esc, reconcileKeyedChildren } from './render.js';
 import { dialogFocusableElements } from './dialogs.js';
-import { buildGalaxyClusterDetail, buildGalaxyLayout } from './galaxy-layout.js';
+import { buildGalaxyClusterDetail, buildGalaxyConstellation, buildGalaxyLayout } from './galaxy-layout.js';
 import { fetchAndDecryptPrivateDataset } from './private-dataset.js';
 
 (() => {
@@ -84,6 +84,9 @@ const nodes = $('nodes');
 const lines = $('lines');
 const generationBands = $('generationBands');
 const galaxyClustersElement = $('galaxyClusters');
+const galaxyConstellationElement = $('galaxyConstellation');
+const galaxyConstellationLines = $('galaxyConstellationLines');
+const galaxyConstellationStars = $('galaxyConstellationStars');
 const galaxyHud = $('galaxyHud');
 const selectionRect = $('selectionRect');
 const minimap = $('minimap');
@@ -117,6 +120,11 @@ let layoutCenter = { x: 1800, y: 1500 };
 let galaxyLayoutState = null;
 let galaxyActiveClusterId = '';
 let galaxyDetailState = null;
+let galaxyOverviewScale = 0.1;
+let galaxyConstellationClusterId = '';
+let galaxySemanticStage = 'overview';
+let galaxyConstellationSignature = '';
+let galaxySemanticSettleTimer = null;
 let galaxyLayoutCache = null;
 let galaxyLayoutPending = null;
 let galaxyLayoutRequestId = 0;
@@ -1803,6 +1811,7 @@ function applyView() {
   clampView();
   world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.s})`;
   updateZoomClass();
+  updateGalaxySemanticZoom();
   updateMinimapViewport();
   updateOffscreenIndicators();
   if (renderVirtualizationActive) scheduleRender();
@@ -1900,6 +1909,11 @@ function updateWorldBounds() {
   lines.setAttribute('width', maxX);
   lines.setAttribute('height', maxY);
   lines.setAttribute('viewBox', `0 0 ${maxX} ${maxY}`);
+  if (galaxyConstellationLines) {
+    galaxyConstellationLines.setAttribute('width', maxX);
+    galaxyConstellationLines.setAttribute('height', maxY);
+    galaxyConstellationLines.setAttribute('viewBox', `0 0 ${maxX} ${maxY}`);
+  }
   return { maxX, maxY };
 }
 function updateMinimap(maxX, maxY, visiblePeople = null) {
@@ -3153,7 +3167,7 @@ function updateZoomClass() {
   world.classList.toggle('zoomCompactLevel', view.s >= 0.12 && view.s < 0.32);
   world.classList.toggle('zoomBranchActionsHidden', view.s < 1);
   world.style.setProperty('--inverse-view-scale', String(1 / Math.max(view.s, 0.01)));
-  world.style.setProperty('--galaxy-inverse-view-scale', String(1 / Math.max(view.s, 0.042)));
+  world.style.setProperty('--galaxy-inverse-view-scale', String(1 / Math.max(view.s, 0.01)));
 }
 function updateFocusButton() {
   const btn = $('focusBtn');
@@ -3350,6 +3364,126 @@ async function openLargeTreeOverview() {
 function galaxyClusterColor(cluster) {
   return familyColor(cluster?.familyKeys?.[0] || cluster?.key || 'galaxy');
 }
+const galaxyConstellationStartRatio = 1.35;
+const galaxyDetailOpenRatio = 3.05;
+function galaxySemanticRatio() {
+  return view.s / Math.max(galaxyOverviewScale, galaxyOverviewMinZoom);
+}
+function nearestGalaxyCluster(worldPoint = null) {
+  if (!galaxyLayoutState?.clusters.length) return null;
+  const rect = main.getBoundingClientRect();
+  const target = worldPoint || screenToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2);
+  return galaxyLayoutState.clusters.reduce((nearest, cluster) => {
+    const distance = Math.hypot(cluster.x - target.x, cluster.y - target.y);
+    return !nearest || distance < nearest.distance ? { cluster, distance } : nearest;
+  }, null)?.cluster || null;
+}
+function clearGalaxyConstellation() {
+  galaxyConstellationSignature = '';
+  galaxyConstellationLines?.replaceChildren();
+  galaxyConstellationStars?.replaceChildren();
+  galaxyConstellationElement?.classList.add('hidden');
+  galaxyConstellationElement?.setAttribute('aria-hidden', 'true');
+}
+function renderGalaxyConstellation() {
+  if (!galaxyConstellationElement || !galaxyConstellationLines || !galaxyConstellationStars
+    || galaxySemanticStage !== 'constellation' || galaxyActiveClusterId
+    || !galaxyConstellationClusterId || !galaxyLayoutState) {
+    clearGalaxyConstellation();
+    return;
+  }
+  const constellation = buildGalaxyConstellation(
+    galaxyLayoutState,
+    galaxyConstellationClusterId,
+    nonPoolPeople,
+    { maxPeople: main.clientWidth < 700 ? 14 : 20, overviewScale: galaxyOverviewScale }
+  );
+  const signature = `${galaxyConstellationClusterId}:${galaxyOverviewScale.toFixed(5)}:${constellation.stars.map(star => star.id).join('.')}`;
+  if (signature === galaxyConstellationSignature) return;
+  galaxyConstellationSignature = signature;
+  const positions = new Map(constellation.stars.map(star => [star.id, star]));
+  const fragments = document.createDocumentFragment();
+  constellation.edges.forEach(edge => {
+    const from = positions.get(edge.from);
+    const to = positions.get(edge.to);
+    if (!from || !to) return;
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', from.x);
+    line.setAttribute('y1', from.y);
+    line.setAttribute('x2', to.x);
+    line.setAttribute('y2', to.y);
+    line.setAttribute('class', `galaxyConstellationLine ${edge.kind}`);
+    fragments.appendChild(line);
+  });
+  galaxyConstellationLines.replaceChildren(fragments);
+  const starElements = constellation.stars.map(star => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `galaxyConstellationStar${star.primary ? ' primary' : ''}`;
+    button.style.left = `${star.x}px`;
+    button.style.top = `${star.y}px`;
+    button.dataset.personId = star.id;
+    button.dataset.testid = `galaxy-star-${star.id}`;
+    const meta = star.year ? `, geboren ${star.year}` : '';
+    button.setAttribute('aria-label', `${star.label}${meta}. Personenkarten öffnen`);
+    button.innerHTML = `<span>${esc(star.label)}${star.year ? ` · ${star.year}` : ''}</span>`;
+    button.addEventListener('click', event => {
+      event.stopPropagation();
+      openGalaxyCluster(galaxyConstellationClusterId, { focusPersonId: button.dataset.personId, trigger: button });
+    });
+    return button;
+  });
+  galaxyConstellationStars.replaceChildren(...starElements);
+  galaxyConstellationElement.classList.remove('hidden');
+  galaxyConstellationElement.setAttribute('aria-hidden', 'false');
+}
+function updateGalaxyClusterSemanticClasses() {
+  galaxyClustersElement?.querySelectorAll('.galaxyCluster').forEach(button => {
+    const inConstellation = galaxySemanticStage === 'constellation';
+    button.classList.toggle('constellationContext', inConstellation);
+    button.classList.toggle('constellationFocus', inConstellation && button.dataset.clusterId === galaxyConstellationClusterId);
+  });
+}
+function updateGalaxySemanticZoom({ anchorWorld = null, force = false } = {}) {
+  if (layoutMode !== 'galaxy' || !galaxyLayoutState) return;
+  if (galaxyActiveClusterId) {
+    galaxySemanticStage = 'detail';
+    world.dataset.galaxyZoomStage = 'detail';
+    clearGalaxyConstellation();
+    return;
+  }
+  const previousStage = galaxySemanticStage;
+  const previousClusterId = galaxyConstellationClusterId;
+  const ratio = galaxySemanticRatio();
+  galaxySemanticStage = ratio >= galaxyConstellationStartRatio ? 'constellation' : 'overview';
+  if (galaxySemanticStage === 'constellation') {
+    if (anchorWorld || !galaxyConstellationClusterId) {
+      galaxyConstellationClusterId = nearestGalaxyCluster(anchorWorld)?.id || '';
+    }
+  } else {
+    galaxyConstellationClusterId = '';
+  }
+  const progress = Math.max(0, Math.min(1, (ratio - galaxyConstellationStartRatio) / (galaxyDetailOpenRatio - galaxyConstellationStartRatio)));
+  world.dataset.galaxyZoomStage = galaxySemanticStage;
+  world.style.setProperty('--galaxy-star-label-opacity', String(Math.max(0, Math.min(1, (progress - 0.2) / 0.45))));
+  if (force || previousStage !== galaxySemanticStage || previousClusterId !== galaxyConstellationClusterId) {
+    updateGalaxyClusterSemanticClasses();
+    renderGalaxyConstellation();
+    updateGalaxyHud();
+  }
+}
+function settleGalaxySemanticZoom() {
+  clearTimeout(galaxySemanticSettleTimer);
+  galaxySemanticSettleTimer = null;
+  if (layoutMode !== 'galaxy' || galaxyActiveClusterId || galaxySemanticStage !== 'constellation') return false;
+  if (galaxySemanticRatio() < galaxyDetailOpenRatio) return false;
+  const clusterId = galaxyConstellationClusterId || nearestGalaxyCluster()?.id;
+  return clusterId ? openGalaxyCluster(clusterId) : false;
+}
+function scheduleGalaxySemanticSettle(delay = 150) {
+  clearTimeout(galaxySemanticSettleTimer);
+  galaxySemanticSettleTimer = window.setTimeout(settleGalaxySemanticZoom, delay);
+}
 function fitGalaxyBounds(bounds, { maxScale = 0.58, minScale = minZoom } = {}) {
   if (!bounds || !main.clientWidth || !main.clientHeight) return false;
   const mainRect = main.getBoundingClientRect();
@@ -3370,6 +3504,18 @@ function fitGalaxyBounds(bounds, { maxScale = 0.58, minScale = minZoom } = {}) {
   view.x = -((bounds.minX + bounds.maxX) / 2) * view.s + (leftPadding - rightPadding) / 2;
   view.y = -((bounds.minY + bounds.maxY) / 2) * view.s + (topPadding - bottomPadding) / 2;
   applyView();
+  return true;
+}
+function fitGalaxyOverview() {
+  const fitted = fitGalaxyBounds(galaxyLayoutState?.bounds, {
+    maxScale: 0.58,
+    minScale: galaxyOverviewMinZoom
+  });
+  if (!fitted) return false;
+  galaxyOverviewScale = view.s;
+  galaxySemanticStage = 'overview';
+  galaxyConstellationClusterId = '';
+  updateGalaxySemanticZoom({ force: true });
   return true;
 }
 function minimumZoomForMode() {
@@ -3393,23 +3539,35 @@ function updateGalaxyHud() {
   const cluster = galaxyActiveClusterId
     ? galaxyLayoutState.clusterById.get(galaxyActiveClusterId)
     : null;
+  const stageLabel = galaxyHud.querySelector('.galaxyBeta');
+  if (stageLabel) stageLabel.textContent = cluster
+    ? 'Familie'
+    : galaxySemanticStage === 'constellation' ? 'Zoomstufe' : 'Übersicht';
   $('galaxyBackBtn')?.classList.toggle('hidden', !cluster);
   $('galaxyRelationsBtn')?.classList.toggle('hidden', !cluster);
-  if ($('galaxyExitBtn')) $('galaxyExitBtn').textContent = isLargeTree() ? 'Karten-Nahbereich' : 'Karten';
+  if ($('galaxyExitBtn')) $('galaxyExitBtn').textContent = isLargeTree() ? 'Karten-Nahbereich' : 'Baumansicht';
   if (cluster) {
     $('galaxyHudTitle').textContent = cluster.label;
     const omitted = galaxyDetailState?.omitted || 0;
     const shown = cluster.count - omitted;
     $('galaxyHudText').textContent = `${shown.toLocaleString('de-DE')} von ${cluster.count.toLocaleString('de-DE')} Personen · ${cluster.period}${omitted ? ' · für eine flüssige Darstellung begrenzt' : ''}. „Verwandtschaft“ zeigt Beziehungen über Familiennamen hinweg.`;
+  } else if (galaxySemanticStage === 'constellation' && galaxyConstellationClusterId) {
+    const constellationCluster = galaxyLayoutState.clusterById.get(galaxyConstellationClusterId);
+    $('galaxyHudTitle').textContent = `${constellationCluster?.label || 'Familie'} · Sternbild`;
+    $('galaxyHudText').textContent = `${Math.min(main.clientWidth < 700 ? 14 : 20, constellationCluster?.count || 0)} sichtbare Personensterne${(constellationCluster?.count || 0) > (main.clientWidth < 700 ? 14 : 20) ? ` von ${constellationCluster.count}` : ''} · Linien zeigen belegte Eltern- und Partnerbeziehungen. Weiter hineinzoomen öffnet die Karten.`;
   } else {
     $('galaxyHudTitle').textContent = 'Familienübersicht';
-    $('galaxyHudText').textContent = `${nonPoolPeople.length.toLocaleString('de-DE')} Personen in ${galaxyLayoutState.clusters.length.toLocaleString('de-DE')} Familienclustern · Größe entspricht der Personenzahl · Linien zeigen Beziehungen zwischen Familien.`;
+    $('galaxyHudText').textContent = `${nonPoolPeople.length.toLocaleString('de-DE')} Personen in ${galaxyLayoutState.clusters.length.toLocaleString('de-DE')} Familienclustern · Antippen öffnet direkt; mit zwei Fingern hineinzoomen entfaltet erst das Familien-Sternbild.`;
   }
 }
-function applyGalaxyOverviewPositions() {
+function applyGalaxyOverviewPositions({ preserveConstellation = false } = {}) {
   if (!galaxyLayoutState) return false;
   galaxyActiveClusterId = '';
   galaxyDetailState = null;
+  if (!preserveConstellation) {
+    galaxySemanticStage = 'overview';
+    galaxyConstellationClusterId = '';
+  }
   layoutVisibleIds = new Set(nonPoolPeople.map(entry => entry.id));
   layoutFocusId = galaxyLayoutState.clusterById.get(galaxyLayoutState.rootClusterId)?.representativeId || '';
   for (const cluster of galaxyLayoutState.clusters) {
@@ -3456,8 +3614,12 @@ function renderGalaxyClusters() {
       });
     }
     const color = galaxyClusterColor(cluster);
-    const size = Math.round(Math.min(116, 66 + Math.sqrt(cluster.count) * 5));
-    button.className = `galaxyCluster${cluster.id === galaxyLayoutState.rootClusterId ? ' root' : ''}`;
+    const densityScale = galaxyLayoutState.clusters.length > 30
+      ? 0.68
+      : galaxyLayoutState.clusters.length > 18 ? 0.82 : 1;
+    const size = Math.max(44, Math.round(Math.min(116, 66 + Math.sqrt(cluster.count) * 5) * densityScale));
+    const inConstellation = galaxySemanticStage === 'constellation';
+    button.className = `galaxyCluster${cluster.id === galaxyLayoutState.rootClusterId ? ' root' : ''}${inConstellation ? ' constellationContext' : ''}${inConstellation && cluster.id === galaxyConstellationClusterId ? ' constellationFocus' : ''}`;
     button.style.left = `${cluster.x}px`;
     button.style.top = `${cluster.y}px`;
     button.style.setProperty('--cluster-color', color);
@@ -3492,6 +3654,10 @@ function renderGalaxyConnections() {
 }
 function openGalaxyCluster(clusterId, { focusPersonId = '', trigger = null } = {}) {
   if (layoutMode !== 'galaxy' || !galaxyLayoutState?.clusterById.has(clusterId)) return false;
+  clearTimeout(galaxySemanticSettleTimer);
+  galaxySemanticSettleTimer = null;
+  galaxyConstellationClusterId = clusterId;
+  galaxySemanticStage = 'detail';
   galaxyActiveClusterId = clusterId;
   galaxyDetailState = buildGalaxyClusterDetail(galaxyLayoutState, clusterId, nonPoolPeople, {
     maxPeople: 160,
@@ -3523,13 +3689,29 @@ function showGalaxyOverview({ restoreFocus = false } = {}) {
   applyGalaxyOverviewPositions();
   world.classList.add('galaxyZooming');
   render();
-  fitGalaxyBounds(galaxyLayoutState.bounds, { maxScale: 0.58, minScale: galaxyOverviewMinZoom });
+  fitGalaxyOverview();
   window.setTimeout(() => world.classList.remove('galaxyZooming'), 280);
   if (restoreFocus && previousClusterId) {
     window.setTimeout(() => galaxyClustersElement
       ?.querySelector(`[data-cluster-id="${CSS.escape(previousClusterId)}"]`)
       ?.focus({ preventScroll: true }), 0);
   }
+  return true;
+}
+function showGalaxyConstellation(clusterId = galaxyActiveClusterId, { ratio = 2.25 } = {}) {
+  if (layoutMode !== 'galaxy' || !galaxyLayoutState?.clusterById.has(clusterId)) return false;
+  applyGalaxyOverviewPositions({ preserveConstellation: true });
+  galaxyConstellationClusterId = clusterId;
+  galaxySemanticStage = 'constellation';
+  const cluster = galaxyLayoutState.clusterById.get(clusterId);
+  view.s = Math.max(galaxyOverviewMinZoom, Math.min(maxZoom, galaxyOverviewScale * ratio));
+  view.x = -cluster.x * view.s;
+  view.y = -cluster.y * view.s;
+  world.classList.add('galaxyZooming');
+  render();
+  applyView();
+  updateGalaxySemanticZoom({ force: true });
+  window.setTimeout(() => world.classList.remove('galaxyZooming'), 280);
   return true;
 }
 function relationComponents() {
@@ -3548,6 +3730,10 @@ function clearDerivedLayoutState() {
   galaxyLayoutState = null;
   galaxyActiveClusterId = '';
   galaxyDetailState = null;
+  galaxyOverviewScale = 0.1;
+  galaxyConstellationClusterId = '';
+  galaxySemanticStage = 'overview';
+  clearGalaxyConstellation();
   galaxyClustersElement?.replaceChildren();
   galaxyHud?.classList.add('hidden');
 }
@@ -3758,7 +3944,7 @@ function setLayoutMode(next, { allowInView = false } = {}) {
     else if (nextFocusId) jumpToPerson(nextFocusId);
     else fit();
   } else if (layoutMode === 'galaxy') {
-    fitGalaxyBounds(galaxyLayoutState?.bounds, { maxScale: 0.58, minScale: galaxyOverviewMinZoom });
+    fitGalaxyOverview();
   } else {
     fitDerivedLayout();
   }
@@ -3850,6 +4036,7 @@ function render() {
   const visiblePeople = nonPoolPeople.filter(p => visible.has(p.id));
   const galaxyOverview = layoutMode === 'galaxy' && !galaxyActiveClusterId;
   renderGalaxyClusters();
+  renderGalaxyConstellation();
   renderVirtualizationActive = !galaxyOverview && shouldVirtualizePeople(visiblePeople);
   const renderedPeople = galaxyOverview
     ? []
@@ -4341,8 +4528,12 @@ main.addEventListener('touchstart', e => {
       s: view.s,
       x: view.x,
       y: view.y,
-      mid: midpoint(a,b)
+      mid: midpoint(a,b),
+      clusterId: layoutMode === 'galaxy' && !galaxyActiveClusterId
+        ? nearestGalaxyCluster(screenToWorld(midpoint(a,b).x, midpoint(a,b).y))?.id || ''
+        : ''
     };
+    if (pinch.clusterId) galaxyConstellationClusterId = pinch.clusterId;
   }
 }, { passive:true });
 
@@ -4361,15 +4552,21 @@ main.addEventListener('touchmove', e => {
 main.addEventListener('touchend', e => {
   if (e.touches.length < 2) {
     pinch = null;
-    if (layoutMode === 'galaxy' && galaxyActiveClusterId && view.s < 0.18) showGalaxyOverview();
+    if (layoutMode === 'galaxy' && galaxyActiveClusterId
+      && view.s < Math.max(0.18, galaxyOverviewScale * 2.45)) {
+      showGalaxyConstellation(galaxyActiveClusterId);
+      return;
+    }
+    settleGalaxySemanticZoom();
   }
 }, { passive:true });
 
 // -- Zoom and fit helpers ---------------------------------------------
 function zoomTo(ns, cx = null, cy = null) {
   const targetScale = Math.max(minimumZoomForMode(), Math.min(maxZoom, ns));
-  if (layoutMode === 'galaxy' && galaxyActiveClusterId && targetScale < 0.18) {
-    showGalaxyOverview();
+  if (layoutMode === 'galaxy' && galaxyActiveClusterId
+    && targetScale < Math.max(0.18, galaxyOverviewScale * 2.45)) {
+    showGalaxyConstellation(galaxyActiveClusterId);
     return;
   }
   const rect = main.getBoundingClientRect();
@@ -4377,17 +4574,23 @@ function zoomTo(ns, cx = null, cy = null) {
   if (cy === null) cy = rect.top + rect.height / 2;
   const old = view.s;
   const worldPoint = screenToWorld(cx, cy);
+  if (layoutMode === 'galaxy' && !galaxyActiveClusterId && targetScale > old) {
+    galaxyConstellationClusterId = nearestGalaxyCluster(worldPoint)?.id || galaxyConstellationClusterId;
+  }
   view.s = targetScale;
   view.x = cx - (rect.left + rect.width / 2) - worldPoint.x * view.s;
   view.y = cy - (rect.top + rect.height / 2) - worldPoint.y * view.s;
   applyView();
+  if (layoutMode === 'galaxy' && !galaxyActiveClusterId && targetScale > old) {
+    scheduleGalaxySemanticSettle();
+  }
 }
 
 function fit() {
   if (layoutMode === 'galaxy') {
     return galaxyActiveClusterId
       ? fitGalaxyBounds(galaxyDetailState?.bounds, { maxScale: 0.82, minScale: 0.24 })
-      : fitGalaxyBounds(galaxyLayoutState?.bounds, { maxScale: 0.58, minScale: galaxyOverviewMinZoom });
+      : fitGalaxyOverview();
   }
   updateWorldBounds();
   const ids = visibleIds();
@@ -8180,12 +8383,18 @@ if (window.location?.search?.includes('ux-debug=1')) {
     getGalaxyState: () => ({
       active: layoutMode === 'galaxy',
       activeClusterId: galaxyActiveClusterId,
+      constellationClusterId: galaxyConstellationClusterId,
+      semanticStage: galaxySemanticStage,
+      semanticRatio: galaxySemanticRatio(),
+      overviewScale: galaxyOverviewScale,
       clusterCount: galaxyLayoutState?.clusters.length || 0,
       clusters: galaxyLayoutState?.clusters.map(cluster => ({
         id: cluster.id,
         label: cluster.label,
         count: cluster.count,
-        period: cluster.period
+        period: cluster.period,
+        x: cluster.x,
+        y: cluster.y
       })) || []
     }),
     getLargeTreeState: () => ({
@@ -8199,6 +8408,19 @@ if (window.location?.search?.includes('ux-debug=1')) {
       layoutDurationMs: galaxyLayoutMetrics.durationMs
     }),
     openGalaxyClusterForTest: clusterId => openGalaxyCluster(clusterId),
+    zoomGalaxyToClusterForTest: (clusterId, ratio = 1, settle = false) => {
+      const cluster = galaxyLayoutState?.clusterById.get(clusterId);
+      if (!cluster || galaxyActiveClusterId) return false;
+      galaxyConstellationClusterId = clusterId;
+      view.s = Math.max(galaxyOverviewMinZoom, Math.min(maxZoom, galaxyOverviewScale * ratio));
+      view.x = -cluster.x * view.s;
+      view.y = -cluster.y * view.s;
+      applyView();
+      render();
+      if (settle) settleGalaxySemanticZoom();
+      return true;
+    },
+    settleGalaxyZoomForTest: settleGalaxySemanticZoom,
     openPrivateDataDialogForTest: () => openPrivateDataDialog(document.activeElement),
     applyFullAutoLayoutForTest: () => applyAutomaticClassicLayout({ allowLargeTree: true })
   };

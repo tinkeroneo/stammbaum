@@ -178,6 +178,105 @@ export function buildGalaxyLayout(people, {
   return { clusters, clusterById, personToCluster, edges, bounds, rootClusterId: firstRootId };
 }
 
+export function buildGalaxyConstellation(layout, clusterId, people, {
+  maxPeople = 20,
+  overviewScale = 0.1
+} = {}) {
+  const cluster = layout?.clusterById?.get(clusterId);
+  const byId = new Map((people || []).map(person => [String(person.id), person]));
+  if (!cluster) return { stars: [], edges: [], omitted: 0 };
+
+  const memberIds = cluster.memberIds.filter(id => byId.has(String(id))).map(String);
+  const memberSet = new Set(memberIds);
+  const adjacency = new Map(memberIds.map(id => [id, new Set()]));
+  const relationKind = new Map();
+  const addRelation = (fromId, toId, kind) => {
+    const from = String(fromId);
+    const to = String(toId);
+    if (!memberSet.has(from) || !memberSet.has(to) || from === to) return;
+    adjacency.get(from)?.add(to);
+    adjacency.get(to)?.add(from);
+    const pair = [from, to].sort().join('|');
+    if (!relationKind.has(pair) || kind === 'parent') relationKind.set(pair, kind);
+  };
+  memberIds.forEach(id => {
+    const entry = byId.get(id);
+    (entry?.parents || []).forEach(parentId => addRelation(id, parentId, 'parent'));
+    [...(entry?.partners || []), entry?.partner].filter(Boolean)
+      .forEach(partnerId => addRelation(id, partnerId, 'partner'));
+  });
+
+  const startId = memberSet.has(String(cluster.representativeId))
+    ? String(cluster.representativeId)
+    : memberIds[0];
+  const ordered = [];
+  const seen = new Set();
+  const visitComponent = seed => {
+    const queue = [seed];
+    while (queue.length && ordered.length < maxPeople) {
+      const id = queue.shift();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      ordered.push(id);
+      const neighbours = [...(adjacency.get(id) || [])].sort((left, right) =>
+        (birthYear(byId.get(left)) ?? Infinity) - (birthYear(byId.get(right)) ?? Infinity)
+        || String(byId.get(left)?.name || '').localeCompare(String(byId.get(right)?.name || ''), 'de')
+      );
+      neighbours.forEach(neighbour => {
+        if (!seen.has(neighbour)) queue.push(neighbour);
+      });
+    }
+  };
+  if (startId) visitComponent(startId);
+  for (const id of memberIds) {
+    if (ordered.length >= maxPeople) break;
+    if (!seen.has(id)) visitComponent(id);
+  }
+
+  const safeOverviewScale = Math.max(0.02, Number(overviewScale) || 0.1);
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  const positions = new Map();
+  ordered.forEach((id, index) => {
+    if (index === 0) {
+      positions.set(id, { x: cluster.x, y: cluster.y });
+      return;
+    }
+    const radiusPx = 24 + Math.sqrt(index) * 25;
+    const radius = radiusPx / safeOverviewScale;
+    const angle = index * goldenAngle - Math.PI / 2;
+    positions.set(id, {
+      x: Math.round(cluster.x + Math.cos(angle) * radius),
+      y: Math.round(cluster.y + Math.sin(angle) * radius)
+    });
+  });
+
+  const stars = ordered.map((id, index) => {
+    const entry = byId.get(id);
+    const position = positions.get(id);
+    const firstName = String(entry?.firstName || entry?.name || 'Person').trim().split(/\s+/)[0];
+    return {
+      id,
+      x: position.x,
+      y: position.y,
+      label: firstName || 'Person',
+      year: birthYear(entry),
+      primary: index === 0
+    };
+  });
+  const selectedSet = new Set(ordered);
+  const edges = [...relationKind.entries()]
+    .map(([pair, kind]) => {
+      const [from, to] = pair.split('|');
+      return { from, to, kind };
+    })
+    .filter(edge => selectedSet.has(edge.from) && selectedSet.has(edge.to));
+  return {
+    stars,
+    edges,
+    omitted: Math.max(0, memberIds.length - stars.length)
+  };
+}
+
 export function buildGalaxyClusterDetail(layout, clusterId, people, { maxPeople = 160, focusPersonId = '' } = {}) {
   const cluster = layout?.clusterById?.get(clusterId);
   const byId = new Map((people || []).map(person => [String(person.id), person]));

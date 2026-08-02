@@ -32,7 +32,7 @@ test('öffentliche Leaf-Module sind unabhängig importierbar', async ({ page }) 
       'normalizeTreeData', 'presumedLivingAgeLimit', 'uniqueIds'
     ],
     dialogs: ['dialogFocusableElements', 'dialogFocusableSelector'],
-    'galaxy-layout': ['buildGalaxyClusterDetail', 'buildGalaxyLayout'],
+    'galaxy-layout': ['buildGalaxyClusterDetail', 'buildGalaxyConstellation', 'buildGalaxyLayout'],
     layout: ['groupRowsByTolerance'],
     persistence: ['readJsonStorage', 'serializeTree'],
     render: ['escapeHtml', 'reconcileKeyedChildren'],

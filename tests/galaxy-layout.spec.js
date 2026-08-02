@@ -106,6 +106,109 @@ test('Galaxie bleibt auf Mobile bedienbar und löst Detail beim Herauszoomen wie
   await expect(page.getByTestId('galaxy-cluster-bodensteiner')).toBeVisible();
 });
 
+test('semantischer Mobile-Zoom hält Cluster stabil, zeigt ein Sternbild und öffnet erst danach Karten', async ({ page }) => {
+  await openTree(page, { width: 390, height: 844 });
+  await page.evaluate(() => window.__uxDebug.setLayoutModeForTest('galaxy'));
+  const clusterId = 'family:bodensteiner';
+
+  await page.evaluate(id => window.__uxDebug.zoomGalaxyToClusterForTest(id, 1.05), clusterId);
+  const overviewBox = await page.getByTestId('galaxy-cluster-bodensteiner').boundingBox();
+  expect((await page.evaluate(() => window.__uxDebug.getGalaxyState())).semanticStage).toBe('overview');
+
+  await page.evaluate(id => window.__uxDebug.zoomGalaxyToClusterForTest(id, 1.8), clusterId);
+  const constellationBox = await page.getByTestId('galaxy-cluster-bodensteiner').boundingBox();
+  const constellationState = await page.evaluate(() => window.__uxDebug.getGalaxyState());
+  expect(constellationState.semanticStage).toBe('constellation');
+  expect(constellationState.constellationClusterId).toBe(clusterId);
+  expect(Math.abs(constellationBox.width - overviewBox.width)).toBeLessThan(1.5);
+  expect(Math.abs(constellationBox.height - overviewBox.height)).toBeLessThan(1.5);
+  await expect(page.locator('.galaxyConstellationStar')).toHaveCount(3);
+  expect(await page.locator('.galaxyConstellationLine').count()).toBeGreaterThan(0);
+  await expect.poll(() => page.evaluate(() =>
+    getComputedStyle(document.querySelector('.galaxyCluster.constellationFocus')).opacity
+  )).toBe('0');
+  const starTargets = await page.locator('.galaxyConstellationStar').evaluateAll(elements =>
+    elements.map(element => element.getBoundingClientRect().width)
+  );
+  expect(Math.min(...starTargets)).toBeGreaterThanOrEqual(45.9);
+  expect(Math.max(...starTargets)).toBeLessThan(47);
+  await expect(page.locator('#nodes > .person')).toHaveCount(0);
+  await expect(page.getByTestId('galaxy-hud')).toContainText('Sternbild');
+  if (captureScreenshots) {
+    fs.mkdirSync(screenshotDir, { recursive: true });
+    await page.screenshot({ path: path.join(screenshotDir, 'galaxie-sternbild-390x844.png') });
+  }
+
+  await page.evaluate(id => window.__uxDebug.zoomGalaxyToClusterForTest(id, 3.2, true), clusterId);
+  await expect(page.getByTestId('person-card-root-a')).toBeVisible();
+  expect((await page.evaluate(() => window.__uxDebug.getGalaxyState())).semanticStage).toBe('detail');
+});
+
+test('echte Zwei-Finger-Geste durchläuft auf Mobile beide semantischen Zoomstufen', async ({ browser }) => {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true
+  });
+  const page = await context.newPage();
+  await openTree(page, { width: 390, height: 844 });
+  await page.evaluate(() => window.__uxDebug.setLayoutModeForTest('galaxy'));
+
+  const pinchAtCluster = async scale => page.evaluate(({ clusterId, scale }) => {
+    const state = window.__uxDebug.getGalaxyState();
+    const cluster = state.clusters.find(entry => entry.id === clusterId);
+    const view = window.__uxDebug.getView();
+    const main = document.querySelector('#main');
+    const rect = main.getBoundingClientRect();
+    const center = {
+      x: rect.left + rect.width / 2 + view.x + cluster.x * view.s,
+      y: rect.top + rect.height / 2 + view.y + cluster.y * view.s
+    };
+    const createTouches = (distance, identifiers = [1, 2]) => identifiers.map((identifier, index) => new Touch({
+      identifier,
+      target: main,
+      clientX: center.x + (index === 0 ? -distance / 2 : distance / 2),
+      clientY: center.y,
+      pageX: center.x + (index === 0 ? -distance / 2 : distance / 2),
+      pageY: center.y,
+      radiusX: 8,
+      radiusY: 8,
+      force: 0.5
+    }));
+    const startTouches = createTouches(80);
+    main.dispatchEvent(new TouchEvent('touchstart', {
+      bubbles: true,
+      cancelable: true,
+      touches: startTouches,
+      targetTouches: startTouches,
+      changedTouches: startTouches
+    }));
+    const movedTouches = createTouches(80 * scale);
+    main.dispatchEvent(new TouchEvent('touchmove', {
+      bubbles: true,
+      cancelable: true,
+      touches: movedTouches,
+      targetTouches: movedTouches,
+      changedTouches: movedTouches
+    }));
+    main.dispatchEvent(new TouchEvent('touchend', {
+      bubbles: true,
+      cancelable: true,
+      touches: [],
+      targetTouches: [],
+      changedTouches: movedTouches
+    }));
+  }, { clusterId: 'family:bodensteiner', scale });
+
+  await pinchAtCluster(1.8);
+  await expect(page.locator('.galaxyConstellationStar')).toHaveCount(3);
+  expect((await page.evaluate(() => window.__uxDebug.getGalaxyState())).semanticStage).toBe('constellation');
+  await pinchAtCluster(1.8);
+  await expect(page.getByTestId('person-card-root-a')).toBeVisible();
+  expect((await page.evaluate(() => window.__uxDebug.getGalaxyState())).semanticStage).toBe('detail');
+  await context.close();
+});
+
 test('synthetische Demo-Galaxie bleibt kollisionsarm und visuell prüfbar', async ({ page }) => {
   await page.addInitScript(({ key, value }) => {
     localStorage.setItem(key, JSON.stringify(value));
@@ -151,6 +254,7 @@ test('synthetische Demo-Galaxie bleibt kollisionsarm und visuell prüfbar', asyn
   await page.evaluate(id => window.__uxDebug.openGalaxyClusterForTest(id), largestCluster.id);
   await expect(page.locator('#nodes > .person')).not.toHaveCount(0);
   if (captureScreenshots) {
+    await page.waitForTimeout(320);
     await page.screenshot({ path: path.join(screenshotDir, 'galaxie-cluster-1440x900.png') });
   }
 
