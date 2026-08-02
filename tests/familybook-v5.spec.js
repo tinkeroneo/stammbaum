@@ -36,6 +36,15 @@ test('bereinigter US-Zweig lädt, ist verknüpft und visuell prüfbar', async ({
   const importedState = await page.evaluate(() => window.__uxDebug.getDataSnapshot());
   expect(importedState.people.filter(person => !person.pool)).toHaveLength(3245);
   expect(importedState.people.filter(person => person.pool)).toHaveLength(1093);
+  expect(importedState.people.filter(person =>
+    String(person.lastName || '').toLowerCase() === 'born'
+    && !/\bBorn$/i.test(String(person.name || '').trim())
+  )).toHaveLength(0);
+  expect(importedState.people.find(person => person.id === 'fbx9913')).toMatchObject({
+    name: 'Michael Born',
+    firstName: 'Michael',
+    lastName: 'Born'
+  });
   expect(importedState.people.find(person => person.id === 'fb0001')?.parents).toEqual(['fbbridge0001']);
   expect(importedState.people.find(person => person.id === 'fbbridge0001')?.parents).toEqual(['p334', 'p335']);
   await expect.poll(
