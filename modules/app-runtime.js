@@ -1363,6 +1363,21 @@ function primaryPartner(p) { return person(partnerIds(p)[0]); }
 function mutualPartnerIds(p) {
   return p ? (mutualPartnerIdsByPersonId.get(p.id) || []) : [];
 }
+function peopleHaveAncestryRelationship(leftId, rightId) {
+  const isAncestor = (ancestorId, descendantId) => {
+    const seen = new Set();
+    const queue = [...(person(descendantId)?.parents || [])];
+    while (queue.length) {
+      const id = queue.shift();
+      if (!id || seen.has(id)) continue;
+      if (id === ancestorId) return true;
+      seen.add(id);
+      queue.push(...(person(id)?.parents || []));
+    }
+    return false;
+  };
+  return isAncestor(leftId, rightId) || isAncestor(rightId, leftId);
+}
 function addPartnerLink(p, q, reciprocal = true) {
   if (!p || !q || p.id === q.id) return;
   setPartnerIds(p, [...partnerIds(p), q.id]);
@@ -4121,9 +4136,11 @@ function render() {
       const member = person(id);
       if (!member) continue;
       members.push(member);
-      mutualPartnerIds(member).forEach(partnerId => {
-        if (!seen.has(partnerId) && renderedIds.has(partnerId)) queue.push(partnerId);
-      });
+      mutualPartnerIds(member)
+        .filter(partnerId => !peopleHaveAncestryRelationship(member.id, partnerId))
+        .forEach(partnerId => {
+          if (!seen.has(partnerId) && renderedIds.has(partnerId)) queue.push(partnerId);
+        });
     }
     return members;
   };
@@ -4740,11 +4757,363 @@ function estimatedGenerationYear(p, depth, siblingIndex){
 }
 
 // -- Automatic layout algorithm ----------------------------------------
+function layoutLargeFamilyGraph(activePeople) {
+  const byId = new Map(activePeople.map(person => [person.id, person]));
+  const memberGap = 224;
+  const unitGap = 36;
+  const laneGap = 54;
+  const generationGap = 150;
+  const componentGap = 520;
+  const startX = 110;
+  const startY = 130;
+  const singleWidth = 196;
+  const rootRank = new Map(rootIds.map((id, index) => [id, index]));
+
+  const activeParentIds = person => uniqueIds(person?.parents || []).filter(id => byId.has(id));
+  const parentGraph = new Map(activePeople.map(person => [person.id, activeParentIds(person)]));
+  const ancestryMemo = new Map();
+  const isAncestor = (ancestorId, descendantId) => {
+    const key = `${ancestorId}|${descendantId}`;
+    if (ancestryMemo.has(key)) return ancestryMemo.get(key);
+    const seen = new Set();
+    const queue = [...(parentGraph.get(descendantId) || [])];
+    while (queue.length) {
+      const id = queue.shift();
+      if (!id || seen.has(id)) continue;
+      if (id === ancestorId) {
+        ancestryMemo.set(key, true);
+        return true;
+      }
+      seen.add(id);
+      queue.push(...(parentGraph.get(id) || []));
+    }
+    ancestryMemo.set(key, false);
+    return false;
+  };
+  const conflictsWithAncestry = (leftId, rightId) =>
+    isAncestor(leftId, rightId) || isAncestor(rightId, leftId);
+
+  const unitMemberOrder = (left, right) => {
+    const leftRoot = rootRank.has(left.id) ? rootRank.get(left.id) : Infinity;
+    const rightRoot = rootRank.has(right.id) ? rootRank.get(right.id) : Infinity;
+    const leftDegree = partnerIds(left).filter(id => byId.has(id)).length;
+    const rightDegree = partnerIds(right).filter(id => byId.has(id)).length;
+    return leftRoot - rightRoot
+      || rightDegree - leftDegree
+      || (birthSortValue(left) ?? Infinity) - (birthSortValue(right) ?? Infinity)
+      || fullName(left).localeCompare(fullName(right), 'de')
+      || left.id.localeCompare(right.id);
+  };
+
+  function buildUnits(groupPartners) {
+    const disjointParent = new Map(activePeople.map(person => [person.id, person.id]));
+    const find = id => {
+      let root = id;
+      while (disjointParent.get(root) !== root) root = disjointParent.get(root);
+      let current = id;
+      while (disjointParent.get(current) !== current) {
+        const next = disjointParent.get(current);
+        disjointParent.set(current, root);
+        current = next;
+      }
+      return root;
+    };
+    const join = (leftId, rightId) => {
+      const leftRoot = find(leftId);
+      const rightRoot = find(rightId);
+      if (leftRoot === rightRoot) return;
+      if (leftRoot.localeCompare(rightRoot) <= 0) disjointParent.set(rightRoot, leftRoot);
+      else disjointParent.set(leftRoot, rightRoot);
+    };
+
+    if (groupPartners) {
+      const seenPairs = new Set();
+      for (const person of activePeople) {
+        for (const partnerId of partnerIds(person)) {
+          if (!byId.has(partnerId)) continue;
+          const pairKey = [person.id, partnerId].sort().join('|');
+          if (seenPairs.has(pairKey)) continue;
+          seenPairs.add(pairKey);
+          // Imported research data can contain a contradictory partner link
+          // between an ancestor and a descendant. Parent direction wins for
+          // layout purposes; the underlying relationship remains untouched.
+          if (!conflictsWithAncestry(person.id, partnerId)) join(person.id, partnerId);
+        }
+      }
+    }
+
+    const units = new Map();
+    for (const person of activePeople) {
+      const id = find(person.id);
+      if (!units.has(id)) {
+        units.set(id, {
+          id,
+          members: [],
+          parents: new Set(),
+          children: new Set(),
+          partnerNeighbors: new Set(),
+          depth: 0,
+          x: 0,
+          y: 0,
+          width: singleWidth,
+          height: 116
+        });
+      }
+      units.get(id).members.push(person);
+    }
+    for (const unit of units.values()) {
+      unit.members.sort(unitMemberOrder);
+      unit.width = Math.max(singleWidth, (unit.members.length - 1) * memberGap + singleWidth);
+      unit.height = Math.max(116, unit.members.length > 2 ? 126 + (unit.members.length - 2) * 56 : 116);
+    }
+
+    for (const child of activePeople) {
+      const childUnit = units.get(find(child.id));
+      for (const parentId of activeParentIds(child)) {
+        const parentUnit = units.get(find(parentId));
+        if (!parentUnit || parentUnit.id === childUnit.id || parentUnit.children.has(childUnit.id)) continue;
+        parentUnit.children.add(childUnit.id);
+        childUnit.parents.add(parentUnit.id);
+      }
+    }
+    for (const person of activePeople) {
+      const personUnit = units.get(find(person.id));
+      for (const partnerId of partnerIds(person)) {
+        if (!byId.has(partnerId)) continue;
+        const partnerUnit = units.get(find(partnerId));
+        if (!partnerUnit || partnerUnit.id === personUnit.id) continue;
+        personUnit.partnerNeighbors.add(partnerUnit.id);
+        partnerUnit.partnerNeighbors.add(personUnit.id);
+      }
+    }
+    return units;
+  }
+
+  function assignGenerationDepths(units) {
+    const inDegree = new Map([...units.values()].map(unit => [unit.id, unit.parents.size]));
+    const queue = [...units.values()]
+      .filter(unit => inDegree.get(unit.id) === 0)
+      .sort((left, right) => stableUnitCompare(left, right));
+    let processed = 0;
+    while (queue.length) {
+      const unit = queue.shift();
+      processed += 1;
+      for (const childId of unit.children) {
+        const child = units.get(childId);
+        child.depth = Math.max(child.depth, unit.depth + 1);
+        inDegree.set(childId, inDegree.get(childId) - 1);
+        if (inDegree.get(childId) === 0) {
+          queue.push(child);
+          queue.sort((left, right) => stableUnitCompare(left, right));
+        }
+      }
+    }
+    return processed === units.size;
+  }
+
+  function stableUnitCompare(left, right) {
+    const rootValue = unit => Math.min(...unit.members.map(member =>
+      rootRank.has(member.id) ? rootRank.get(member.id) : Infinity
+    ));
+    const birthValue = unit => Math.min(...unit.members.map(member => birthSortValue(member) ?? Infinity));
+    const leftRoot = rootValue(left);
+    const rightRoot = rootValue(right);
+    return leftRoot - rightRoot
+      || birthValue(left) - birthValue(right)
+      || fullName(left.members[0]).localeCompare(fullName(right.members[0]), 'de')
+      || left.id.localeCompare(right.id);
+  }
+
+  let units = buildUnits(true);
+  // A partner component can turn otherwise valid ancestry into a cycle.
+  // Falling back to individual units preserves the more important parent
+  // direction and still produces a complete deterministic layout.
+  if (!assignGenerationDepths(units)) {
+    units = buildUnits(false);
+    if (!assignGenerationDepths(units)) {
+      // Invalid imported parent cycles must not make auto-layout hang.
+      [...units.values()].filter(unit => !Number.isFinite(unit.depth)).forEach(unit => { unit.depth = 0; });
+    }
+  }
+
+  const componentAdjacency = new Map([...units.values()].map(unit => [unit.id, new Set()]));
+  for (const unit of units.values()) {
+    for (const otherId of [...unit.parents, ...unit.children, ...unit.partnerNeighbors]) {
+      if (!units.has(otherId)) continue;
+      componentAdjacency.get(unit.id).add(otherId);
+      componentAdjacency.get(otherId).add(unit.id);
+    }
+  }
+  const components = [];
+  const componentSeen = new Set();
+  for (const unit of units.values()) {
+    if (componentSeen.has(unit.id)) continue;
+    const ids = [];
+    const queue = [unit.id];
+    componentSeen.add(unit.id);
+    while (queue.length) {
+      const id = queue.shift();
+      ids.push(id);
+      for (const neighborId of componentAdjacency.get(id)) {
+        if (componentSeen.has(neighborId)) continue;
+        componentSeen.add(neighborId);
+        queue.push(neighborId);
+      }
+    }
+    components.push(ids.map(id => units.get(id)));
+  }
+
+  const maxLaneWidth = Math.max(12000, Math.min(24000, Math.round(Math.sqrt(activePeople.length) * 420)));
+  const componentBoxes = [];
+  for (const component of components) {
+    const minDepth = Math.min(...component.map(unit => unit.depth));
+    const maxDepth = Math.max(...component.map(unit => unit.depth));
+    const layers = Array.from({ length: maxDepth - minDepth + 1 }, () => []);
+    component.forEach(unit => layers[unit.depth - minDepth].push(unit));
+    layers.forEach(layer => layer.sort(stableUnitCompare));
+
+    const layerByUnitId = new Map();
+    layers.forEach((layer, layerIndex) => layer.forEach(unit => layerByUnitId.set(unit.id, layerIndex)));
+    for (let pass = 0; pass < 8; pass += 1) {
+      const downward = pass % 2 === 0;
+      const layerIndexes = [...layers.keys()];
+      if (!downward) layerIndexes.reverse();
+      const positions = new Map();
+      layers.forEach(layer => layer.forEach((unit, index) => positions.set(unit.id, index)));
+
+      for (const layerIndex of layerIndexes) {
+        const layer = layers[layerIndex];
+        const stableIndex = new Map(layer.map((unit, index) => [unit.id, index]));
+        const barycenter = new Map();
+        for (const unit of layer) {
+          const relationIds = [...(downward ? unit.parents : unit.children)]
+            .filter(id => layerByUnitId.has(id));
+          const values = relationIds.map(id => positions.get(id)).filter(Number.isFinite);
+          barycenter.set(unit.id, values.length
+            ? values.reduce((sum, value) => sum + value, 0) / values.length
+            : null);
+        }
+        layer.sort((left, right) => {
+          const leftValue = barycenter.get(left.id);
+          const rightValue = barycenter.get(right.id);
+          if (leftValue === null && rightValue === null) return stableIndex.get(left.id) - stableIndex.get(right.id);
+          if (leftValue === null) return 1;
+          if (rightValue === null) return -1;
+          return leftValue - rightValue || stableIndex.get(left.id) - stableIndex.get(right.id);
+        });
+        layer.forEach((unit, index) => positions.set(unit.id, index));
+      }
+    }
+
+    let y = 0;
+    let componentMinX = Infinity;
+    let componentMaxX = -Infinity;
+    for (const layer of layers) {
+      const lanes = [];
+      let lane = [];
+      let laneWidth = 0;
+      for (const unit of layer) {
+        const addition = (lane.length ? unitGap : 0) + unit.width;
+        if (lane.length && laneWidth + addition > maxLaneWidth) {
+          lanes.push(lane);
+          lane = [];
+          laneWidth = 0;
+        }
+        lane.push(unit);
+        laneWidth += (lane.length > 1 ? unitGap : 0) + unit.width;
+      }
+      if (lane.length) lanes.push(lane);
+
+      for (const laneUnits of lanes) {
+        const height = Math.max(...laneUnits.map(unit => unit.height));
+        const width = laneUnits.reduce((sum, unit) => sum + unit.width, 0)
+          + Math.max(0, laneUnits.length - 1) * unitGap;
+        let x = -width / 2;
+        for (const unit of laneUnits) {
+          unit.x = x + unit.width / 2;
+          unit.y = y + height / 2;
+          componentMinX = Math.min(componentMinX, unit.x - unit.width / 2);
+          componentMaxX = Math.max(componentMaxX, unit.x + unit.width / 2);
+          x += unit.width + unitGap;
+        }
+        y += height + laneGap;
+      }
+      y += generationGap - laneGap;
+    }
+    componentBoxes.push({
+      units: component,
+      minX: componentMinX,
+      maxX: componentMaxX,
+      minY: 0,
+      maxY: Math.max(0, y - generationGap),
+      peopleCount: component.reduce((sum, unit) => sum + unit.members.length, 0),
+      rootPriority: Math.min(...component.flatMap(unit => unit.members.map(member =>
+        rootRank.has(member.id) ? rootRank.get(member.id) : Infinity
+      )))
+    });
+  }
+
+  componentBoxes.sort((left, right) => left.rootPriority - right.rootPriority
+    || right.peopleCount - left.peopleCount
+    || left.units[0].id.localeCompare(right.units[0].id));
+  const packingWidth = Math.max(maxLaneWidth, ...componentBoxes.map(box => box.maxX - box.minX));
+  let cursorX = 0;
+  let cursorY = 0;
+  let rowHeight = 0;
+  for (const box of componentBoxes) {
+    const width = box.maxX - box.minX;
+    const height = box.maxY - box.minY;
+    if (cursorX > 0 && cursorX + width > packingWidth) {
+      cursorX = 0;
+      cursorY += rowHeight + componentGap;
+      rowHeight = 0;
+    }
+    const deltaX = cursorX - box.minX;
+    const deltaY = cursorY - box.minY;
+    box.units.forEach(unit => {
+      unit.x += deltaX;
+      unit.y += deltaY;
+    });
+    cursorX += width + componentGap;
+    rowHeight = Math.max(rowHeight, height);
+  }
+
+  let minPersonX = Infinity;
+  let minPersonY = Infinity;
+  for (const unit of units.values()) {
+    let x = unit.x - (unit.members.length - 1) * memberGap / 2;
+    for (const member of unit.members) {
+      member.x = Math.round(x);
+      member.y = Math.round(unit.y);
+      minPersonX = Math.min(minPersonX, member.x);
+      minPersonY = Math.min(minPersonY, member.y);
+      x += memberGap;
+    }
+  }
+  const normalizeX = startX - minPersonX;
+  const normalizeY = startY - minPersonY;
+  activePeople.forEach(person => {
+    person.x = Math.round(person.x + normalizeX);
+    person.y = Math.round(person.y + normalizeY);
+  });
+}
+
 function autoLayout(saveResult = true) {
   const activePeople = nonPoolPeople;
   if (!activePeople.length) return;
   const commandBefore = saveResult ? captureCommandState() : null;
   const largeDataset = activePeople.length > 1200;
+
+  if (largeDataset) {
+    layoutLargeFamilyGraph(activePeople);
+    if (saveResult) {
+      clearGeneratedLayoutState();
+      commitDataCommand('Auto-Layout anwenden', commandBefore);
+    }
+    render();
+    fit();
+    return;
+  }
 
   const byId = new Map(activePeople.map(p => [p.id, p]));
   const layoutParentsOf = p => uniqueIds(p?.parents || []).filter(id => byId.has(id)).slice(0, 2);
