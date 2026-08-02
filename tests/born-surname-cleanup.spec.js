@@ -7,8 +7,8 @@ const {
 test('PDF-Satzfragment born wird entfernt und der echte Nachname rekonstruiert', () => {
   const person = {
     id: 'regular',
-    name: 'Aaron Souhrada. He was born',
-    firstName: 'Aaron Souhrada. He was',
+    name: 'Alex Mustermann. He was born',
+    firstName: 'Alex Mustermann. He was',
     lastName: 'born',
     location: '',
     note: ''
@@ -16,9 +16,9 @@ test('PDF-Satzfragment born wird entfernt und der echte Nachname rekonstruiert',
 
   expect(cleanBornSurnameArtifact(person)).not.toBeNull();
   expect(person).toMatchObject({
-    name: 'Aaron Souhrada',
-    firstName: 'Aaron',
-    lastName: 'Souhrada'
+    name: 'Alex Mustermann',
+    firstName: 'Alex',
+    lastName: 'Mustermann'
   });
   expect(analyzeTree({ people: [person] })).toMatchObject({
     artifacts: [],
@@ -29,22 +29,22 @@ test('PDF-Satzfragment born wird entfernt und der echte Nachname rekonstruiert',
 test('echter Familienname Born bleibt erhalten', () => {
   const person = {
     id: 'real-born',
-    name: 'Michael Born. He was born',
-    firstName: 'Michael Born. He was',
+    name: 'Mira Born. She was born',
+    firstName: 'Mira Born. She was',
     lastName: 'born',
     location: '',
     note: ''
   };
 
   cleanBornSurnameArtifact(person);
-  expect(person).toMatchObject({ name: 'Michael Born', firstName: 'Michael', lastName: 'Born' });
+  expect(person).toMatchObject({ name: 'Mira Born', firstName: 'Mira', lastName: 'Born' });
   expect(analyzeTree({ people: [person] }).genuineBornSurnames).toHaveLength(1);
 });
 
 test('Orts- und unsichere Datumsfragmente gehen bei der Bereinigung nicht verloren', () => {
   const located = {
     id: 'located',
-    name: 'Celeste R. Weaver in Bar Harbor, Hancock County, Maine. She was born',
+    name: 'Celia R. Muster in Beispielstadt, Musterland, Teststaat. She was born',
     firstName: '',
     lastName: 'born',
     location: '',
@@ -52,7 +52,7 @@ test('Orts- und unsichere Datumsfragmente gehen bei der Bereinigung nicht verlor
   };
   const dated = {
     id: 'dated',
-    name: 'Dorothy Barbara Busta November 18, 1967. She was born',
+    name: 'Dora Beispiel November 18, 1967. She was born',
     firstName: '',
     lastName: 'born',
     location: '',
@@ -62,15 +62,15 @@ test('Orts- und unsichere Datumsfragmente gehen bei der Bereinigung nicht verlor
   cleanBornSurnameArtifact(located);
   cleanBornSurnameArtifact(dated);
   expect(located).toMatchObject({
-    name: 'Celeste R. Weaver',
-    firstName: 'Celeste R.',
-    lastName: 'Weaver',
-    location: 'Bar Harbor, Hancock County, Maine'
+    name: 'Celia R. Muster',
+    firstName: 'Celia R.',
+    lastName: 'Muster',
+    location: 'Beispielstadt, Musterland, Teststaat'
   });
   expect(dated).toMatchObject({
-    name: 'Dorothy Barbara Busta',
-    firstName: 'Dorothy Barbara',
-    lastName: 'Busta'
+    name: 'Dora Beispiel',
+    firstName: 'Dora',
+    lastName: 'Beispiel'
   });
   expect(dated.note).toContain('November 18, 1967');
 });
@@ -78,7 +78,7 @@ test('Orts- und unsichere Datumsfragmente gehen bei der Bereinigung nicht verlor
 test('eingeschobene PDF-Seitenköpfe werden aus dem Namen entfernt', () => {
   const person = {
     id: 'ocr-header',
-    name: 'Annette M. Descendants of : Page 187 of 2 Joseph Bodensteiner Nolte. She was born',
+    name: 'Ada M. Descendants of : Page 187 of 2 Joseph Bodensteiner Muster. She was born',
     firstName: '',
     lastName: 'born',
     location: '',
@@ -86,5 +86,5 @@ test('eingeschobene PDF-Seitenköpfe werden aus dem Namen entfernt', () => {
   };
 
   cleanBornSurnameArtifact(person);
-  expect(person).toMatchObject({ name: 'Annette M. Nolte', firstName: 'Annette M.', lastName: 'Nolte' });
+  expect(person).toMatchObject({ name: 'Ada M. Muster', firstName: 'Ada M.', lastName: 'Muster' });
 });

@@ -84,8 +84,7 @@ test('Dialog zeigt Regel und Betroffenenzahl vor dem bestätigten Datenschutzexp
 
   await expect(page.getByTestId('export-living-count')).toHaveText('2 von 4');
   await expect(page.locator('#exportPrivacyRule')).toContainText('Geburtsjahr fehlt');
-  await expect(page.locator('#exportPrivacyOptions')).toHaveAttribute('disabled', '');
-  await page.getByTestId('export-privacy-enabled').check();
+  await expect(page.getByTestId('export-privacy-enabled')).toBeChecked();
   await expect(page.locator('#exportPrivacyOptions')).not.toHaveAttribute('disabled', '');
   await expect(page.getByTestId('export-privacy-count')).toHaveText('2 Person(en)');
 

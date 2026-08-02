@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { test, expect } = require('@playwright/test');
-const realTree = require('../Bodensteiner.json');
+const demoTree = require('../Bodensteiner.json');
 
 const storeKey = 'mobile-family-tree-v5-clean';
 const screenshotDir = path.resolve(__dirname, '..', 'docs', 'galaxy-beta-screenshots');
@@ -106,11 +106,11 @@ test('Galaxie bleibt auf Mobile bedienbar und löst Detail beim Herauszoomen wie
   await expect(page.getByTestId('galaxy-cluster-bodensteiner')).toBeVisible();
 });
 
-test('reale Familiengalaxie bleibt kollisionsarm und visuell prüfbar', async ({ page }) => {
+test('synthetische Demo-Galaxie bleibt kollisionsarm und visuell prüfbar', async ({ page }) => {
   await page.addInitScript(({ key, value }) => {
     localStorage.setItem(key, JSON.stringify(value));
     localStorage.setItem(`${key}-help-seen-v1`, JSON.stringify(['pan-zoom', 'search', 'edit']));
-  }, { key: storeKey, value: realTree });
+  }, { key: storeKey, value: demoTree });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/?ux-debug=1');
   await page.getByTestId('welcome-continue').click();

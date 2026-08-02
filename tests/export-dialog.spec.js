@@ -54,9 +54,15 @@ async function openExport(page) {
   await expect(page.getByTestId('export-dialog')).toBeVisible();
 }
 
+async function disablePrivacyFilter(page) {
+  const privacy = page.getByTestId('export-privacy-enabled');
+  if (await privacy.isChecked()) await privacy.uncheck();
+}
+
 test('JSON-Dialog zeigt Zusammenfassung und exportiert wahlweise mit oder ohne Bilder', async ({ page }) => {
   await openTree(page);
   await openExport(page);
+  await disablePrivacyFilter(page);
 
   const summary = page.getByTestId('export-summary');
   await expect(summary).toContainText('Personen');
@@ -75,6 +81,7 @@ test('JSON-Dialog zeigt Zusammenfassung und exportiert wahlweise mit oder ohne B
   expect(withoutJson.people.find(person => person.id === 'export-a').image).toBe('');
 
   await openExport(page);
+  await disablePrivacyFilter(page);
   await page.locator('#exportIncludeImages').check();
   const withDownload = page.waitForEvent('download');
   await page.getByTestId('export-submit').click();

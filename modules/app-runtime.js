@@ -7,6 +7,7 @@ import { groupRowsByTolerance } from './layout.js';
 import { escapeHtml as esc, reconcileKeyedChildren } from './render.js';
 import { dialogFocusableElements } from './dialogs.js';
 import { buildGalaxyClusterDetail, buildGalaxyLayout } from './galaxy-layout.js';
+import { fetchAndDecryptPrivateDataset } from './private-dataset.js';
 
 (() => {
 'use strict';
@@ -6188,7 +6189,7 @@ function topDialogEntry() {
 }
 function dialogIsolationRoot(dialog) {
   const layer = dialog?.parentElement;
-  if (layer?.matches('.decisionLayer, .importLayer, .relationshipLayer, .exportLayer')) return layer;
+  if (layer?.matches('.decisionLayer, .importLayer, .privateDataLayer, .relationshipLayer, .exportLayer')) return layer;
   return dialog;
 }
 function resolveDialogFocus(entry) {
@@ -7839,6 +7840,113 @@ document.querySelector('[data-testid=\"welcome-continue\"]')?.addEventListener('
   hideWelcomeSurface();
   if (isLargeTree()) focusPreferredPerson({ preferFocus: true });
 });
+
+let privateDataFocusReturnTarget = null;
+let privateUnlockTaps = [];
+
+function setPrivateDataError(message = '') {
+  const error = $('privateDataError');
+  if (!error) return;
+  error.textContent = message;
+  error.classList.toggle('hidden', !message);
+}
+
+function closePrivateDataDialog({ returnFocus = true } = {}) {
+  const layer = $('privateDataLayer');
+  const dialog = $('privateDataDialog');
+  if (!layer || !dialog) return false;
+  $('privateDataPassphrase').value = '';
+  setPrivateDataError('');
+  layer.classList.add('hidden');
+  dialog.setAttribute('aria-hidden', 'true');
+  privateDataFocusReturnTarget = null;
+  return closeDialog('close', 'privateDataDialog', { returnFocus });
+}
+
+function openPrivateDataDialog(trigger = document.activeElement) {
+  const layer = $('privateDataLayer');
+  const dialog = $('privateDataDialog');
+  if (!layer || !dialog || !layer.classList.contains('hidden')) return false;
+  privateDataFocusReturnTarget = trigger instanceof HTMLElement ? trigger : null;
+  $('privateDataPassphrase').value = '';
+  setPrivateDataError('');
+  layer.classList.remove('hidden');
+  dialog.setAttribute('aria-hidden', 'false');
+  openDialog('privateDataDialog', privateDataFocusReturnTarget, '#privateDataPassphrase', {
+    requestClose: () => closePrivateDataDialog()
+  });
+  return true;
+}
+
+function registerPrivateUnlockTap(event) {
+  const now = Date.now();
+  privateUnlockTaps = privateUnlockTaps.filter(value => now - value < 4_000);
+  privateUnlockTaps.push(now);
+  if (privateUnlockTaps.length < 7) return;
+  privateUnlockTaps = [];
+  openPrivateDataDialog(event.currentTarget);
+}
+
+async function unlockPrivateDataset(event) {
+  event?.preventDefault();
+  const input = $('privateDataPassphrase');
+  const button = $('privateDataSubmit');
+  const passphrase = String(input?.value || '');
+  if (!passphrase) {
+    setPrivateDataError('Bitte das Passwort eingeben.');
+    input?.focus();
+    return false;
+  }
+  setPrivateDataError('');
+  button.disabled = true;
+  button.textContent = 'Entschlüsseln …';
+  try {
+    const result = await runBusy('Privatbestand wird lokal entschlüsselt …', async () => {
+      const parsed = await fetchAndDecryptPrivateDataset({ passphrase });
+      const positioned = parsed.people.filter(entry =>
+        entry?.x !== '' && entry?.x !== null && entry?.x !== undefined
+        && entry?.y !== '' && entry?.y !== null && entry?.y !== undefined
+        && Number.isFinite(Number(entry.x)) && Number.isFinite(Number(entry.y))
+      ).length;
+      return {
+        imported: normalize(parsed, { normalizePositions: false }),
+        positioned
+      };
+    });
+    const trigger = privateDataFocusReturnTarget;
+    closePrivateDataDialog({ returnFocus: false });
+    openImportDialog(result.imported, {
+      fileName: 'Verschlüsselter Bodensteiner-Privatbestand',
+      positioned: result.positioned,
+      trigger
+    });
+    return true;
+  } catch {
+    setPrivateDataError('Entschlüsselung fehlgeschlagen. Passwort oder Privatbestand ist nicht verfügbar.');
+    input?.focus();
+    return false;
+  } finally {
+    if (input) input.value = '';
+    button.disabled = false;
+    button.textContent = 'Lokal entschlüsseln';
+  }
+}
+
+$('privateDataClose')?.addEventListener('click', () => closePrivateDataDialog());
+$('privateDataLayer')?.addEventListener('click', event => {
+  if (event.target === $('privateDataLayer')) closePrivateDataDialog();
+});
+$('privateDataForm')?.addEventListener('submit', unlockPrivateDataset);
+[$('app-title'), $('welcomeTitle')].filter(Boolean).forEach(target => {
+  target.addEventListener('click', registerPrivateUnlockTap);
+});
+document.addEventListener('keydown', event => {
+  if (event.ctrlKey && event.altKey && String(event.key).toLowerCase() === 'p') {
+    event.preventDefault();
+    openPrivateDataDialog(document.activeElement);
+  }
+});
+
 if (minimap) {
   minimap.addEventListener('click', e => {
     panFromMinimapEvent(e, minimapInner, minimapState);
@@ -8091,6 +8199,7 @@ if (window.location?.search?.includes('ux-debug=1')) {
       layoutDurationMs: galaxyLayoutMetrics.durationMs
     }),
     openGalaxyClusterForTest: clusterId => openGalaxyCluster(clusterId),
+    openPrivateDataDialogForTest: () => openPrivateDataDialog(document.activeElement),
     applyFullAutoLayoutForTest: () => applyAutomaticClassicLayout({ allowLargeTree: true })
   };
 }

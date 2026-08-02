@@ -6,7 +6,8 @@ const jsonPath = path.resolve(__dirname, '..', 'stammbaum_mit_familienbuch_full_
 const screenshotDir = path.resolve(__dirname, '..', 'docs', 'familienbuch-v5-screenshots');
 const hasLocalFamilybook = fs.existsSync(jsonPath);
 const tree = hasLocalFamilybook ? JSON.parse(fs.readFileSync(jsonPath, 'utf8')) : null;
-fs.mkdirSync(screenshotDir, { recursive: true });
+const captureScreenshots = process.env.UPDATE_FAMILYBOOK_SCREENSHOTS === '1';
+if (captureScreenshots) fs.mkdirSync(screenshotDir, { recursive: true });
 
 test.setTimeout(120_000);
 test.skip(!hasLocalFamilybook, 'Lokaler, bewusst nicht eingecheckter Genealogie-Datensatz fehlt.');
@@ -40,11 +41,9 @@ test('bereinigter US-Zweig lädt, ist verknüpft und visuell prüfbar', async ({
     String(person.lastName || '').toLowerCase() === 'born'
     && !/\bBorn$/i.test(String(person.name || '').trim())
   )).toHaveLength(0);
-  expect(importedState.people.find(person => person.id === 'fbx9913')).toMatchObject({
-    name: 'Michael Born',
-    firstName: 'Michael',
-    lastName: 'Born'
-  });
+  const genuineBornSurname = importedState.people.find(person => person.id === 'fbx9913');
+  expect(genuineBornSurname?.lastName).toBe('Born');
+  expect(genuineBornSurname?.name).toMatch(/\bBorn$/);
   expect(importedState.people.find(person => person.id === 'fb0001')?.parents).toEqual(['fbbridge0001']);
   expect(importedState.people.find(person => person.id === 'fbbridge0001')?.parents).toEqual(['p334', 'p335']);
   await expect.poll(
@@ -80,7 +79,7 @@ test('bereinigter US-Zweig lädt, ist verknüpft und visuell prüfbar', async ({
   expect(clusterMetrics.count).toBe(53);
   expect(clusterMetrics.minimumTarget).toBeGreaterThanOrEqual(44);
   expect(clusterMetrics.largestOverlap).toBeLessThan(0.2);
-  await page.screenshot({ path: path.join(screenshotDir, 'familienuebersicht-v5-1440x900.png') });
+  if (captureScreenshots) await page.screenshot({ path: path.join(screenshotDir, 'familienuebersicht-v5-1440x900.png') });
 
   await page.getByTestId('person-search-open').click();
   await page.getByTestId('person-search').fill('Ungeklärter Bodensteiner-Anschluss');
@@ -92,13 +91,13 @@ test('bereinigter US-Zweig lädt, ist verknüpft und visuell prüfbar', async ({
   await expect(page.getByTestId('person-card-p334')).toBeInViewport();
   await expect(page.getByTestId('person-card-fbbridge0001')).toBeInViewport();
   await expect(page.getByTestId('person-card-fb0001')).toBeInViewport();
-  await page.screenshot({ path: path.join(screenshotDir, 'anschluss-uebersicht-1440x900.png') });
+  if (captureScreenshots) await page.screenshot({ path: path.join(screenshotDir, 'anschluss-uebersicht-1440x900.png') });
 
   await page.evaluate(() => window.__uxDebug.setLayoutModeForTest('classic'));
   await expect(page.getByTestId('person-card-fbbridge0001')).toBeVisible();
   await expect(page.getByTestId('person-card-fb0001')).toBeVisible();
   await expect(page.getByTestId('person-card-fb0002')).toBeVisible();
-  await page.screenshot({ path: path.join(screenshotDir, 'anschluss-detail-1440x900.png') });
+  if (captureScreenshots) await page.screenshot({ path: path.join(screenshotDir, 'anschluss-detail-1440x900.png') });
 
   await page.getByTestId('person-search-open').click();
   await page.getByTestId('person-search').fill('About 1734 Unterlind');
@@ -107,7 +106,7 @@ test('bereinigter US-Zweig lädt, ist verknüpft und visuell prüfbar', async ({
   await page.getByTestId('person-dialog-close').click();
   await page.getByTestId('person-search-close').click();
   await expect(page.getByTestId('person-card-fb0001')).toBeInViewport();
-  await page.screenshot({ path: path.join(screenshotDir, 'us-linie-detail-1440x900.png') });
+  if (captureScreenshots) await page.screenshot({ path: path.join(screenshotDir, 'us-linie-detail-1440x900.png') });
 
   await page.getByTestId('person-search-open').click();
   await page.getByTestId('person-search').fill('George J. Mihm');
@@ -125,7 +124,7 @@ test('bereinigter US-Zweig lädt, ist verknüpft und visuell prüfbar', async ({
   await expect(page.getByTestId('person-card-fbx9047')).toBeVisible();
   await expect(page.getByTestId('branch-toggle-fbx9046')).toBeVisible();
   await expect(page.getByTestId('branch-toggle-fbx9047')).toHaveCount(0);
-  await page.screenshot({ path: path.join(screenshotDir, 'mihm-bodensteiner-zweige-1440x900.png') });
+  if (captureScreenshots) await page.screenshot({ path: path.join(screenshotDir, 'mihm-bodensteiner-zweige-1440x900.png') });
 
   expect(errors).toEqual([]);
 });

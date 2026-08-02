@@ -5,9 +5,14 @@ test.pdf
 !package-lock.json
 !docs/performance-results.json
 !docs/performance-results-after-s4-07.json
+!private/Bodensteiner.enc.json
 *.tmp
 *.log
+*.passphrase.txt
+private/*.key
+.private/
 extract_yumpu_familybook.py
+scripts/revise-familybook-v5.cjs
 node_modules/
 test-results/
 playwright-report/

@@ -25,7 +25,7 @@ function fixtureWithUsefulRoot() {
   return { copy, rootId: root.id };
 }
 
-async function openRealTree(page) {
+async function openDemoTree(page) {
   const { copy, rootId } = fixtureWithUsefulRoot();
   await page.addInitScript(({ key, seenKey, value }) => {
     if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(value));
@@ -57,7 +57,7 @@ function overlapPairs(boxes) {
 }
 
 test('Baum und Kreis sind fokussierte, kollisionsfreie Leseansichten', async ({ page }) => {
-  const rootId = await openRealTree(page);
+  const rootId = await openDemoTree(page);
   const classic = await page.evaluate(() => Object.fromEntries(
     window.__uxDebug.getDataSnapshot().people.map(person => [person.id, { x: person.x, y: person.y }])
   ));
@@ -87,7 +87,7 @@ test('Baum und Kreis sind fokussierte, kollisionsfreie Leseansichten', async ({ 
 
 test('Radialansicht bleibt auf Mobile lesbar und speichert niemals ihre abgeleiteten Positionen', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  const rootId = await openRealTree(page);
+  const rootId = await openDemoTree(page);
   const classicRoot = await page.evaluate(id => {
     const person = window.__uxDebug.getDataSnapshot().people.find(entry => entry.id === id);
     return { x: person.x, y: person.y };

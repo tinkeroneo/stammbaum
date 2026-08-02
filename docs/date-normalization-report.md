@@ -6,7 +6,7 @@ Stand: 2. August 2026
 
 | Datei | Personen | geänderte Datumswerte | erhaltene unsichere Originalangaben | anschließend unverarbeitbar |
 | --- | ---: | ---: | ---: | ---: |
-| `Bodensteiner.json` | 385 | 9 | 0 | 0 |
+| lokaler Ausgangsstammbaum | 385 | 9 | 0 | 0 |
 | `stammbaum-mit-bildern.json` | 385 | 9 | 0 | 0 |
 | `familienbuch_bodensteiner_full_extension_v4.json` | 3.980 | 5.820 | 570 | 0 |
 | `stammbaum_mit_familienbuch_full_v4.json` | 4.365 | 5.829 | 570 | 0 |
@@ -24,7 +24,7 @@ Insgesamt wurden 19.694 nichtleere Geburts-, Sterbe- und Heiratsangaben direkt m
 - `About ...` und `Before ...` wurden auf den enthaltenen verarbeitbaren Datumswert reduziert.
 - Bereiche wie `Between 1979 and 2007` verwenden für Sortierung und Verarbeitung die erste Grenze `1979`.
 - Bei Näherungen, Vorher-Angaben und Bereichen steht die vollständige ursprüngliche Angabe zusätzlich im Personenhinweis.
-- Der offensichtliche Feldfehler `died: "Voit"` bei Ingrid Braun wurde nach `birthName: "Voit"` verschoben und im Personenhinweis dokumentiert.
+- Ein offensichtlicher Feldfehler mit einem Geburtsnamen im Sterbedatumsfeld wurde in das Geburtsnamensfeld verschoben und im Personenhinweis dokumentiert.
 - Quellen-/Erwähnungsdaten wurden nicht verändert, da sie freie Quellenbeschreibungen und keine von der Datumsauswertung verwendeten Lebensdaten sind.
 
 ## Absicherung
@@ -38,5 +38,5 @@ Insgesamt wurden 19.694 nichtleere Geburts-, Sterbe- und Heiratsangaben direkt m
 Reproduzierbarer Prüfbefehl:
 
 ```powershell
-node scripts\normalize-genealogy-dates.cjs --check Bodensteiner.json stammbaum-mit-bildern.json familienbuch_bodensteiner_full_extension_v4.json stammbaum_mit_familienbuch_full_v4.json stammbaum_mit_familienbuch_full_v5_bereinigt.json
+node scripts\normalize-genealogy-dates.cjs --check <lokale-stammbaumdateien.json>
 ```

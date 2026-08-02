@@ -26,7 +26,7 @@ Nach der Bereinigung:
 
 - 0 verbliebene PDF-Satzfragmente `He/She was born` in Personennamen
 - 0 fehlerhafte Personen mit Nachname `born`
-- 1 echter Familienname `Born`: `Michael Born` (`fbx9913`)
+- 1 Datensatz mit dem echten Familiennamen `Born`; dieser wurde nicht verändert
 
 ## Reproduzierbare Prüfung
 

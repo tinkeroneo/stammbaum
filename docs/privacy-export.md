@@ -16,13 +16,15 @@ Ein vorhandenes Sterbedatum beendet die Vermutung. Ohne Sterbedatum gelten Perso
 
 ## Bewusst wählbare Änderungen
 
-Der Datenschutzfilter ist standardmäßig aus, damit bestehende Exporte kompatibel bleiben. Nach Aktivierung sind drei Optionen einzeln abwählbar:
+Der Datenschutzfilter ist für neue Exporte standardmäßig aktiviert. Wer für einen ausschließlich privaten, lokalen Zweck bewusst eine unveränderte Arbeitskopie benötigt, kann ihn im Dialog abwählen. Drei Schutzoptionen sind einzeln abwählbar:
 
 - Geburtsdatum vermutlich Lebender auf das vierstellige Jahr kürzen; ohne erkennbares Jahr wird es entfernt.
 - Notiz, Quellen-/Erwähnungszeilen und Personenlink vermutlich Lebender entfernen.
 - Personenbild vermutlich Lebender entfernen.
 
 Die bestehende Option „Personenbilder einschließen“ bleibt übergeordnet: Ist sie aus, werden Bilder aller Personen entfernt. Der Dialog zeigt vor der Bestätigung Gesamtzahl, Anzahl vermutlich Lebender, tatsächlich betroffene Personen und geschätzte Dateigröße.
+
+Auch mit aktivem Filter bleiben Namen und Familienbeziehungen erhalten. Ein solcher Export ist daher nicht automatisch zur öffentlichen Veröffentlichung geeignet und muss vor jeder Weitergabe fachlich geprüft werden.
 
 ## Technische Garantien
 
