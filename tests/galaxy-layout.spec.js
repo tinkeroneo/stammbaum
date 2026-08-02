@@ -157,6 +157,9 @@ test('reale Familiengalaxie bleibt kollisionsarm und visuell prüfbar', async ({
   await page.getByTestId('galaxy-back').click();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByTestId('galaxy-hud')).toBeInViewport();
+  await expect.poll(async () => page.locator('.galaxyCluster').evaluateAll(elements =>
+    Math.max(...elements.map(element => element.getBoundingClientRect().width))
+  )).toBeLessThan(140);
   if (captureScreenshots) {
     await page.screenshot({ path: path.join(screenshotDir, 'galaxie-uebersicht-390x844.png') });
   }
