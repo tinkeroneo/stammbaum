@@ -5119,6 +5119,10 @@ function autoLayout(saveResult = true) {
   anchorInLawAncestorBranches();
   interlockRootBranches();
   compressEmptyHorizontalSpace();
+  // Partner- und Seitenzweig-Ausrichtung kann zuvor getrennte Einheiten wieder
+  // auf dieselbe Kartenposition schieben. Daher die endgültigen Reihen erst
+  // nach allen strukturverändernden Verschiebungen nochmals entzerren.
+  resolveRowOverlaps();
 
   if (saveResult) {
     clearGeneratedLayoutState();

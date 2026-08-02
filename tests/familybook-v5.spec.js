@@ -33,24 +33,11 @@ test('bereinigter US-Zweig lädt, ist verknüpft und visuell prüfbar', async ({
   await page.getByTestId('import-confirm').click();
 
   await expect.poll(() => page.evaluate(() => window.__uxDebug.getDataSnapshot().people.length), { timeout: 60_000 }).toBe(4338);
-  expect(await page.evaluate(() => window.__uxDebug.getDataSnapshot().people.find(person => person.id === 'fb0001')?.parents)).toEqual(['fbbridge0001']);
-  expect(await page.evaluate(() => window.__uxDebug.getDataSnapshot().people.find(person => person.id === 'fbbridge0001')?.parents)).toEqual(['p334', 'p335']);
-
-  await page.evaluate(() => {
-    const left = window.__uxDebug.getPerson('p334');
-    const right = window.__uxDebug.getPerson('fbbridge0001');
-    const dx = Math.abs(right.x - left.x);
-    const dy = Math.abs(right.y - left.y);
-    const scale = Math.max(0.18, Math.min(0.55, 900 / Math.max(dx, 1), 500 / Math.max(dy, 1)));
-    window.__uxDebug.setViewForTest({
-      x: -((left.x + right.x) / 2) * scale,
-      y: -((left.y + right.y) / 2) * scale,
-      s: scale,
-    });
-  });
-  await expect(page.getByTestId('person-card-p334')).toBeInViewport();
-  await expect(page.getByTestId('person-card-fbbridge0001')).toBeInViewport();
-  await page.screenshot({ path: path.join(screenshotDir, 'anschluss-uebersicht-1440x900.png') });
+  const importedState = await page.evaluate(() => window.__uxDebug.getDataSnapshot());
+  expect(importedState.people.filter(person => !person.pool)).toHaveLength(3245);
+  expect(importedState.people.filter(person => person.pool)).toHaveLength(1093);
+  expect(importedState.people.find(person => person.id === 'fb0001')?.parents).toEqual(['fbbridge0001']);
+  expect(importedState.people.find(person => person.id === 'fbbridge0001')?.parents).toEqual(['p334', 'p335']);
 
   await page.getByTestId('person-search-open').click();
   await page.getByTestId('person-search').fill('Ungeklärter Bodensteiner-Anschluss');
@@ -58,6 +45,13 @@ test('bereinigter US-Zweig lädt, ist verknüpft und visuell prüfbar', async ({
   await expect(page.getByTestId('person-dialog')).toBeVisible();
   await page.getByTestId('person-dialog-close').click();
   await page.getByTestId('person-search-close').click();
+  await page.evaluate(() => window.__uxDebug.setLayoutModeForTest('radial'));
+  await expect(page.getByTestId('person-card-p334')).toBeInViewport();
+  await expect(page.getByTestId('person-card-fbbridge0001')).toBeInViewport();
+  await expect(page.getByTestId('person-card-fb0001')).toBeInViewport();
+  await page.screenshot({ path: path.join(screenshotDir, 'anschluss-uebersicht-1440x900.png') });
+
+  await page.evaluate(() => window.__uxDebug.setLayoutModeForTest('classic'));
   await expect(page.getByTestId('person-card-fbbridge0001')).toBeVisible();
   await expect(page.getByTestId('person-card-fb0001')).toBeVisible();
   await expect(page.getByTestId('person-card-fb0002')).toBeVisible();
