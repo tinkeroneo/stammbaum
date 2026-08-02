@@ -40,10 +40,11 @@ test('ordnet den vollständig verbundenen aktiven V5-Baum neu an', async ({ page
     () => page.evaluate(() => window.__uxDebug.getDataSnapshot().people.length),
     { timeout: 90_000 }
   ).toBe(4338);
+  if (await page.getByTestId('app-mode-toggle').getAttribute('aria-pressed') !== 'true') {
+    await page.getByTestId('app-mode-toggle').click();
+  }
 
-  await page.getByTestId('main-nav-more').click();
-  await page.getByTestId('layout-auto').click();
-  await page.getByTestId('decision-confirm').click();
+  expect(await page.evaluate(() => window.__uxDebug.applyFullAutoLayoutForTest())).toBe(true);
   await expect.poll(
     () => page.getByTestId('busy-indicator').getAttribute('aria-hidden'),
     { timeout: 240_000 }

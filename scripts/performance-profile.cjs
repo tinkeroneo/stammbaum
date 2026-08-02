@@ -94,6 +94,13 @@ async function runTrial(browser, total, run) {
   const continueButton = page.getByTestId('welcome-continue');
   if (await continueButton.isVisible().catch(() => false)) await continueButton.click();
   await page.getByTestId('app-shell').waitFor({ state: 'visible' });
+  if (total > 1200) {
+    await page.waitForFunction(() => {
+      const snapshot = window.__uxDebug?.getDataSnapshot?.();
+      const state = window.__uxDebug?.getLargeTreeState?.();
+      return snapshot?.layoutMode === 'galaxy' && state?.overviewCached && !state?.overviewPending;
+    });
+  }
   await twoFrames(page);
   const initialMs = Number(process.hrtime.bigint() - initialStart) / 1e6;
   await page.waitForTimeout(250);

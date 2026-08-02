@@ -11,7 +11,7 @@ npm run profile
 
 Das Script startet den lokalen statischen Testserver, öffnet für jeden Lauf einen kalten Browser-Kontext und erzeugt drei synthetische Datensätze mit 385, 1.200 und 5.000 Personen. Jede Größe wird dreimal gemessen. Der Bericht enthält alle Einzelwerte, Median, schlechtesten Wert, Long Tasks und DOM-Mengen. Standardziel ist die ignorierte Datei `docs/performance-results-current.json`; ein historischer Nachweis wird explizit mit `--output=...` erzeugt.
 
-Vor Pan/Zoom wartet das Script 250 ms auf verzögerte Startarbeit; vor der Suche wartet es 250 ms auf die geöffnete Sheet-Endposition. Long Tasks aus Start und Interaktionen werden getrennt erfasst. Dadurch misst ein Interaktionswert nicht versehentlich die 220-ms-Sheetanimation oder das verzögerte Start-`fit()`.
+Vor Pan/Zoom wartet das Script 250 ms auf verzögerte Startarbeit; bei mehr als 1.200 Personen zusätzlich auf die fertige, gecachte Familienübersicht. Vor der Suche wartet es 250 ms auf die geöffnete Sheet-Endposition. Long Tasks aus Start und Interaktionen werden getrennt erfasst. Dadurch misst ein Interaktionswert nicht versehentlich die 220-ms-Sheetanimation, einen noch laufenden Worker oder das verzögerte Start-`fit()`.
 
 Referenzgerät: Windows 10.0.26200 x64, Intel Core i7-1360P (16 logische CPUs), 31,7 GiB RAM, Node 24.12.0, Chrome/Chromium 150.0.7871.188, headless, 1440 × 900. Die Angaben werden bei jedem Lauf neu in die JSON-Datei geschrieben.
 
@@ -64,3 +64,23 @@ Die S4-06-Rohdatei bleibt unverändert erhalten; der Profiler wurde für die Nac
 - Der frühere 1.200er-Fallback mit 1.200 Karten wurde auf 80 sichtbare beziehungsweise fokusrelevante Karten begrenzt. Fokus und Auswahl bleiben dabei erhalten.
 
 S4-07 trennt nun Datenindizes, Renderableitung und DOM-Patch: Suchtext und Sortierung werden bei Datenänderung abgeleitet, Karten werden über stabile Einzel-/Paar-Keys wiederverwendet, Beziehungen/Generationsbänder/Minimap nur bei geänderter Signatur aufgebaut und reine Detail-/Spotlight-Aktionen patchen nur ihren Zustand.
+
+## Ergebnis nach der Großbaum-Navigationsarchitektur
+
+Stand: 2. August 2026
+
+Messdaten: [`performance-results-large-tree.json`](performance-results-large-tree.json)
+
+| Personen | Initial Median / schlecht. | Pan/Zoom Median / schlecht. | Suche Median / schlecht. | Detail Median / schlecht. | längster Interaktions-/Starttask | DOM / Karten / Linien (Median) |
+|---:|---:|---:|---:|---:|---:|---:|
+| 385 | 737,5 / 1.636,5 ms | 19,3 / 19,7 ms | 14,3 / 16,2 ms | 55,3 / 58,5 ms | 0 / 171 ms | 6.075 / 385 / 767 |
+| 1.200 | 647,9 / 666,9 ms | 49,7 / 49,9 ms | 27,9 / 32,4 ms | 74,4 / 78,5 ms | 59 / 142 ms | 6.227 / 80 / 56 |
+| 5.000 | 814,7 / 930,3 ms | 13,7 / 14,7 ms | 31,2 / 31,5 ms | 54,7 / 69,6 ms | 0 / 194 ms | 2.434 / 160 / 117 |
+
+Bei mehr als 1.200 aktiven Personen startet die Anwendung nun in der semantischen Familienübersicht. Die Clusterberechnung läuft in einem Modul-Worker und wird anhand der Beziehungstopologie gecacht. Die klassische Ansicht ist auf einen bearbeitbaren Nahbereich begrenzt; eine versehentliche globale Auto-Anordnung wird dort verhindert. Die Minimap rendert Familiencluster und ihre Beziehungen statt tausender Einzelpunkte.
+
+- Alle gemessenen Interaktionen bleiben unter 100 ms.
+- Suche bleibt in allen neun Läufen deutlich unter 150 ms.
+- Der 5.000er-Start umfasst die vollständig berechnete Worker-Übersicht und bleibt im schlechtesten Lauf unter einer Sekunde.
+- Pan/Zoom bei 5.000 Personen sinkt gegenüber S4-07 von 46,6 ms auf 13,7 ms Median.
+- Die 5.000er-Ansicht hält den DOM trotz vollständiger aktiver Datenmenge bei 2.434 Elementen und höchstens 160 gerenderten Detailkarten.

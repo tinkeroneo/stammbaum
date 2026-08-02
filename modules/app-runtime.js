@@ -45,9 +45,11 @@ const persistenceDbName = storeKey + '-db';
 const persistenceStoreName = 'treeState';
 const persistenceRecordKey = 'current';
 const minZoom = 0.045;
+const galaxyOverviewMinZoom = 0.028;
 const maxZoom = 2.4;
 const minFitZoom = 0.42;
 const defaultDataUrl = 'Bodensteiner.json';
+const largeTreeThreshold = 1200;
 
 const sample = { people: [
   {id:'p1',name:'Großvater',born:'1932',died:'2011',birthName:'',note:'Familienzweig A',x:520,y:180,parents:[],partner:'p2'},
@@ -114,6 +116,10 @@ let layoutCenter = { x: 1800, y: 1500 };
 let galaxyLayoutState = null;
 let galaxyActiveClusterId = '';
 let galaxyDetailState = null;
+let galaxyLayoutCache = null;
+let galaxyLayoutPending = null;
+let galaxyLayoutRequestId = 0;
+let galaxyLayoutMetrics = { source: 'none', durationMs: 0 };
 let rootIds = [...(data.rootIds || [])];
 let temporaryRootId = '';
 let rootSelectionDeferredForDataset = false;
@@ -349,6 +355,11 @@ function updateHeaderMeta() {
   const statusEl = $('app-storage-status');
   if (titleEl) titleEl.textContent = guessTreeName();
   if (statusEl) statusEl.textContent = getPersistenceStatusLabel();
+  const startButton = $('startNavBtn');
+  const startLabel = startButton?.querySelector('.mainNavLabel');
+  const overviewMode = isLargeTree();
+  if (startLabel) startLabel.textContent = overviewMode ? 'Übersicht' : 'Start';
+  startButton?.setAttribute('aria-label', overviewMode ? 'Familienübersicht öffnen' : 'Startansicht öffnen');
 }
 const surfaceStateKeys = ['sheet','sideNav','searchSheet','rootSelectionSheet','overviewSheet','birthdaySheet','scrollSheet','checkSheet','listSheet','fileMenu','settingsMenu'];
 
@@ -885,8 +896,8 @@ function applyLoadedData(imported, { fitResult = true } = {}) {
   layoutEdges = [];
   layoutFocusId = '';
   rebuildDataIndexes();
-  const preferFocus = nonPoolPeople.length > 1200;
-  focusMode = preferFocus;
+  const preferFocus = isLargeTree();
+  focusMode = false;
   focusId = null;
   activeFamily = '';
   rootIds = [...(imported.rootIds || [])];
@@ -1055,7 +1066,7 @@ async function loadDefaultData({ saveResult = true, fitResult = true } = {}) {
   refreshWelcomeMeta();
   updateHeaderMeta();
   if (saveResult) save();
-  if (fitResult) focusPreferredPerson({ preferFocus: focusMode || nonPoolPeople.length > 1200 });
+  if (fitResult) focusPreferredPerson({ preferFocus: focusMode || isLargeTree() });
   return loadedDefaultData;
 }
 function computeStartupStateNow() {
@@ -1064,11 +1075,11 @@ function computeStartupStateNow() {
   return startupState;
 }
 function dataWithClassicPositions() {
-  if (!savedClassicPositions) return data;
+  if (!savedClassicPositions && !focusLayoutRestore) return data;
   return {
     ...data,
     people: data.people.map(entry => {
-      const classic = savedClassicPositions.get(entry.id);
+      const classic = savedClassicPositions?.get(entry.id) || focusLayoutRestore?.get(entry.id);
       return classic ? { ...entry, x: classic.x, y: classic.y } : entry;
     })
   };
@@ -1129,7 +1140,7 @@ async function openWorkingFile() {
     startupStateSignals.defaultDataLoaded = false;
     computeStartupStateNow();
     updateHeaderMeta();
-    focusPreferredPerson({ preferFocus: focusMode || nonPoolPeople.length > 1200 });
+    focusPreferredPerson({ preferFocus: focusMode || isLargeTree() });
   } catch (err) {
     if (err?.name !== 'AbortError') alert('Arbeitsdatei konnte nicht geöffnet werden.');
   }
@@ -1892,6 +1903,45 @@ function updateWorldBounds() {
 }
 function updateMinimap(maxX, maxY, visiblePeople = null) {
   if ((!minimapInner || !minimapSvg) && (!overviewMap || !overviewSvg)) return;
+  const galaxyOverview = layoutMode === 'galaxy' && galaxyLayoutState && !galaxyActiveClusterId;
+  if (galaxyOverview) {
+    const surfaceSize = [
+      minimapInner?.clientWidth || 0,
+      minimapInner?.clientHeight || 0,
+      overviewMap?.clientWidth || 0,
+      overviewMap?.clientHeight || 0
+    ].join(':');
+    const signature = `galaxy:${maxX}:${maxY}:${surfaceSize}:${galaxyLayoutState.clusters.map(cluster =>
+      `${cluster.id},${cluster.x},${cluster.y},${cluster.count}`
+    ).join(';')}`;
+    if (signature === minimapRenderSignature) {
+      updateMinimapViewport();
+      return;
+    }
+    minimapRenderSignature = signature;
+    if (minimapInner && minimapSvg) {
+      minimapState = renderGalaxyMinimapSurface({
+        inner: minimapInner,
+        svg: minimapSvg,
+        maxX,
+        maxY,
+        fallbackWidth: 150,
+        fallbackHeight: 90
+      });
+    }
+    if (overviewMap && overviewSvg) {
+      overviewState = renderGalaxyMinimapSurface({
+        inner: overviewMap,
+        svg: overviewSvg,
+        maxX,
+        maxY,
+        fallbackWidth: 340,
+        fallbackHeight: 260
+      });
+    }
+    updateMinimapViewport();
+    return;
+  }
   const visible = visiblePeople ? new Set(visiblePeople.map(p => p.id)) : visibleIds();
   const sourcePeople = visiblePeople || data.people.filter(p => visible.has(p.id));
   const compactMinimap = sourcePeople.length > 1200;
@@ -1937,6 +1987,39 @@ function updateMinimap(maxX, maxY, visiblePeople = null) {
     });
   }
   updateMinimapViewport();
+}
+function renderGalaxyMinimapSurface({ inner, svg, maxX, maxY, fallbackWidth, fallbackHeight }) {
+  const mapW = inner.clientWidth || fallbackWidth;
+  const mapH = inner.clientHeight || fallbackHeight;
+  const scale = Math.min(mapW / maxX, mapH / maxY);
+  const offsetX = (mapW - maxX * scale) / 2;
+  const offsetY = (mapH - maxY * scale) / 2;
+  svg.setAttribute('viewBox', `0 0 ${mapW} ${mapH}`);
+  svg.replaceChildren();
+
+  for (const edge of galaxyLayoutState.edges) {
+    const from = galaxyLayoutState.clusterById.get(edge.from);
+    const to = galaxyLayoutState.clusterById.get(edge.to);
+    if (!from || !to) continue;
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', offsetX + from.x * scale);
+    line.setAttribute('y1', offsetY + from.y * scale);
+    line.setAttribute('x2', offsetX + to.x * scale);
+    line.setAttribute('y2', offsetY + to.y * scale);
+    line.setAttribute('class', 'galaxyMiniEdge');
+    svg.appendChild(line);
+  }
+  for (const cluster of galaxyLayoutState.clusters) {
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', offsetX + cluster.x * scale);
+    circle.setAttribute('cy', offsetY + cluster.y * scale);
+    circle.setAttribute('r', Math.max(3, Math.min(9, 3 + Math.sqrt(cluster.count) * 0.32)));
+    circle.setAttribute('fill', galaxyClusterColor(cluster));
+    circle.setAttribute('class', `galaxyMiniCluster${cluster.id === galaxyLayoutState.rootClusterId ? ' root' : ''}`);
+    circle.dataset.clusterId = cluster.id;
+    svg.appendChild(circle);
+  }
+  return { maxX, maxY, mapW, mapH, scale, offsetX, offsetY, mode: 'galaxy' };
 }
 function renderMinimapSurface({
   inner,
@@ -2171,7 +2254,7 @@ function fitFocusNeighborhood(id) {
     fitAll();
     return;
   }
-  fitPeople(people, nonPoolPeople.length > 1200 ? 0.82 : 0.72);
+  fitPeople(people, isLargeTree() ? 0.82 : 0.72);
 }
 function fitReadablePerson() {
   const id = focusMode && focusId ? focusId : (selected || preferredLandingPersonId());
@@ -2849,7 +2932,7 @@ function updateNameModeButton() {
   }
 }
 function updateLayoutButton() {
-  const labels = { classic: 'Klassisch', tree: 'Generationen', radial: 'Verwandtschaftskreis', galaxy: 'Familiengalaxie' };
+  const labels = { classic: 'Klassisch', tree: 'Generationen', radial: 'Verwandtschaftskreis', galaxy: 'Familienübersicht' };
   document.body.classList.toggle('treeLayout', layoutMode === 'tree');
   document.body.classList.toggle('radialLayout', layoutMode === 'radial');
   document.body.classList.toggle('galaxyLayout', layoutMode === 'galaxy');
@@ -2860,7 +2943,7 @@ function updateLayoutButton() {
     button.title = button.dataset.layoutMode === 'classic'
       ? 'Gespeicherte Kartenpositionen anzeigen'
       : button.dataset.layoutMode === 'galaxy'
-        ? 'Familien als interaktive Sternhaufen erkunden (Beta)'
+        ? 'Den gesamten Stammbaum als interaktive Familiencluster erkunden'
         : `${labels[button.dataset.layoutMode]} als fokussierte Leseansicht anzeigen`;
   });
   const hint = $('layoutModeHint');
@@ -2869,16 +2952,42 @@ function updateLayoutButton() {
     hint.textContent = layoutMode === 'classic'
       ? 'Klassisch zeigt die gespeicherten, bearbeitbaren Kartenpositionen.'
       : layoutMode === 'galaxy'
-        ? 'Galaxie β verdichtet Familien zu verknüpften Sternhaufen. Ein Cluster öffnet seine zeitlich gegliederten Personen.'
+        ? 'Die Familienübersicht verdichtet den gesamten Stammbaum zu verknüpften Clustern. Ein Cluster öffnet seine zeitlich gegliederten Personen.'
         : `${labels[layoutMode]} zeigt ${layoutVisibleIds?.size || 0} Personen rund um ${focus ? visibleName(focus) : 'die gewählte Person'} (maximal ${layoutMode === 'radial' ? 2 : 3} Beziehungsschritte).`;
+  }
+  const fitButton = $('fitBtn');
+  if (fitButton) {
+    const title = fitButton.querySelector('.settingsItemTitle');
+    const description = fitButton.querySelector('.settingsItemDescription');
+    const text = layoutMode === 'galaxy'
+      ? galaxyActiveClusterId ? 'Aktuellen Cluster zeigen' : 'Alle Familiencluster zeigen'
+      : focusMode ? 'Aktuellen Nahbereich zeigen' : 'Gesamten Baum zeigen';
+    if (title) title.textContent = text;
+    if (description) description.textContent = layoutMode === 'galaxy'
+      ? 'Passt die semantische Übersicht in den verfügbaren Bereich.'
+      : focusMode
+        ? 'Zentriert die sichtbare Verwandtschaft der gewählten Person.'
+        : 'Alle sichtbaren Knoten in die Ansicht passen.';
+    fitButton.setAttribute('aria-label', text);
   }
   updateGalaxyHud();
   const autoButton = $('autoBtn');
   if (autoButton) {
-    autoButton.disabled = !editMode;
-    autoButton.title = editMode
-      ? 'Klassische Kartenpositionen automatisch neu anordnen'
-      : 'Zum automatischen Aufräumen den Bearbeitungsmodus aktivieren.';
+    const derivedLargeTreeScope = isLargeTree() && focusMode;
+    autoButton.disabled = !editMode || derivedLargeTreeScope;
+    autoButton.title = derivedLargeTreeScope
+      ? 'Der Karten-Nahbereich wird automatisch aus Beziehungen erzeugt; der vollständige große Baum wird nicht neu berechnet.'
+      : editMode
+        ? 'Klassische Kartenpositionen automatisch neu anordnen'
+        : 'Zum automatischen Aufräumen den Bearbeitungsmodus aktivieren.';
+    const title = autoButton.querySelector('.settingsItemTitle');
+    const description = autoButton.querySelector('.settingsItemDescription');
+    if (title) title.textContent = derivedLargeTreeScope
+      ? 'Nahbereich wird automatisch angeordnet'
+      : 'Positionen automatisch aufräumen';
+    if (description) description.textContent = derivedLargeTreeScope
+      ? 'Nur der sichtbare Arbeitsausschnitt wird erzeugt; der Gesamtbaum bleibt performant.'
+      : 'Ordnet die klassische Ansicht kompakt neu an. Rückgängig ist möglich.';
   }
 }
 function updatePoolButton() {
@@ -2993,11 +3102,14 @@ function updateZoomClass() {
   world.classList.toggle('zoomCompactLevel', view.s >= 0.12 && view.s < 0.32);
   world.classList.toggle('zoomBranchActionsHidden', view.s < 0.55);
   world.style.setProperty('--inverse-view-scale', String(1 / Math.max(view.s, 0.01)));
+  world.style.setProperty('--galaxy-inverse-view-scale', String(1 / Math.max(view.s, 0.042)));
 }
 function updateFocusButton() {
   const btn = $('focusBtn');
   const quickBtn = $('quickFocus');
-  const text = focusMode ? 'Gesamten Baum zeigen' : 'Nahbereich zeigen';
+  const text = focusMode
+    ? isLargeTree() ? 'Zur Familienübersicht' : 'Gesamten Baum zeigen'
+    : 'Nahbereich zeigen';
   if (btn) {
     const title = btn.querySelector('.settingsItemTitle');
     const description = btn.querySelector('.settingsItemDescription');
@@ -3005,7 +3117,9 @@ function updateFocusButton() {
     else btn.textContent = text;
     if (description) {
       description.textContent = focusMode
-        ? 'Kehrt zur vollständigen Baumansicht zurück.'
+        ? isLargeTree()
+          ? 'Kehrt zur Übersicht aller Familiencluster zurück.'
+          : 'Kehrt zur vollständigen Baumansicht zurück.'
         : 'Zeigt zwei Generationen davor und danach.';
     }
     btn.classList.toggle('primary', focusMode);
@@ -3052,6 +3166,11 @@ function focusPreferredPerson({ preferFocus = false } = {}) {
   const id = preferredLandingPersonId();
   if (!id) return;
   selected = id;
+  if (preferFocus && isLargeTree()) {
+    render();
+    void openLargeTreeOverview();
+    return;
+  }
   if (preferFocus) {
     setFocusMode(true, id);
     return;
@@ -3067,6 +3186,7 @@ function setFocusMode(enabled, id = selected || focusId) {
   if (focusMode) selected = focusId;
   updateFocusButton();
   if (focusMode) applyFocusLayout(focusId);
+  updateLayoutButton();
   render();
   if (focusMode) fitFocusNeighborhood(focusId);
   else fit();
@@ -3083,19 +3203,126 @@ function restoreClassicPositions() {
     if (pos) { p.x = pos.x; p.y = pos.y; }
   }
 }
+function isLargeTree() {
+  return nonPoolPeople.length > largeTreeThreshold;
+}
+function galaxyLayoutSignature() {
+  return `${rootIds.join('.')}|${nonPoolPeople.map(entry => [
+    entry.id,
+    entry.lastName,
+    entry.birthName,
+    entry.name,
+    entry.born,
+    (entry.parents || []).join('.'),
+    (entry.partners || []).join('.'),
+    entry.partner || ''
+  ].join(':')).join(';')}`;
+}
+function galaxyLayoutInputPeople() {
+  return nonPoolPeople.map(entry => ({
+    id: entry.id,
+    name: entry.name,
+    lastName: entry.lastName,
+    birthName: entry.birthName,
+    born: entry.born,
+    parents: [...(entry.parents || [])],
+    partners: [...(entry.partners || [])],
+    partner: entry.partner || ''
+  }));
+}
+function buildGalaxyLayoutInWorker(signature) {
+  if (typeof Worker !== 'function') {
+    return Promise.resolve({
+      layout: buildGalaxyLayout(nonPoolPeople, { rootIds, maxNamedClusters: 48 }),
+      source: 'main-thread-fallback'
+    });
+  }
+  const requestId = ++galaxyLayoutRequestId;
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('./galaxy-layout-worker.js', import.meta.url), { type: 'module' });
+    const finish = () => worker.terminate();
+    worker.addEventListener('message', event => {
+      if (event.data?.requestId !== requestId) return;
+      finish();
+      if (event.data.error) reject(new Error(event.data.error));
+      else resolve({ layout: event.data.layout, source: 'worker' });
+    });
+    worker.addEventListener('error', event => {
+      finish();
+      reject(new Error(event.message || 'Familienübersicht konnte nicht berechnet werden.'));
+    });
+    worker.postMessage({
+      requestId,
+      people: galaxyLayoutInputPeople(),
+      options: { rootIds: [...rootIds], maxNamedClusters: 48 },
+      signature
+    });
+  });
+}
+function prepareGalaxyLayout() {
+  const signature = galaxyLayoutSignature();
+  if (galaxyLayoutCache?.signature === signature) {
+    return Promise.resolve(galaxyLayoutCache.layout);
+  }
+  if (galaxyLayoutPending?.signature === signature) return galaxyLayoutPending.promise;
+  const startedAt = performance.now();
+  const promise = buildGalaxyLayoutInWorker(signature)
+    .catch(() => ({
+      layout: buildGalaxyLayout(nonPoolPeople, { rootIds, maxNamedClusters: 48 }),
+      source: 'main-thread-fallback'
+    }))
+    .then(({ layout, source }) => {
+      galaxyLayoutMetrics = {
+        source,
+        durationMs: Math.round((performance.now() - startedAt) * 10) / 10
+      };
+      if (galaxyLayoutSignature() === signature) galaxyLayoutCache = { signature, layout };
+      return layout;
+    })
+    .finally(() => {
+      if (galaxyLayoutPending?.signature === signature) galaxyLayoutPending = null;
+    });
+  galaxyLayoutPending = { signature, promise };
+  return promise;
+}
+async function openLargeTreeOverview() {
+  if (!isLargeTree()) return setLayoutMode('galaxy', { allowInView: true });
+  const signature = galaxyLayoutSignature();
+  await runBusy('Familienübersicht wird aufgebaut …', async () => {
+    await prepareGalaxyLayout();
+    if (!isLargeTree() || galaxyLayoutSignature() !== signature) return;
+    if (layoutMode === 'galaxy') showGalaxyOverview();
+    else setLayoutMode('galaxy', { allowInView: true });
+  });
+  return layoutMode === 'galaxy';
+}
 function galaxyClusterColor(cluster) {
   return familyColor(cluster?.familyKeys?.[0] || cluster?.key || 'galaxy');
 }
 function fitGalaxyBounds(bounds, { maxScale = 0.58, minScale = minZoom } = {}) {
   if (!bounds || !main.clientWidth || !main.clientHeight) return false;
+  const mainRect = main.getBoundingClientRect();
+  const hudRect = galaxyHud && !galaxyHud.classList.contains('hidden')
+    ? galaxyHud.getBoundingClientRect()
+    : null;
+  const toolbarRect = document.querySelector('.toolbar')?.getBoundingClientRect();
+  const topPadding = hudRect ? Math.max(20, hudRect.bottom - mainRect.top + 16) : 20;
+  const bottomPadding = toolbarRect ? Math.max(20, mainRect.bottom - toolbarRect.top + 16) : 20;
+  const leftPadding = 20;
+  const rightPadding = 82;
   const width = Math.max(1, bounds.maxX - bounds.minX);
   const height = Math.max(1, bounds.maxY - bounds.minY);
-  const scale = Math.min(main.clientWidth / width, main.clientHeight / height);
+  const availableWidth = Math.max(1, main.clientWidth - leftPadding - rightPadding);
+  const availableHeight = Math.max(1, main.clientHeight - topPadding - bottomPadding);
+  const scale = Math.min(availableWidth / width, availableHeight / height);
   view.s = Math.max(minScale, Math.min(maxScale, scale));
-  view.x = -((bounds.minX + bounds.maxX) / 2) * view.s;
-  view.y = -((bounds.minY + bounds.maxY) / 2) * view.s;
+  view.x = -((bounds.minX + bounds.maxX) / 2) * view.s + (leftPadding - rightPadding) / 2;
+  view.y = -((bounds.minY + bounds.maxY) / 2) * view.s + (topPadding - bottomPadding) / 2;
   applyView();
   return true;
+}
+function minimumZoomForMode() {
+  return layoutMode === 'galaxy' && !galaxyActiveClusterId ? galaxyOverviewMinZoom : minZoom;
 }
 function focusGalaxyDetail(personId) {
   const position = galaxyDetailState?.positions?.get(String(personId));
@@ -3116,14 +3343,16 @@ function updateGalaxyHud() {
     ? galaxyLayoutState.clusterById.get(galaxyActiveClusterId)
     : null;
   $('galaxyBackBtn')?.classList.toggle('hidden', !cluster);
+  $('galaxyRelationsBtn')?.classList.toggle('hidden', !cluster);
+  if ($('galaxyExitBtn')) $('galaxyExitBtn').textContent = isLargeTree() ? 'Karten-Nahbereich' : 'Karten';
   if (cluster) {
     $('galaxyHudTitle').textContent = cluster.label;
     const omitted = galaxyDetailState?.omitted || 0;
     const shown = cluster.count - omitted;
-    $('galaxyHudText').textContent = `${shown.toLocaleString('de-DE')} von ${cluster.count.toLocaleString('de-DE')} Personen · ${cluster.period}${omitted ? ' · für die Beta-Ansicht begrenzt' : ''}. Weit herauszoomen oder „Zur Galaxie“ wählen.`;
+    $('galaxyHudText').textContent = `${shown.toLocaleString('de-DE')} von ${cluster.count.toLocaleString('de-DE')} Personen · ${cluster.period}${omitted ? ' · für eine flüssige Darstellung begrenzt' : ''}. „Verwandtschaft“ zeigt Beziehungen über Familiennamen hinweg.`;
   } else {
-    $('galaxyHudTitle').textContent = 'Familiengalaxie';
-    $('galaxyHudText').textContent = `${galaxyLayoutState.clusters.length.toLocaleString('de-DE')} Sternhaufen · Größe entspricht der Personenzahl · Linien verbinden Familien. Cluster antippen, um hineinzuzoomen.`;
+    $('galaxyHudTitle').textContent = 'Familienübersicht';
+    $('galaxyHudText').textContent = `${nonPoolPeople.length.toLocaleString('de-DE')} Personen in ${galaxyLayoutState.clusters.length.toLocaleString('de-DE')} Familienclustern · Größe entspricht der Personenzahl · Linien zeigen Beziehungen zwischen Familien.`;
   }
 }
 function applyGalaxyOverviewPositions() {
@@ -3144,7 +3373,17 @@ function applyGalaxyOverviewPositions() {
   return true;
 }
 function applyGalaxyLayout() {
-  galaxyLayoutState = buildGalaxyLayout(nonPoolPeople, { rootIds, maxNamedClusters: 48 });
+  const signature = galaxyLayoutSignature();
+  const cached = galaxyLayoutCache?.signature === signature;
+  const startedAt = performance.now();
+  galaxyLayoutState = cached ? galaxyLayoutCache.layout : buildGalaxyLayout(nonPoolPeople, { rootIds, maxNamedClusters: 48 });
+  if (!cached) {
+    galaxyLayoutMetrics = {
+      source: 'main-thread',
+      durationMs: Math.round((performance.now() - startedAt) * 10) / 10
+    };
+  }
+  galaxyLayoutCache = { signature, layout: galaxyLayoutState };
   return applyGalaxyOverviewPositions();
 }
 function renderGalaxyClusters() {
@@ -3233,7 +3472,7 @@ function showGalaxyOverview({ restoreFocus = false } = {}) {
   applyGalaxyOverviewPositions();
   world.classList.add('galaxyZooming');
   render();
-  fitGalaxyBounds(galaxyLayoutState.bounds, { maxScale: 0.58 });
+  fitGalaxyBounds(galaxyLayoutState.bounds, { maxScale: 0.58, minScale: galaxyOverviewMinZoom });
   window.setTimeout(() => world.classList.remove('galaxyZooming'), 280);
   if (restoreFocus && previousClusterId) {
     window.setTimeout(() => galaxyClustersElement
@@ -3464,19 +3703,26 @@ function setLayoutMode(next, { allowInView = false } = {}) {
   updateLayoutButton();
   render();
   if (layoutMode === 'classic') {
-    if (nextFocusId) jumpToPerson(nextFocusId);
+    if (isLargeTree() && nextFocusId) setFocusMode(true, nextFocusId);
+    else if (nextFocusId) jumpToPerson(nextFocusId);
     else fit();
   } else if (layoutMode === 'galaxy') {
-    fitGalaxyBounds(galaxyLayoutState?.bounds, { maxScale: 0.58 });
+    fitGalaxyBounds(galaxyLayoutState?.bounds, { maxScale: 0.58, minScale: galaxyOverviewMinZoom });
   } else {
     fitDerivedLayout();
   }
   return true;
 }
-function applyAutomaticClassicLayout() {
-  if (!editMode) return false;
-  const commandBefore = captureCommandState();
+function applyAutomaticClassicLayout({ allowLargeTree = false } = {}) {
+  if (!editMode || (isLargeTree() && !allowLargeTree)) return false;
+  if (focusMode) {
+    restoreFocusLayoutPositions();
+    focusMode = false;
+    focusId = null;
+    updateFocusButton();
+  }
   if (layoutMode !== 'classic') restoreClassicPositions();
+  const commandBefore = captureCommandState();
   layoutMode = 'classic';
   savedClassicPositions = null;
   clearDerivedLayoutState();
@@ -3686,9 +3932,9 @@ function render() {
       el.dataset.collapseId = canCollapse ? p.id : '';
       el.dataset.renderKey = renderKey;
       el.dataset.renderSignature = signature;
-      if (editMode && layoutMode === 'classic') el.title = 'Ziehen: Person bewegen · Shift + Ziehen: gesamten Ast bewegen';
+      if (editMode && layoutMode === 'classic' && !focusMode) el.title = 'Ziehen: Person bewegen · Shift + Ziehen: gesamten Ast bewegen';
       el.innerHTML = html;
-      bindCanvasCard(el, { draggable: editMode && layoutMode === 'classic' });
+      bindCanvasCard(el, { draggable: editMode && layoutMode === 'classic' && !focusMode });
     }
     desiredCards.push(el);
   }
@@ -3954,7 +4200,7 @@ window.addEventListener('pointerup', e => {
     selection = null;
     if (width > 12 && height > 12) {
       const ratio = Math.min(main.clientWidth / width, main.clientHeight / height) * 0.88;
-      zoomTo(Math.max(minZoom, Math.min(maxZoom, view.s * ratio)), rect.left + width / 2, rect.top + height / 2);
+      zoomTo(Math.max(minimumZoomForMode(), Math.min(maxZoom, view.s * ratio)), rect.left + width / 2, rect.top + height / 2);
     }
     pan = null;
     return;
@@ -4048,7 +4294,7 @@ main.addEventListener('touchmove', e => {
   e.preventDefault();
   const a = e.touches[0], b = e.touches[1];
   const mid = midpoint(a,b);
-  const ns = Math.max(minZoom, Math.min(maxZoom, pinch.s * distance(a,b) / Math.max(1, pinch.d)));
+  const ns = Math.max(minimumZoomForMode(), Math.min(maxZoom, pinch.s * distance(a,b) / Math.max(1, pinch.d)));
   view.x = mid.x - (pinch.mid.x - pinch.x) * (ns / pinch.s);
   view.y = mid.y - (pinch.mid.y - pinch.y) * (ns / pinch.s);
   view.s = ns;
@@ -4064,7 +4310,7 @@ main.addEventListener('touchend', e => {
 
 // -- Zoom and fit helpers ---------------------------------------------
 function zoomTo(ns, cx = null, cy = null) {
-  const targetScale = Math.max(minZoom, Math.min(maxZoom, ns));
+  const targetScale = Math.max(minimumZoomForMode(), Math.min(maxZoom, ns));
   if (layoutMode === 'galaxy' && galaxyActiveClusterId && targetScale < 0.18) {
     showGalaxyOverview();
     return;
@@ -4084,7 +4330,7 @@ function fit() {
   if (layoutMode === 'galaxy') {
     return galaxyActiveClusterId
       ? fitGalaxyBounds(galaxyDetailState?.bounds, { maxScale: 0.82, minScale: 0.24 })
-      : fitGalaxyBounds(galaxyLayoutState?.bounds, { maxScale: 0.58 });
+      : fitGalaxyBounds(galaxyLayoutState?.bounds, { maxScale: 0.58, minScale: galaxyOverviewMinZoom });
   }
   updateWorldBounds();
   const ids = visibleIds();
@@ -6211,6 +6457,15 @@ async function submitExportDialog() {
 }
 function openOverview(trigger = overviewButton) {
   if (!overviewSheet || !overviewMap) return false;
+  const cluster = galaxyActiveClusterId ? galaxyLayoutState?.clusterById.get(galaxyActiveClusterId) : null;
+  const title = $('overviewTitle');
+  const description = $('overviewDescription');
+  if (title) title.textContent = layoutMode === 'galaxy'
+    ? cluster ? `Cluster ${cluster.label}` : 'Familienübersicht'
+    : focusMode ? 'Nahbereich im Stammbaum' : 'Überblick';
+  if (description) description.textContent = layoutMode === 'galaxy' && !cluster
+    ? 'Jeder Punkt steht für einen Familiencluster. Tippe einen Cluster an, um seine Personen zu öffnen.'
+    : 'Tippe auf einen Bereich, um den sichtbaren Ausschnitt dorthin zu verschieben.';
   overviewFocusReturnTarget = trigger instanceof HTMLElement ? trigger : overviewButton;
   setDialogVisibility(overviewSheet, true);
   overviewButton?.setAttribute('aria-expanded', 'true');
@@ -6365,6 +6620,10 @@ function maybeOpenRequiredRootSelection() {
 function openStartFromNavigation() {
   closeSecondaryPanelsForNavigation();
   updateMainNavCurrent('startNavBtn');
+  if (isLargeTree()) {
+    void openLargeTreeOverview();
+    return;
+  }
   const id = preferredLandingPersonId();
   if (!id) {
     fit();
@@ -7144,6 +7403,12 @@ overviewButton?.addEventListener('click', () => openOverview(overviewButton));
 $('overviewCloseBtn')?.addEventListener('click', () => closeOverview());
 overviewSheet?.addEventListener('pointerdown', event => event.stopPropagation());
 overviewMap?.addEventListener('click', event => {
+  const clusterId = event.target.closest?.('[data-cluster-id]')?.dataset.clusterId;
+  if (layoutMode === 'galaxy' && !galaxyActiveClusterId && clusterId) {
+    closeOverview({ returnFocus: false });
+    openGalaxyCluster(clusterId);
+    return;
+  }
   panFromMinimapEvent(event, overviewMap, overviewState);
 });
 offscreenIndicators?.addEventListener('pointerdown', event => event.stopPropagation());
@@ -7229,6 +7494,10 @@ $('modeBtn').addEventListener('click', async event => {
 $('addBtn').addEventListener('click', () => { selected = null; pendingNewPos = null; openSheet(null); });
 $('focusBtn')?.addEventListener('click', () => {
   closeSettingsMenu();
+  if (focusMode && isLargeTree()) {
+    void openLargeTreeOverview();
+    return;
+  }
   if (layoutMode !== 'classic') setLayoutMode('classic');
   if (focusMode) {
     setFocusMode(false);
@@ -7238,6 +7507,10 @@ $('focusBtn')?.addEventListener('click', () => {
   if (id) setFocusMode(true, id);
 });
 $('quickFocus').addEventListener('click', () => {
+  if (focusMode && isLargeTree()) {
+    void openLargeTreeOverview();
+    return;
+  }
   if (layoutMode !== 'classic') setLayoutMode('classic');
   if (focusMode) setFocusMode(false);
   else if (selected) setFocusMode(true, selected);
@@ -7298,7 +7571,7 @@ document.addEventListener('click', e => {
   closeSettingsMenu();
 });
 $('fitBtn').addEventListener('click', () => {
-  fitAll();
+  fit();
   closeSettingsMenu();
 });
 $('rootSelectionBtn')?.addEventListener('click', () => {
@@ -7417,11 +7690,15 @@ $('navClearBtn').addEventListener('click', () => jumpToFamily(''));
 $('navSearch').addEventListener('input', renderNavigator);
 document.querySelectorAll('[data-layout-mode]').forEach(button => {
   button.addEventListener('click', () => {
-    setLayoutMode(button.dataset.layoutMode);
+    if (button.dataset.layoutMode === 'galaxy' && isLargeTree()) void openLargeTreeOverview();
+    else setLayoutMode(button.dataset.layoutMode);
     closeSettingsMenu();
   });
 });
 $('galaxyBackBtn')?.addEventListener('click', () => showGalaxyOverview({ restoreFocus: true }));
+$('galaxyRelationsBtn')?.addEventListener('click', () => {
+  if (selected) setLayoutMode('radial', { allowInView: true });
+});
 $('galaxyExitBtn')?.addEventListener('click', () => setLayoutMode('classic'));
 $('nameModeBtn').addEventListener('click', () => {
   cycleViewPreset();
@@ -7504,6 +7781,7 @@ document.querySelector('[data-testid=\"welcome-demo\"]')?.addEventListener('clic
 });
 document.querySelector('[data-testid=\"welcome-continue\"]')?.addEventListener('click', () => {
   hideWelcomeSurface();
+  if (isLargeTree()) focusPreferredPerson({ preferFocus: true });
 });
 if (minimap) {
   minimap.addEventListener('click', e => {
@@ -7564,7 +7842,7 @@ async function confirmImport() {
     save();
     hideWelcomeSurface();
     refreshWelcomeMeta();
-    focusPreferredPerson({ preferFocus: focusMode || nonPoolPeople.length > 1200 });
+    focusPreferredPerson({ preferFocus: focusMode || isLargeTree() });
   });
   return true;
 }
@@ -7746,7 +8024,18 @@ if (window.location?.search?.includes('ux-debug=1')) {
         period: cluster.period
       })) || []
     }),
-    openGalaxyClusterForTest: clusterId => openGalaxyCluster(clusterId)
+    getLargeTreeState: () => ({
+      active: isLargeTree(),
+      threshold: largeTreeThreshold,
+      personCount: nonPoolPeople.length,
+      overviewCached: galaxyLayoutCache?.signature === galaxyLayoutSignature(),
+      overviewPending: !!galaxyLayoutPending,
+      classicScoped: layoutMode === 'classic' && focusMode,
+      layoutSource: galaxyLayoutMetrics.source,
+      layoutDurationMs: galaxyLayoutMetrics.durationMs
+    }),
+    openGalaxyClusterForTest: clusterId => openGalaxyCluster(clusterId),
+    applyFullAutoLayoutForTest: () => applyAutomaticClassicLayout({ allowLargeTree: true })
   };
 }
 computeStartupStateNow();

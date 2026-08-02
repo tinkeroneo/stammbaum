@@ -38,6 +38,40 @@ test('bereinigter US-Zweig lädt, ist verknüpft und visuell prüfbar', async ({
   expect(importedState.people.filter(person => person.pool)).toHaveLength(1093);
   expect(importedState.people.find(person => person.id === 'fb0001')?.parents).toEqual(['fbbridge0001']);
   expect(importedState.people.find(person => person.id === 'fbbridge0001')?.parents).toEqual(['p334', 'p335']);
+  await expect.poll(
+    () => page.evaluate(() => window.__uxDebug.getDataSnapshot().layoutMode),
+    { timeout: 30_000 }
+  ).toBe('galaxy');
+  expect(await page.evaluate(() => window.__uxDebug.getLargeTreeState())).toMatchObject({
+    active: true,
+    personCount: 3245,
+    overviewCached: true,
+    overviewPending: false,
+    layoutSource: 'worker'
+  });
+  await expect(page.locator('#nodes > .person')).toHaveCount(0);
+  const clusterMetrics = await page.locator('.galaxyCluster').evaluateAll(elements => {
+    const boxes = elements.map(element => element.getBoundingClientRect());
+    let largestOverlap = 0;
+    for (let left = 0; left < boxes.length; left += 1) {
+      for (let right = left + 1; right < boxes.length; right += 1) {
+        const a = boxes[left];
+        const b = boxes[right];
+        const area = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left))
+          * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+        if (area > 0) largestOverlap = Math.max(largestOverlap, area / Math.min(a.width * a.height, b.width * b.height));
+      }
+    }
+    return {
+      count: boxes.length,
+      minimumTarget: Math.min(...boxes.map(box => Math.min(box.width, box.height))),
+      largestOverlap
+    };
+  });
+  expect(clusterMetrics.count).toBe(53);
+  expect(clusterMetrics.minimumTarget).toBeGreaterThanOrEqual(44);
+  expect(clusterMetrics.largestOverlap).toBeLessThan(0.2);
+  await page.screenshot({ path: path.join(screenshotDir, 'familienuebersicht-v5-1440x900.png') });
 
   await page.getByTestId('person-search-open').click();
   await page.getByTestId('person-search').fill('Ungeklärter Bodensteiner-Anschluss');

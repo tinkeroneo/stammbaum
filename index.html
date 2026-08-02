@@ -108,15 +108,17 @@
                 <section class="galaxyHud hidden" id="galaxyHud" data-testid="galaxy-hud"
                     aria-live="polite" aria-labelledby="galaxyHudTitle">
                     <div>
-                        <span class="galaxyBeta">Beta</span>
-                        <strong id="galaxyHudTitle">Familiengalaxie</strong>
+                        <span class="galaxyBeta">Übersicht</span>
+                        <strong id="galaxyHudTitle">Familienübersicht</strong>
                         <p id="galaxyHudText">Familiencluster antippen, um hineinzuzoomen.</p>
                     </div>
                     <div class="galaxyHudActions">
                         <button type="button" class="pill hidden" id="galaxyBackBtn"
                             data-testid="galaxy-back">Zur Galaxie</button>
+                        <button type="button" class="pill hidden" id="galaxyRelationsBtn"
+                            data-testid="galaxy-relations">Verwandtschaft</button>
                         <button type="button" class="pill" id="galaxyExitBtn"
-                            data-testid="galaxy-exit">Klassisch</button>
+                            data-testid="galaxy-exit">Karten</button>
                     </div>
                 </section>
             </section>
@@ -192,7 +194,7 @@
                                 <button type="button" class="layoutChoice" data-layout-mode="radial"
                                     data-testid="layout-radial" aria-label="Fokussierter Verwandtschaftskreis" aria-pressed="false">Kreis</button>
                                 <button type="button" class="layoutChoice galaxyLayoutChoice" data-layout-mode="galaxy"
-                                    data-testid="layout-galaxy" aria-label="Familiengalaxie, Beta" aria-pressed="false">Galaxie β</button>
+                                    data-testid="layout-galaxy" aria-label="Familienübersicht" aria-pressed="false">Galaxie</button>
                             </div>
                             <p class="settingsSectionHint" id="layoutModeHint">Klassisch zeigt die gespeicherten, bearbeitbaren Kartenpositionen.</p>
                         </div>
@@ -536,7 +538,7 @@
                 <div class="overviewTop">
                     <div>
                         <h2 id="overviewTitle">Überblick</h2>
-                        <p>Tippe auf einen Bereich, um den sichtbaren Ausschnitt dorthin zu verschieben.</p>
+                        <p id="overviewDescription">Tippe auf einen Bereich, um den sichtbaren Ausschnitt dorthin zu verschieben.</p>
                     </div>
                     <button type="button" class="pill" id="overviewCloseBtn" data-testid="overview-close"
                         aria-label="Überblick schließen">Schließen</button>
