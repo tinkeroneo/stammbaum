@@ -18,7 +18,7 @@ test('ES-Modulgraph lädt ohne Browserfehler und startet die App', async ({ page
 test('öffentliche Leaf-Module sind unabhängig importierbar', async ({ page }) => {
   await page.goto('/');
   const exportsByModule = await page.evaluate(async () => {
-    const names = ['data-model', 'selectors', 'commands', 'persistence', 'viewport', 'layout', 'render', 'dialogs', 'app-shell'];
+    const names = ['data-model', 'selectors', 'commands', 'persistence', 'viewport', 'layout', 'galaxy-layout', 'render', 'dialogs', 'app-shell'];
     return Object.fromEntries(await Promise.all(names.map(async name => [
       name,
       Object.keys(await import(`/modules/${name}.js`)).sort()
@@ -32,6 +32,7 @@ test('öffentliche Leaf-Module sind unabhängig importierbar', async ({ page }) 
       'normalizeTreeData', 'presumedLivingAgeLimit', 'uniqueIds'
     ],
     dialogs: ['dialogFocusableElements', 'dialogFocusableSelector'],
+    'galaxy-layout': ['buildGalaxyClusterDetail', 'buildGalaxyLayout'],
     layout: ['groupRowsByTolerance'],
     persistence: ['readJsonStorage', 'serializeTree'],
     render: ['escapeHtml', 'reconcileKeyedChildren'],

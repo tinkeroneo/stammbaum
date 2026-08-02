@@ -6,6 +6,7 @@ import { clampViewport } from './viewport.js';
 import { groupRowsByTolerance } from './layout.js';
 import { escapeHtml as esc, reconcileKeyedChildren } from './render.js';
 import { dialogFocusableElements } from './dialogs.js';
+import { buildGalaxyClusterDetail, buildGalaxyLayout } from './galaxy-layout.js';
 
 (() => {
 'use strict';
@@ -79,6 +80,8 @@ const world = $('world');
 const nodes = $('nodes');
 const lines = $('lines');
 const generationBands = $('generationBands');
+const galaxyClustersElement = $('galaxyClusters');
+const galaxyHud = $('galaxyHud');
 const selectionRect = $('selectionRect');
 const minimap = $('minimap');
 const minimapInner = minimap ? minimap.querySelector('.minimapInner') : null;
@@ -108,6 +111,9 @@ let layoutDistanceById = new Map();
 let layoutEdges = [];
 let layoutFocusId = '';
 let layoutCenter = { x: 1800, y: 1500 };
+let galaxyLayoutState = null;
+let galaxyActiveClusterId = '';
+let galaxyDetailState = null;
 let rootIds = [...(data.rootIds || [])];
 let temporaryRootId = '';
 let rootSelectionDeferredForDataset = false;
@@ -2843,24 +2849,30 @@ function updateNameModeButton() {
   }
 }
 function updateLayoutButton() {
-  const labels = { classic: 'Klassisch', tree: 'Generationen', radial: 'Verwandtschaftskreis' };
+  const labels = { classic: 'Klassisch', tree: 'Generationen', radial: 'Verwandtschaftskreis', galaxy: 'Familiengalaxie' };
   document.body.classList.toggle('treeLayout', layoutMode === 'tree');
   document.body.classList.toggle('radialLayout', layoutMode === 'radial');
+  document.body.classList.toggle('galaxyLayout', layoutMode === 'galaxy');
   document.querySelectorAll('[data-layout-mode]').forEach(button => {
     const active = button.dataset.layoutMode === layoutMode;
     button.setAttribute('aria-pressed', String(active));
     button.disabled = false;
     button.title = button.dataset.layoutMode === 'classic'
       ? 'Gespeicherte Kartenpositionen anzeigen'
-      : `${labels[button.dataset.layoutMode]} als fokussierte Leseansicht anzeigen`;
+      : button.dataset.layoutMode === 'galaxy'
+        ? 'Familien als interaktive Sternhaufen erkunden (Beta)'
+        : `${labels[button.dataset.layoutMode]} als fokussierte Leseansicht anzeigen`;
   });
   const hint = $('layoutModeHint');
   if (hint) {
     const focus = person(layoutFocusId);
     hint.textContent = layoutMode === 'classic'
       ? 'Klassisch zeigt die gespeicherten, bearbeitbaren Kartenpositionen.'
-      : `${labels[layoutMode]} zeigt ${layoutVisibleIds?.size || 0} Personen rund um ${focus ? visibleName(focus) : 'die gewählte Person'} (maximal ${layoutMode === 'radial' ? 2 : 3} Beziehungsschritte).`;
+      : layoutMode === 'galaxy'
+        ? 'Galaxie β verdichtet Familien zu verknüpften Sternhaufen. Ein Cluster öffnet seine zeitlich gegliederten Personen.'
+        : `${labels[layoutMode]} zeigt ${layoutVisibleIds?.size || 0} Personen rund um ${focus ? visibleName(focus) : 'die gewählte Person'} (maximal ${layoutMode === 'radial' ? 2 : 3} Beziehungsschritte).`;
   }
+  updateGalaxyHud();
   const autoButton = $('autoBtn');
   if (autoButton) {
     autoButton.disabled = !editMode;
@@ -3071,6 +3083,165 @@ function restoreClassicPositions() {
     if (pos) { p.x = pos.x; p.y = pos.y; }
   }
 }
+function galaxyClusterColor(cluster) {
+  return familyColor(cluster?.familyKeys?.[0] || cluster?.key || 'galaxy');
+}
+function fitGalaxyBounds(bounds, { maxScale = 0.58, minScale = minZoom } = {}) {
+  if (!bounds || !main.clientWidth || !main.clientHeight) return false;
+  const width = Math.max(1, bounds.maxX - bounds.minX);
+  const height = Math.max(1, bounds.maxY - bounds.minY);
+  const scale = Math.min(main.clientWidth / width, main.clientHeight / height);
+  view.s = Math.max(minScale, Math.min(maxScale, scale));
+  view.x = -((bounds.minX + bounds.maxX) / 2) * view.s;
+  view.y = -((bounds.minY + bounds.maxY) / 2) * view.s;
+  applyView();
+  return true;
+}
+function focusGalaxyDetail(personId) {
+  const position = galaxyDetailState?.positions?.get(String(personId));
+  if (!position) return fitGalaxyBounds(galaxyDetailState?.bounds, { maxScale: 0.82, minScale: 0.24 });
+  const readableScale = main.clientWidth < 700 ? 0.72 : 0.78;
+  view.s = readableScale;
+  view.x = -position.x * view.s;
+  view.y = -position.y * view.s;
+  applyView();
+  return true;
+}
+function updateGalaxyHud() {
+  if (!galaxyHud) return;
+  const active = layoutMode === 'galaxy' && galaxyLayoutState;
+  galaxyHud.classList.toggle('hidden', !active);
+  if (!active) return;
+  const cluster = galaxyActiveClusterId
+    ? galaxyLayoutState.clusterById.get(galaxyActiveClusterId)
+    : null;
+  $('galaxyBackBtn')?.classList.toggle('hidden', !cluster);
+  if (cluster) {
+    $('galaxyHudTitle').textContent = cluster.label;
+    const omitted = galaxyDetailState?.omitted || 0;
+    const shown = cluster.count - omitted;
+    $('galaxyHudText').textContent = `${shown.toLocaleString('de-DE')} von ${cluster.count.toLocaleString('de-DE')} Personen · ${cluster.period}${omitted ? ' · für die Beta-Ansicht begrenzt' : ''}. Weit herauszoomen oder „Zur Galaxie“ wählen.`;
+  } else {
+    $('galaxyHudTitle').textContent = 'Familiengalaxie';
+    $('galaxyHudText').textContent = `${galaxyLayoutState.clusters.length.toLocaleString('de-DE')} Sternhaufen · Größe entspricht der Personenzahl · Linien verbinden Familien. Cluster antippen, um hineinzuzoomen.`;
+  }
+}
+function applyGalaxyOverviewPositions() {
+  if (!galaxyLayoutState) return false;
+  galaxyActiveClusterId = '';
+  galaxyDetailState = null;
+  layoutVisibleIds = new Set(nonPoolPeople.map(entry => entry.id));
+  layoutFocusId = galaxyLayoutState.clusterById.get(galaxyLayoutState.rootClusterId)?.representativeId || '';
+  for (const cluster of galaxyLayoutState.clusters) {
+    cluster.memberIds.forEach(id => {
+      const entry = person(id);
+      if (!entry) return;
+      entry.x = cluster.x;
+      entry.y = cluster.y;
+    });
+  }
+  updateGalaxyHud();
+  return true;
+}
+function applyGalaxyLayout() {
+  galaxyLayoutState = buildGalaxyLayout(nonPoolPeople, { rootIds, maxNamedClusters: 48 });
+  return applyGalaxyOverviewPositions();
+}
+function renderGalaxyClusters() {
+  if (!galaxyClustersElement) return;
+  if (layoutMode !== 'galaxy' || !galaxyLayoutState || galaxyActiveClusterId) {
+    if (galaxyClustersElement.childElementCount) galaxyClustersElement.replaceChildren();
+    return;
+  }
+  const existing = new Map([...galaxyClustersElement.children].map(element => [element.dataset.clusterId, element]));
+  const desired = [];
+  for (const cluster of galaxyLayoutState.clusters) {
+    let button = existing.get(cluster.id);
+    if (!button) {
+      button = document.createElement('button');
+      button.type = 'button';
+      button.addEventListener('click', event => {
+        event.stopPropagation();
+        openGalaxyCluster(button.dataset.clusterId, { trigger: button });
+      });
+    }
+    const color = galaxyClusterColor(cluster);
+    const size = Math.round(Math.min(116, 66 + Math.sqrt(cluster.count) * 5));
+    button.className = `galaxyCluster${cluster.id === galaxyLayoutState.rootClusterId ? ' root' : ''}`;
+    button.style.left = `${cluster.x}px`;
+    button.style.top = `${cluster.y}px`;
+    button.style.setProperty('--cluster-color', color);
+    button.style.setProperty('--cluster-size', `${size}px`);
+    button.dataset.clusterId = cluster.id;
+    button.dataset.testid = `galaxy-cluster-${cluster.testId}`;
+    button.setAttribute('aria-label', `${cluster.label}, ${cluster.count} Personen, ${cluster.period}. Cluster öffnen`);
+    button.innerHTML = `<strong>${esc(cluster.label)}</strong><span>${cluster.count.toLocaleString('de-DE')} · ${esc(cluster.period)}</span>`;
+    desired.push(button);
+  }
+  reconcileKeyedChildren(galaxyClustersElement, desired);
+}
+function renderGalaxyConnections() {
+  if (!galaxyLayoutState) return;
+  const maxWeight = Math.max(1, ...galaxyLayoutState.edges.map(edge => edge.weight));
+  for (const edge of galaxyLayoutState.edges) {
+    const from = galaxyLayoutState.clusterById.get(edge.from);
+    const to = galaxyLayoutState.clusterById.get(edge.to);
+    if (!from || !to) continue;
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const length = Math.max(1, Math.hypot(dx, dy));
+    const bend = Math.min(260, length * 0.08);
+    const cx = (from.x + to.x) / 2 - dy / length * bend;
+    const cy = (from.y + to.y) / 2 + dx / length * bend;
+    path.setAttribute('d', `M ${from.x} ${from.y} Q ${Math.round(cx)} ${Math.round(cy)} ${to.x} ${to.y}`);
+    path.setAttribute('class', `galaxyEdge${edge.weight >= Math.max(3, maxWeight * 0.45) ? ' strong' : ''}`);
+    path.style.strokeWidth = `${Math.min(7, 1.4 + edge.weight / maxWeight * 4.6)}px`;
+    lines.appendChild(path);
+  }
+}
+function openGalaxyCluster(clusterId, { focusPersonId = '', trigger = null } = {}) {
+  if (layoutMode !== 'galaxy' || !galaxyLayoutState?.clusterById.has(clusterId)) return false;
+  galaxyActiveClusterId = clusterId;
+  galaxyDetailState = buildGalaxyClusterDetail(galaxyLayoutState, clusterId, nonPoolPeople, {
+    maxPeople: 160,
+    focusPersonId
+  });
+  layoutVisibleIds = galaxyDetailState.ids;
+  galaxyDetailState.positions.forEach((position, id) => {
+    const entry = person(id);
+    if (!entry) return;
+    entry.x = position.x;
+    entry.y = position.y;
+  });
+  const cluster = galaxyLayoutState.clusterById.get(clusterId);
+  selected = galaxyDetailState.ids.has(focusPersonId) ? focusPersonId : cluster.representativeId;
+  layoutFocusId = selected;
+  updateGalaxyHud();
+  world.classList.add('galaxyZooming');
+  focusGalaxyDetail(selected);
+  render();
+  window.setTimeout(() => world.classList.remove('galaxyZooming'), 280);
+  if (trigger instanceof HTMLElement && document.activeElement === trigger) {
+    window.setTimeout(() => nodes.querySelector(`[data-member-id="${CSS.escape(selected)}"]`)?.focus({ preventScroll: true }), 0);
+  }
+  return true;
+}
+function showGalaxyOverview({ restoreFocus = false } = {}) {
+  if (layoutMode !== 'galaxy' || !galaxyLayoutState) return false;
+  const previousClusterId = galaxyActiveClusterId;
+  applyGalaxyOverviewPositions();
+  world.classList.add('galaxyZooming');
+  render();
+  fitGalaxyBounds(galaxyLayoutState.bounds, { maxScale: 0.58 });
+  window.setTimeout(() => world.classList.remove('galaxyZooming'), 280);
+  if (restoreFocus && previousClusterId) {
+    window.setTimeout(() => galaxyClustersElement
+      ?.querySelector(`[data-cluster-id="${CSS.escape(previousClusterId)}"]`)
+      ?.focus({ preventScroll: true }), 0);
+  }
+  return true;
+}
 function relationComponents() {
   return [...relationComponentIds].sort((a, b) => {
     const ax = Math.min(...a.map(id => person(id)?.x ?? 0));
@@ -3084,6 +3255,11 @@ function clearDerivedLayoutState() {
   layoutDistanceById = new Map();
   layoutEdges = [];
   layoutFocusId = '';
+  galaxyLayoutState = null;
+  galaxyActiveClusterId = '';
+  galaxyDetailState = null;
+  galaxyClustersElement?.replaceChildren();
+  galaxyHud?.classList.add('hidden');
 }
 function layoutFocusPersonId(preferredId = selected) {
   return person(preferredId) && !person(preferredId).pool
@@ -3258,8 +3434,9 @@ function fitDerivedLayout() {
   applyView();
 }
 function setLayoutMode(next, { allowInView = false } = {}) {
-  if (!['classic', 'tree', 'radial'].includes(next)) return false;
+  if (!['classic', 'tree', 'radial', 'galaxy'].includes(next)) return false;
   const nextFocusId = layoutFocusPersonId();
+  if (next === 'galaxy' && next === layoutMode && galaxyActiveClusterId) return showGalaxyOverview();
   if (next === layoutMode && (next === 'classic' || nextFocusId === layoutFocusId)) return false;
   if (focusMode) {
     restoreFocusLayoutPositions();
@@ -3274,6 +3451,7 @@ function setLayoutMode(next, { allowInView = false } = {}) {
     savedClassicPositions = null;
     clearDerivedLayoutState();
   } else {
+    clearDerivedLayoutState();
     selected = nextFocusId;
     if (editMode) {
       editMode = false;
@@ -3281,12 +3459,15 @@ function setLayoutMode(next, { allowInView = false } = {}) {
     }
     if (layoutMode === 'tree') applyTreeLayout(nextFocusId);
     if (layoutMode === 'radial') applyRadialLayout(nextFocusId);
+    if (layoutMode === 'galaxy') applyGalaxyLayout();
   }
   updateLayoutButton();
   render();
   if (layoutMode === 'classic') {
     if (nextFocusId) jumpToPerson(nextFocusId);
     else fit();
+  } else if (layoutMode === 'galaxy') {
+    fitGalaxyBounds(galaxyLayoutState?.bounds, { maxScale: 0.58 });
   } else {
     fitDerivedLayout();
   }
@@ -3370,12 +3551,16 @@ function render() {
   updateZoomClass();
   const visible = visibleIds();
   const visiblePeople = nonPoolPeople.filter(p => visible.has(p.id));
-  renderVirtualizationActive = shouldVirtualizePeople(visiblePeople);
-  const renderedPeople = renderVirtualizationActive ? viewportPeopleSlice(visiblePeople) : visiblePeople;
+  const galaxyOverview = layoutMode === 'galaxy' && !galaxyActiveClusterId;
+  renderGalaxyClusters();
+  renderVirtualizationActive = !galaxyOverview && shouldVirtualizePeople(visiblePeople);
+  const renderedPeople = galaxyOverview
+    ? []
+    : renderVirtualizationActive ? viewportPeopleSlice(visiblePeople) : visiblePeople;
   const renderedIds = new Set(renderedPeople.map(p => p.id));
-  const showGenerationBands = layoutMode !== 'radial' && !renderVirtualizationActive && visiblePeople.length <= 600;
+  const showGenerationBands = !['radial', 'galaxy'].includes(layoutMode) && !renderVirtualizationActive && visiblePeople.length <= 600;
   updateMinimap(worldBounds.maxX, worldBounds.maxY, minimapSamplePeople(visiblePeople));
-  const directIds = mainLineIds();
+  const directIds = galaxyOverview ? new Set() : mainLineIds();
   const affiliateIds = new Set();
   const affiliateQueue = [...directIds];
   const affiliateSeen = new Set(directIds);
@@ -3389,13 +3574,15 @@ function render() {
     });
   }
   const zClass = zoomClass();
-  const relationshipSignature = `${layoutMode}:${editMode}:${renderedPeople.map(p =>
+  const relationshipSignature = `${layoutMode}:${galaxyActiveClusterId}:${editMode}:${renderedPeople.map(p =>
     `${p.id},${p.x},${p.y},${familyKey(p)},${(p.parents || []).join('.')},${partnerIds(p).join('.')}`
   ).join(';')}`;
   if (relationshipSignature !== relationshipRenderSignature) {
     relationshipRenderSignature = relationshipSignature;
     lines.replaceChildren();
-    if (layoutMode === 'radial') {
+    if (galaxyOverview) {
+      renderGalaxyConnections();
+    } else if (layoutMode === 'radial') {
       renderRadialRelationshipLines(renderedIds, renderedPeople);
     } else {
       for (const p of visiblePeople) {
@@ -3869,23 +4056,36 @@ main.addEventListener('touchmove', e => {
 }, { passive:false });
 
 main.addEventListener('touchend', e => {
-  if (e.touches.length < 2) pinch = null;
+  if (e.touches.length < 2) {
+    pinch = null;
+    if (layoutMode === 'galaxy' && galaxyActiveClusterId && view.s < 0.18) showGalaxyOverview();
+  }
 }, { passive:true });
 
 // -- Zoom and fit helpers ---------------------------------------------
 function zoomTo(ns, cx = null, cy = null) {
+  const targetScale = Math.max(minZoom, Math.min(maxZoom, ns));
+  if (layoutMode === 'galaxy' && galaxyActiveClusterId && targetScale < 0.18) {
+    showGalaxyOverview();
+    return;
+  }
   const rect = main.getBoundingClientRect();
   if (cx === null) cx = rect.left + rect.width / 2;
   if (cy === null) cy = rect.top + rect.height / 2;
   const old = view.s;
   const worldPoint = screenToWorld(cx, cy);
-  view.s = Math.max(minZoom, Math.min(maxZoom, ns));
+  view.s = targetScale;
   view.x = cx - (rect.left + rect.width / 2) - worldPoint.x * view.s;
   view.y = cy - (rect.top + rect.height / 2) - worldPoint.y * view.s;
   applyView();
 }
 
 function fit() {
+  if (layoutMode === 'galaxy') {
+    return galaxyActiveClusterId
+      ? fitGalaxyBounds(galaxyDetailState?.bounds, { maxScale: 0.82, minScale: 0.24 })
+      : fitGalaxyBounds(galaxyLayoutState?.bounds, { maxScale: 0.58 });
+  }
   updateWorldBounds();
   const ids = visibleIds();
   const visible = data.people.filter(p=>ids.has(p.id));
@@ -6396,6 +6596,14 @@ function jumpToPerson(id) {
   const p = person(id);
   if (!p) return;
   selected = id;
+  if (layoutMode === 'galaxy') {
+    const clusterId = galaxyLayoutState?.personToCluster.get(id);
+    if (clusterId) {
+      openGalaxyCluster(clusterId, { focusPersonId: id });
+      showSpotlight(id);
+    }
+    return;
+  }
   if (layoutMode !== 'classic' && layoutFocusId !== id) {
     if (savedClassicPositions) restoreClassicPositions();
     if (layoutMode === 'tree') applyTreeLayout(id);
@@ -7209,6 +7417,8 @@ document.querySelectorAll('[data-layout-mode]').forEach(button => {
     closeSettingsMenu();
   });
 });
+$('galaxyBackBtn')?.addEventListener('click', () => showGalaxyOverview({ restoreFocus: true }));
+$('galaxyExitBtn')?.addEventListener('click', () => setLayoutMode('classic'));
 $('nameModeBtn').addEventListener('click', () => {
   cycleViewPreset();
   closeSettingsMenu();
@@ -7520,7 +7730,19 @@ if (window.location?.search?.includes('ux-debug=1')) {
       if (deleted) render();
       return deleted;
     },
-    setLayoutModeForTest: mode => setLayoutMode(mode, { allowInView: true })
+    setLayoutModeForTest: mode => setLayoutMode(mode, { allowInView: true }),
+    getGalaxyState: () => ({
+      active: layoutMode === 'galaxy',
+      activeClusterId: galaxyActiveClusterId,
+      clusterCount: galaxyLayoutState?.clusters.length || 0,
+      clusters: galaxyLayoutState?.clusters.map(cluster => ({
+        id: cluster.id,
+        label: cluster.label,
+        count: cluster.count,
+        period: cluster.period
+      })) || []
+    }),
+    openGalaxyClusterForTest: clusterId => openGalaxyCluster(clusterId)
   };
 }
 computeStartupStateNow();

@@ -88,6 +88,8 @@
                     Enter öffnet die fokussierte Person.</p>
                 <div class="world" id="world">
                     <div class="generationBands" id="generationBands"></div><svg class="lines" id="lines"></svg>
+                    <div class="galaxyClusters" id="galaxyClusters" role="group"
+                        aria-label="Familiencluster der Galaxie" data-testid="galaxy-clusters"></div>
                     <div id="nodes" role="group" aria-label="Sichtbare Personen im Stammbaum"></div>
                 </div>
                 <div id="selectionRect" class="selectionRect hidden"></div>
@@ -103,6 +105,20 @@
                         <span id="busyLabel">Verarbeitung läuft …</span>
                     </div>
                 </div>
+                <section class="galaxyHud hidden" id="galaxyHud" data-testid="galaxy-hud"
+                    aria-live="polite" aria-labelledby="galaxyHudTitle">
+                    <div>
+                        <span class="galaxyBeta">Beta</span>
+                        <strong id="galaxyHudTitle">Familiengalaxie</strong>
+                        <p id="galaxyHudText">Familiencluster antippen, um hineinzuzoomen.</p>
+                    </div>
+                    <div class="galaxyHudActions">
+                        <button type="button" class="pill hidden" id="galaxyBackBtn"
+                            data-testid="galaxy-back">Zur Galaxie</button>
+                        <button type="button" class="pill" id="galaxyExitBtn"
+                            data-testid="galaxy-exit">Klassisch</button>
+                    </div>
+                </section>
             </section>
             <section class="helpHint hidden" id="helpHint" role="region" aria-live="polite" aria-atomic="true"
                 aria-labelledby="helpHintTitle" data-testid="app-inline-hint">
@@ -175,6 +191,8 @@
                                     data-testid="layout-tree" aria-label="Fokussierte Generationenansicht" aria-pressed="false">Baum</button>
                                 <button type="button" class="layoutChoice" data-layout-mode="radial"
                                     data-testid="layout-radial" aria-label="Fokussierter Verwandtschaftskreis" aria-pressed="false">Kreis</button>
+                                <button type="button" class="layoutChoice galaxyLayoutChoice" data-layout-mode="galaxy"
+                                    data-testid="layout-galaxy" aria-label="Familiengalaxie, Beta" aria-pressed="false">Galaxie β</button>
                             </div>
                             <p class="settingsSectionHint" id="layoutModeHint">Klassisch zeigt die gespeicherten, bearbeitbaren Kartenpositionen.</p>
                         </div>

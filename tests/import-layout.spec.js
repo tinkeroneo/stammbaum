@@ -36,10 +36,9 @@ test('Import übernimmt Dateipositionen standardmäßig exakt', async ({ page })
   await expect(page.getByTestId('import-summary')).toContainText('2 Personen');
   await page.getByTestId('import-confirm').click();
 
-  const positions = await page.evaluate(() => Object.fromEntries(
+  await expect.poll(async () => page.evaluate(() => Object.fromEntries(
     window.__uxDebug.getDataSnapshot().people.map(person => [person.id, { x: person.x, y: person.y }])
-  ));
-  expect(positions).toEqual({
+  ))).toEqual({
     left: { x: 120, y: 240 },
     right: { x: 42120, y: 260 }
   });
@@ -59,6 +58,8 @@ test('automatische Import-Anordnung ist explizit wählbar', async ({ page }) => 
   await page.getByTestId('import-layout-auto').check();
   await page.getByTestId('import-confirm').click();
 
+  await expect.poll(async () => page.evaluate(() => window.__uxDebug.getDataSnapshot().people
+    .map(person => person.id).sort())).toEqual(['child', 'parent']);
   const positions = await page.evaluate(() => Object.fromEntries(
     window.__uxDebug.getDataSnapshot().people.map(person => [person.id, { x: person.x, y: person.y }])
   ));
