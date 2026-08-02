@@ -2139,6 +2139,17 @@ function addRadialLine(a, b, cls, color = '') {
   if (color) path.style.setProperty('--line-color', color);
   lines.appendChild(path);
 }
+function addBranchLine(x1, y1, x2, y2, cls, color = '') {
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  const distance = y2 - y1;
+  const bendY = distance >= 0
+    ? y1 + Math.min(distance * 0.42, 72)
+    : (y1 + y2) / 2;
+  path.setAttribute('d', `M ${x1} ${y1} V ${bendY} H ${x2} V ${y2}`);
+  path.setAttribute('class', cls);
+  if (color) path.style.setProperty('--line-color', color);
+  lines.appendChild(path);
+}
 function addDot(x, y, cls, color = '') {
   const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
   circle.setAttribute('cx', x);
@@ -2157,9 +2168,11 @@ function lineageColorFor(people) {
 }
 function isStemBridge(child, parents = []) {
   const childLineage = lineageFamilyKey(child);
-  const currentFamily = familyKey(child);
-  if (childLineage && currentFamily && childLineage !== currentFamily) return true;
-  return parents.some(parent => familyKey(parent) !== currentFamily && lineageFamilyKey(parent) !== currentFamily);
+  if (!childLineage || !parents.length) return false;
+  return !parents.some(parent => {
+    const parentFamilies = new Set([familyKey(parent), lineageFamilyKey(parent)].filter(Boolean));
+    return parentFamilies.has(childLineage);
+  });
 }
 function parentGroupKey(ids) {
   return [...ids].sort().join('|');
@@ -2168,8 +2181,13 @@ function parentGroupPoint(parents, children) {
   const parentX = parents.reduce((sum, p) => sum + p.x, 0) / parents.length;
   const parentY = parents.reduce((sum, p) => sum + p.y, 0) / parents.length;
   const firstChildY = Math.min(...children.map(c => c.y));
-  const hubY = Math.min(parentY + 78, firstChildY - 72);
-  return { x: parentX, y: Math.max(parentY + 34, hubY) };
+  const parentBottom = parentY + 46;
+  const childTop = firstChildY - 46;
+  if (childTop <= parentBottom + 24) return { x: parentX, y: (parentY + firstChildY) / 2 };
+  return {
+    x: parentX,
+    y: Math.max(parentBottom + 12, Math.min(parentY + 78, childTop - 12))
+  };
 }
 function renderFamilyLines(visible, visiblePeople = null) {
   const groups = new Map();
@@ -2196,14 +2214,14 @@ function renderFamilyLines(visible, visiblePeople = null) {
 
   for (const group of groups.values()) {
     const hub = parentGroupPoint(group.parents, group.children);
-    const parentMidX = group.parents.reduce((sum, p) => sum + p.x, 0) / group.parents.length;
-    const parentMidY = group.parents.reduce((sum, p) => sum + p.y, 0) / group.parents.length;
     const color = lineageColorFor(group.parents);
-    addLine(parentMidX, parentMidY + 28, hub.x, hub.y, 'line familyStem lineageLine', color);
+    for (const parent of group.parents) {
+      addBranchLine(parent.x, parent.y + 46, hub.x, hub.y, 'line familyStem lineageLine', color);
+    }
     addDot(hub.x, hub.y, 'familyHub', color);
     for (const child of group.children) {
       const bridge = isStemBridge(child, group.parents) ? ' stemBridge' : '';
-      addLine(hub.x, hub.y, child.x, child.y - 46, `line childLine lineageLine${bridge}`, color);
+      addBranchLine(hub.x, hub.y, child.x, child.y - 46, `line childLine lineageLine${bridge}`, color);
     }
   }
 
@@ -2211,11 +2229,11 @@ function renderFamilyLines(visible, visiblePeople = null) {
     const hub = parentGroupPoint([group.parent], group.children);
     hub.x = group.children.reduce((sum, child) => sum + child.x, 0) / group.children.length;
     const color = lineageColorFor([group.parent, ...group.children]);
-    addLine(group.parent.x, group.parent.y + 28, hub.x, hub.y, 'line familyStem lineageLine singleParentLine', color);
+    addBranchLine(group.parent.x, group.parent.y + 46, hub.x, hub.y, 'line familyStem lineageLine singleParentLine', color);
     addDot(hub.x, hub.y, 'familyHub singleParentHub', color);
     for (const child of group.children) {
       const bridge = isStemBridge(child, [group.parent]) ? ' stemBridge' : '';
-      addLine(hub.x, hub.y, child.x, child.y - 46, `line childLine lineageLine singleParentLine${bridge}`, color);
+      addBranchLine(hub.x, hub.y, child.x, child.y - 46, `line childLine lineageLine singleParentLine${bridge}`, color);
     }
   }
 }
@@ -2625,6 +2643,38 @@ function branchTogglePresentation(id) {
       ? `${childLabel} und ihre nachfolgenden Generationen sind ausgeblendet.`
       : `${childLabel} und ihre nachfolgenden Generationen werden ausgeblendet.`
   };
+}
+function branchToggleOwnerId(id, visible = null) {
+  const target = person(id);
+  const children = childrenOfPerson(id);
+  if (!target || !children.length) return '';
+
+  const parentGroups = new Map();
+  for (const child of children) {
+    const parentIds = (child.parents || [])
+      .filter(parentId => person(parentId) && !person(parentId).pool)
+      .sort();
+    if (parentIds.length < 2) return id;
+    parentGroups.set(parentGroupKey(parentIds), parentIds);
+  }
+  if (parentGroups.size !== 1) return id;
+
+  const parentIds = [...parentGroups.values()][0];
+  const candidates = parentIds
+    .map(person)
+    .filter(parent => parent && hasChildren(parent.id) && (!visible || visible.has(parent.id)));
+  if (candidates.length < 2) return id;
+
+  const lineageMatches = parent => children.reduce((score, child) => {
+    const lineage = lineageFamilyKey(child);
+    return score + (lineage && [familyKey(parent), lineageFamilyKey(parent)].includes(lineage) ? 1 : 0);
+  }, 0);
+  candidates.sort((left, right) =>
+    lineageMatches(right) - lineageMatches(left)
+    || Number(isMainRoot(right.id)) - Number(isMainRoot(left.id))
+    || left.id.localeCompare(right.id)
+  );
+  return candidates[0]?.id || id;
 }
 function branchToggleButtonHtml(id) {
   const state = branchTogglePresentation(id);
@@ -3100,7 +3150,7 @@ function zoomClass() {
 function updateZoomClass() {
   world.classList.toggle('zoomMini', view.s < 0.12);
   world.classList.toggle('zoomCompactLevel', view.s >= 0.12 && view.s < 0.32);
-  world.classList.toggle('zoomBranchActionsHidden', view.s < 0.55);
+  world.classList.toggle('zoomBranchActionsHidden', view.s < 1);
   world.style.setProperty('--inverse-view-scale', String(1 / Math.max(view.s, 0.01)));
   world.style.setProperty('--galaxy-inverse-view-scale', String(1 / Math.max(view.s, 0.042)));
 }
@@ -3875,7 +3925,11 @@ function render() {
         a.id.localeCompare(b.id)
       );
       const anchor = members.find(member => directIds.has(member.id)) || members[0];
-      const collapseId = members.find(member => hasChildren(member.id))?.id || '';
+      const collapsibleMembers = members.filter(member => hasChildren(member.id));
+      const collapseId = collapsibleMembers.find(member => collapsed.has(member.id))?.id
+        || collapsibleMembers.find(member => branchToggleOwnerId(member.id, renderedIds) === member.id)?.id
+        || collapsibleMembers[0]?.id
+        || '';
       const key = familyKey(anchor);
       const familyMuted = activeFamily && !members.some(member => matchesFamily(member, activeFamily));
       const sideLine = rootIds.length && !members.some(member => directIds.has(member.id) || affiliateIds.has(member.id));
@@ -3913,7 +3967,9 @@ function render() {
       desiredCards.push(el);
       continue;
     }
-    const canCollapse = layoutMode === 'classic' && hasChildren(p.id);
+    const canCollapse = layoutMode === 'classic'
+      && hasChildren(p.id)
+      && (collapsed.has(p.id) || branchToggleOwnerId(p.id, renderedIds) === p.id);
     const key = familyKey(p);
     const familyMuted = activeFamily && !matchesFamily(p, activeFamily);
     const sideLine = rootIds.length && !directIds.has(p.id) && !affiliateIds.has(p.id);

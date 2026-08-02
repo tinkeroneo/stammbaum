@@ -71,8 +71,10 @@ test('ein Touch-Tap öffnet genau einmal und Einklappen schaltet nur einmal', as
   expect(await page.evaluate(() => window.__sheetOpenMutations)).toBeLessThanOrEqual(2);
   await page.getByTestId('person-dialog-close').click();
 
+  await page.evaluate(() => window.__uxDebug.setViewForTest({ x: -650, y: -350, s: 1 }));
   const rootContainer = page.locator('.person').filter({ has: page.getByTestId('person-card-root') });
   const collapse = rootContainer.locator('.collapseBtn');
+  await expect(collapse).toBeInViewport();
   const collapseBox = await collapse.boundingBox();
   await page.touchscreen.tap(
     collapseBox.x + collapseBox.width / 2,

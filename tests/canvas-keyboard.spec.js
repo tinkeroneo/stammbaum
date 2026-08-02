@@ -55,6 +55,7 @@ test('Fokus bleibt beim Einklappen und im Nahbereich auf einer sichtbaren Karte'
   const rootContainer = page.locator('.person').filter({ has: root });
   const collapse = rootContainer.locator('.collapseBtn');
 
+  await page.evaluate(() => window.__uxDebug.setViewForTest({ x: -650, y: -350, s: 1 }));
   await root.focus();
   await collapse.click();
   await expect(page.getByTestId('person-card-child')).toHaveCount(0);

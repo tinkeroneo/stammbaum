@@ -100,5 +100,23 @@ test('bereinigter US-Zweig lädt, ist verknüpft und visuell prüfbar', async ({
   await expect(page.getByTestId('person-card-fb0001')).toBeInViewport();
   await page.screenshot({ path: path.join(screenshotDir, 'us-linie-detail-1440x900.png') });
 
+  await page.getByTestId('person-search-open').click();
+  await page.getByTestId('person-search').fill('George J. Mihm');
+  await page.getByTestId('person-search-result-fbx9045').click();
+  await expect(page.getByTestId('person-dialog')).toBeVisible();
+  await page.getByTestId('person-dialog-close').click();
+  await page.getByTestId('person-search-close').click();
+  await page.evaluate(() => {
+    const focus = window.__uxDebug.getPerson('fbx9045');
+    window.__uxDebug.setViewForTest({ x: -focus.x, y: -focus.y, s: 1 });
+  });
+  await expect(page.getByTestId('person-card-fbx9045')).toBeInViewport();
+  await expect(page.getByTestId('person-card-fb0021')).toBeVisible();
+  await expect(page.getByTestId('person-card-fbx9046')).toBeVisible();
+  await expect(page.getByTestId('person-card-fbx9047')).toBeVisible();
+  await expect(page.getByTestId('branch-toggle-fbx9046')).toBeVisible();
+  await expect(page.getByTestId('branch-toggle-fbx9047')).toHaveCount(0);
+  await page.screenshot({ path: path.join(screenshotDir, 'mihm-bodensteiner-zweige-1440x900.png') });
+
   expect(errors).toEqual([]);
 });

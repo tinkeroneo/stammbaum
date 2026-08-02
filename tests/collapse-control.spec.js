@@ -27,15 +27,9 @@ async function openRootViaSearch(page) {
   await page.getByTestId('person-search-result-root').click();
 }
 
-function overlapArea(a, b) {
-  const width = Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x));
-  const height = Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
-  return width * height;
-}
-
-test('lesbarer Zoom skaliert die Canvas-Aktion mit der Karte und dockt sie außen an', async ({ page }) => {
+test('Nahzoom zeigt eine kleine Canvas-Aktion am Kartenfuß', async ({ page }) => {
   await openTree(page);
-  await page.evaluate(() => window.__uxDebug.setViewForTest({ s: 0.72 }));
+  await page.evaluate(() => window.__uxDebug.setViewForTest({ s: 1 }));
   const root = page.getByTestId('person-card-root');
   const card = page.locator('.couplePerson').filter({ has: root });
   const button = page.getByTestId('branch-toggle-root');
@@ -46,16 +40,13 @@ test('lesbarer Zoom skaliert die Canvas-Aktion mit der Karte und dockt sie auße
   const cardBox = await card.boundingBox();
   const buttonBox = await button.boundingBox();
   const visualBox = await button.locator('span').boundingBox();
-  const rootBox = await root.boundingBox();
-  const partnerBox = await page.getByTestId('person-card-partner').boundingBox();
   expect(buttonBox.width).toBeGreaterThanOrEqual(43.5);
   expect(buttonBox.height).toBeGreaterThanOrEqual(43.5);
-  expect(visualBox.width).toBeGreaterThanOrEqual(25);
-  expect(visualBox.width).toBeLessThan(30);
+  expect(visualBox.width).toBeGreaterThanOrEqual(21.5);
+  expect(visualBox.width).toBeLessThan(23);
   expect(visualBox.height).toBeCloseTo(visualBox.width, 0);
-  expect(buttonBox.x).toBeGreaterThanOrEqual(cardBox.x + cardBox.width);
-  expect(overlapArea(buttonBox, rootBox)).toBe(0);
-  expect(overlapArea(buttonBox, partnerBox)).toBe(0);
+  expect(Math.abs((visualBox.x + visualBox.width / 2) - (cardBox.x + cardBox.width / 2))).toBeLessThan(2);
+  expect(visualBox.y).toBeGreaterThanOrEqual(cardBox.y + cardBox.height - 2);
 
   const before = await page.evaluate(() => window.__uxDebug.getView());
   await button.click();
@@ -100,15 +91,15 @@ test('Zoomschwelle verhindert übergroße Canvas-Aktionen ohne harte Funktionsl�
   await openTree(page);
   const button = page.getByTestId('branch-toggle-root');
 
-  await page.evaluate(() => window.__uxDebug.setViewForTest({ s: 0.55 }));
+  await page.evaluate(() => window.__uxDebug.setViewForTest({ s: 1 }));
   await expect(button).toBeVisible();
   const readableBox = await button.boundingBox();
   const readableVisualBox = await button.locator('span').boundingBox();
   expect(readableBox.width).toBeGreaterThanOrEqual(43.5);
-  expect(readableVisualBox.width).toBeGreaterThanOrEqual(19);
-  expect(readableVisualBox.width).toBeLessThan(22);
+  expect(readableVisualBox.width).toBeGreaterThanOrEqual(21.5);
+  expect(readableVisualBox.width).toBeLessThan(23);
 
-  await page.evaluate(() => window.__uxDebug.setViewForTest({ s: 0.549 }));
+  await page.evaluate(() => window.__uxDebug.setViewForTest({ s: 0.999 }));
   await expect(button).toBeHidden();
   await page.evaluate(() => window.__uxDebug.setViewForTest({ s: 0.13 }));
   await expect(button).toBeHidden();
