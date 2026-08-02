@@ -2551,8 +2551,29 @@ function poolBranchIds(id) {
     partnerIds(current).forEach(partnerId => {
       if (!ids.has(partnerId)) queue.push(partnerId);
     });
-    activeChildrenOfPerson(currentId).forEach(child => {
+    childrenOfPerson(currentId).forEach(child => {
       if (!ids.has(child.id)) queue.push(child.id);
+    });
+  }
+  return ids;
+}
+function pooledConnectionIds(id) {
+  const source = person(id);
+  if (!source?.pool) return new Set(source ? [source.id] : []);
+  const ids = new Set();
+  const queue = [source.id];
+  while (queue.length) {
+    const currentId = queue.shift();
+    const current = person(currentId);
+    if (!current?.pool || ids.has(currentId)) continue;
+    ids.add(currentId);
+    const relatedIds = [
+      ...(current.parents || []),
+      ...partnerIds(current),
+      ...childrenOfPerson(currentId).map(child => child.id)
+    ];
+    relatedIds.forEach(relatedId => {
+      if (!ids.has(relatedId) && person(relatedId)?.pool) queue.push(relatedId);
     });
   }
   return ids;
@@ -2563,11 +2584,23 @@ function movableBranchIds(id) {
   return new Set([...poolBranchIds(id)].filter(branchId => person(branchId)?.pool === source.pool));
 }
 function setPoolBranch(id, pooled) {
-  const ids = poolBranchIds(id);
+  const ids = pooled ? poolBranchIds(id) : pooledConnectionIds(id);
   data.people.forEach(p => {
     if (ids.has(p.id)) p.pool = pooled;
   });
   return ids;
+}
+async function confirmPoolReintegration(id, trigger = document.activeElement) {
+  const ids = pooledConnectionIds(id);
+  if (ids.size <= 1) return true;
+  const decision = await openDecisionDialog({
+    title: 'Verknüpften Zweig eingliedern?',
+    message: `Diese Person ist mit ${ids.size - 1} weiteren Personen im Vorrat verbunden. Alle ${ids.size} Personen werden gemeinsam in den Stammbaum eingegliedert; ihre Verknüpfungen bleiben erhalten.`,
+    confirmLabel: 'Zweig eingliedern',
+    cancelLabel: 'Im Vorrat lassen',
+    trigger
+  });
+  return decision === 'confirm';
 }
 function analyzeDeletionImpact(dataset, targetId, roots = []) {
   const people = Array.isArray(dataset?.people) ? dataset.people : [];
@@ -5421,6 +5454,9 @@ async function saveSheet() {
     });
     if (decision !== 'confirm') return false;
   }
+  if (p?.pool && !keepBranchInPool && !(await confirmPoolReintegration(p.id, saveTrigger))) {
+    return false;
+  }
   const commandBefore = captureCommandState();
 
   if (!p) {
@@ -6735,7 +6771,7 @@ function renderListEditor(){
   }).join('');
 
   $('listRows').querySelectorAll('button[data-act]').forEach(btn => {
-    btn.addEventListener('click', e => {
+    btn.addEventListener('click', async e => {
       e.stopPropagation();
       const id = btn.dataset.id;
       const act = btn.dataset.act;
@@ -6750,15 +6786,17 @@ function renderListEditor(){
         else addPartnerFor(id);
         return;
       }
-      closeListEditor();
       if(act === 'activate') {
         const p = person(id);
         if (p) {
+          if (!(await confirmPoolReintegration(p.id, btn))) return;
+          closeListEditor();
           const commandBefore = captureCommandState();
           setPoolBranch(p.id, false);
           commitDataCommand('Aus Vorrat eingliedern', commandBefore);
           updatePoolButton();
           render();
+          setTimeout(maybeOpenRequiredRootSelection, 0);
         }
       }
     });
