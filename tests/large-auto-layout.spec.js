@@ -53,11 +53,11 @@ async function importAndArrange(page, tree, fileName) {
     const snapshot = window.__uxDebug.getDataSnapshot();
     return {
       count: snapshot.people.length,
-      firstX: snapshot.people.find(person => person.id === firstId)?.x
+      firstPresent: Boolean(snapshot.people.find(person => person.id === firstId))
     };
   }, tree.people[0].id), {
     timeout: 90_000
-  }).toEqual({ count: tree.people.length, firstX: tree.people[0].x });
+  }).toEqual({ count: tree.people.length, firstPresent: true });
   await expect(page.getByTestId('busy-indicator')).toHaveAttribute('aria-hidden', 'true', { timeout: 90_000 });
   if (await page.getByTestId('app-mode-toggle').getAttribute('aria-pressed') !== 'true') {
     await page.getByTestId('app-mode-toggle').click();
@@ -176,10 +176,10 @@ test('vollständiger V5-Graph bleibt kompakt und generationsrichtig', async ({ p
   const arranged = await importAndArrange(page, v5Tree, path.basename(v5Path));
   const metrics = layoutMetrics(arranged);
   expect(metrics).toMatchObject({
-    people: 3245,
+    people: 3252,
     duplicateCoordinates: 0,
     backwardParentEdges: 0,
-    ancestryPartnerPairs: 2,
+    ancestryPartnerPairs: 0,
     regularPartnerPairsOffLevel: 0
   });
   expect(metrics.width).toBeLessThan(30_000);

@@ -39,7 +39,7 @@ test('ordnet den vollständig verbundenen aktiven V5-Baum neu an', async ({ page
   await expect.poll(
     () => page.evaluate(() => window.__uxDebug.getDataSnapshot().people.length),
     { timeout: 90_000 }
-  ).toBe(4338);
+  ).toBe(4341);
   if (await page.getByTestId('app-mode-toggle').getAttribute('aria-pressed') !== 'true') {
     await page.getByTestId('app-mode-toggle').click();
   }
@@ -62,8 +62,8 @@ test('ordnet den vollständig verbundenen aktiven V5-Baum neu an', async ({ page
     occupiedCoordinates.add(key);
   }
 
-  expect(activePeople).toHaveLength(3245);
-  expect(result.people.filter(person => person.pool)).toHaveLength(1093);
+  expect(activePeople).toHaveLength(3252);
+  expect(result.people.filter(person => person.pool)).toHaveLength(1089);
   expect(duplicateCoordinates).toEqual([]);
   expect(pageErrors).toEqual([]);
 });

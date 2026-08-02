@@ -33,10 +33,10 @@ test('bereinigter US-Zweig lädt, ist verknüpft und visuell prüfbar', async ({
   });
   await page.getByTestId('import-confirm').click();
 
-  await expect.poll(() => page.evaluate(() => window.__uxDebug.getDataSnapshot().people.length), { timeout: 60_000 }).toBe(4338);
+  await expect.poll(() => page.evaluate(() => window.__uxDebug.getDataSnapshot().people.length), { timeout: 60_000 }).toBe(4341);
   const importedState = await page.evaluate(() => window.__uxDebug.getDataSnapshot());
-  expect(importedState.people.filter(person => !person.pool)).toHaveLength(3245);
-  expect(importedState.people.filter(person => person.pool)).toHaveLength(1093);
+  expect(importedState.people.filter(person => !person.pool)).toHaveLength(3252);
+  expect(importedState.people.filter(person => person.pool)).toHaveLength(1089);
   expect(importedState.people.filter(person =>
     String(person.lastName || '').toLowerCase() === 'born'
     && !/\bBorn$/i.test(String(person.name || '').trim())
@@ -46,13 +46,76 @@ test('bereinigter US-Zweig lädt, ist verknüpft und visuell prüfbar', async ({
   expect(genuineBornSurname?.name).toMatch(/\bBorn$/);
   expect(importedState.people.find(person => person.id === 'fb0001')?.parents).toEqual(['fbbridge0001']);
   expect(importedState.people.find(person => person.id === 'fbbridge0001')?.parents).toEqual(['p334', 'p335']);
+  expect(importedState.people.find(person => person.id === 'fb0893')).toMatchObject({
+    partners: ['fbx11610'],
+    partnerDetails: { fbx11610: { married: '23.10.1976' } }
+  });
+  expect(importedState.people.find(person => person.id === 'fbx10149')).toMatchObject({
+    parents: ['fb0893', 'fbx11610'],
+    partners: []
+  });
+  expect(importedState.people.find(person => person.id === 'fbx11122')?.parents).toEqual(['fb0893', 'fbx11610']);
+  expect(importedState.people.find(person => person.id === 'fb0446')).toMatchObject({
+    partners: ['fbx11611'],
+    partnerDetails: { fbx11611: { married: '21.01.1952' } }
+  });
+  expect(importedState.people.find(person => person.id === 'fbx9622')).toMatchObject({
+    name: 'Albin Jr. Massman',
+    parents: ['fb0446', 'fbx11611'],
+    partners: []
+  });
+  expect(importedState.people.filter(person =>
+    (person.parents || []).includes('fb0446')
+    && (person.parents || []).includes('fbx11611')
+  )).toHaveLength(14);
+  expect(importedState.people.find(person => person.id === 'fb0497')).toMatchObject({
+    name: 'Joseph John Sr. Vollmecke',
+    born: '21.08.1949',
+    parents: ['fb0134', 'fbx11612'],
+    partners: ['fbx9677'],
+    pool: false
+  });
+  expect(importedState.people.find(person => person.id === 'fbx9677')).toMatchObject({
+    born: '18.02.1949',
+    partners: ['fb0497'],
+    pool: false
+  });
+  expect(importedState.people.find(person => person.id === 'fbx11613')).toMatchObject({
+    name: 'Joseph John Jr. Vollmecke',
+    born: '05.09.1971',
+    parents: ['fb0497', 'fbx9677'],
+    pool: false
+  });
+  expect(importedState.people.find(person => person.id === 'fbx10740')).toBeUndefined();
+  const importedById = new Map(importedState.people.map(person => [String(person.id), person]));
+  const isAncestor = (ancestorId, descendantId) => {
+    const pending = [...(importedById.get(descendantId)?.parents || [])];
+    const seen = new Set();
+    while (pending.length) {
+      const id = String(pending.shift());
+      if (id === ancestorId) return true;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      pending.push(...(importedById.get(id)?.parents || []));
+    }
+    return false;
+  };
+  const ancestryPartnerPairs = new Set();
+  for (const person of importedState.people) {
+    for (const partnerId of [...(person.partners || []), person.partner].filter(Boolean)) {
+      if (isAncestor(String(person.id), String(partnerId)) || isAncestor(String(partnerId), String(person.id))) {
+        ancestryPartnerPairs.add([String(person.id), String(partnerId)].sort().join('|'));
+      }
+    }
+  }
+  expect([...ancestryPartnerPairs]).toEqual([]);
   await expect.poll(
     () => page.evaluate(() => window.__uxDebug.getDataSnapshot().layoutMode),
     { timeout: 30_000 }
   ).toBe('galaxy');
   expect(await page.evaluate(() => window.__uxDebug.getLargeTreeState())).toMatchObject({
     active: true,
-    personCount: 3245,
+    personCount: 3252,
     overviewCached: true,
     overviewPending: false,
     layoutSource: 'worker'
