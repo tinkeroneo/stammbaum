@@ -19,7 +19,7 @@ Der Familienbuch-Zweig beginnt belegt bei Joseph Bodensteiner (ca. 1734, Unterli
 
 ## Aktive Positionierung
 
-Aktiv sind der Brückeneinstieg, Josephs frühe Unterlinder Linie, die Auswanderer Johann Karl/Joseph sowie deren erste US-Nachkommengeneration. Tiefere Nachkommen bleiben im Vorrat. So ist der US-Zweig sichtbar angeschlossen, ohne beim Öffnen rund 4.000 zusätzliche Karten zu rendern. Die aktiven neuen Ebenen liegen rechts neben dem bisherigen Bodensteiner-Zweig und sind generationenweise in 185-Pixel-Abständen angeordnet.
+Aktiv sind der Brückeneinstieg, Josephs frühe Unterlinder Linie, die Auswanderer Johann Karl/Joseph sowie deren erste US-Nachkommengeneration. Tiefere Nachkommen bleiben im Vorrat. So ist der US-Zweig sichtbar angeschlossen, ohne beim Öffnen rund 4.000 zusätzliche Karten zu rendern. Die JSON-Ausgangskoordinaten legen die neuen Ebenen rechts neben dem bisherigen Bodensteiner-Zweig in 185-Pixel-Abständen ab. Beim Import berechnet die App den aktiven Zusammenhang anschließend mit ihrem Auto-Layout neu; diese Laufzeitpositionierung wurde im Browser ohne Koordinatenüberlagerung geprüft.
 
 ## Belegte manuelle Aufspaltungen
 
