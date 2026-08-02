@@ -30,6 +30,7 @@ test('bereinigter US-Zweig lädt, ist verknüpft und visuell prüfbar', async ({
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(tree)),
   });
+  await page.getByTestId('import-confirm').click();
 
   await expect.poll(() => page.evaluate(() => window.__uxDebug.getDataSnapshot().people.length), { timeout: 60_000 }).toBe(4338);
   expect(await page.evaluate(() => window.__uxDebug.getDataSnapshot().people.find(person => person.id === 'fb0001')?.parents)).toEqual(['fbbridge0001']);

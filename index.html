@@ -334,6 +334,39 @@
                     </div>
                 </section>
             </div>
+            <div class="importLayer hidden" id="importLayer" data-testid="import-layer">
+                <section class="importDialog" id="importDialog" role="dialog" aria-modal="true"
+                    aria-hidden="true" aria-labelledby="importTitle" aria-describedby="importDescription"
+                    data-testid="import-dialog">
+                    <div class="importTop">
+                        <div>
+                            <h2 id="importTitle" tabindex="-1">Stammbaum importieren</h2>
+                            <p id="importDescription">Lege fest, wie die Karten nach dem Import positioniert werden.</p>
+                        </div>
+                        <button type="button" class="pill" id="importCancel"
+                            data-testid="import-cancel">Abbrechen</button>
+                    </div>
+                    <p class="importSummary" id="importSummary" data-testid="import-summary"></p>
+                    <fieldset class="importChoice">
+                        <legend>Positionierung</legend>
+                        <label class="importChoiceOption">
+                            <input type="radio" name="importLayout" id="importLayoutPreserve" value="preserve"
+                                data-testid="import-layout-preserve" checked />
+                            <span><strong>Positionen aus Datei beibehalten</strong>
+                                <small>Übernimmt die gespeicherten Kartenpositionen unverändert.</small></span>
+                        </label>
+                        <label class="importChoiceOption">
+                            <input type="radio" name="importLayout" id="importLayoutAuto" value="auto"
+                                data-testid="import-layout-auto" />
+                            <span><strong>Automatisch neu anordnen</strong>
+                                <small>Berechnet die Positionen des aktiven Stammbaums neu. Der Vorrat bleibt ausgenommen.</small></span>
+                        </label>
+                    </fieldset>
+                    <p class="importHint">Der Import ersetzt den aktuell geöffneten Datenbestand. Die gewählte Anordnung wird anschließend gespeichert.</p>
+                    <button type="button" class="pill primary importSubmit" id="importConfirm"
+                        data-testid="import-confirm">Importieren</button>
+                </section>
+            </div>
             <div class="relationshipLayer hidden" id="relationshipLayer" data-testid="relationship-layer">
                 <section class="relationshipDialog" id="relationshipDialog" role="dialog" aria-modal="true"
                     aria-hidden="true" aria-labelledby="relationshipTitle" aria-describedby="relationshipIntro"

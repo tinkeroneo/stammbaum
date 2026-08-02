@@ -3,6 +3,8 @@
   "private": true,
   "scripts": {
     "test": "playwright test",
+    "test:parallel": "playwright test --workers=4",
+    "test:serial": "playwright test --workers=1",
     "test:smoke": "playwright test tests/smoke.spec.js",
     "profile": "node scripts/performance-profile.cjs"
   },

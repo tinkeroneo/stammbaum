@@ -119,3 +119,36 @@ test('Radialansicht bleibt auf Mobile lesbar und speichert niemals ihre abgeleit
     note: 'Persistenzprüfung Kreis'
   });
 });
+
+test('Nahbereich reserviert eine gemeinsame Einheit für Mehrfachpartner', async ({ page }) => {
+  const value = {
+    rootIds: ['parent-a'],
+    people: [
+      { id: 'parent-a', name: 'Elternteil A', born: '1950', x: 500, y: 200, parents: [], partners: ['parent-b'] },
+      { id: 'parent-b', name: 'Elternteil B', born: '1952', x: 740, y: 200, parents: [], partners: ['parent-a'] },
+      { id: 'focus', name: 'Fokus Person', born: '1974', x: 300, y: 500, parents: ['parent-a', 'parent-b'], partners: [] },
+      { id: 'sibling', name: 'Geschwister Person', born: '1972', x: 540, y: 500, parents: ['parent-a', 'parent-b'], partners: [] },
+      { id: 'multi', name: 'Mehrfachpartner Person', born: '1970', x: 780, y: 500, parents: ['parent-a', 'parent-b'], partners: ['partner-1', 'partner-2', 'partner-3'] },
+      { id: 'partner-1', name: 'Partner Eins', born: '1969', x: 1020, y: 500, parents: [], partners: ['multi'] },
+      { id: 'partner-2', name: 'Partner Zwei', born: '1971', x: 1260, y: 500, parents: [], partners: ['multi'] },
+      { id: 'partner-3', name: 'Partner Drei', born: '1973', x: 1500, y: 500, parents: [], partners: ['multi'] }
+    ]
+  };
+  await page.addInitScript(({ key, seenKey, data }) => {
+    localStorage.setItem(key, JSON.stringify(data));
+    localStorage.setItem(seenKey, JSON.stringify(['pan-zoom', 'search', 'edit']));
+  }, { key: storeKey, seenKey: helpSeenKey, data: value });
+  await page.goto('/?ux-debug=1');
+  await page.getByTestId('welcome-continue').click();
+  await page.getByTestId('person-search-open').click();
+  await page.getByTestId('person-search').fill('Fokus Person');
+  await page.getByTestId('person-search-result-focus').click();
+  await page.getByTestId('person-focus-toggle').click();
+  await page.getByTestId('person-dialog-close').click();
+  await page.getByTestId('person-search-close').click();
+
+  const boxes = await renderedCardBoxes(page);
+  expect(boxes).toHaveLength(4);
+  expect(overlapPairs(boxes)).toEqual([]);
+  await expect(page.locator('.multiPartnerCard')).toHaveCount(1);
+});

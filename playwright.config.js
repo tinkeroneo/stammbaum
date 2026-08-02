@@ -3,7 +3,9 @@ const { defineConfig } = require('@playwright/test');
 module.exports = defineConfig({
   testDir: './tests',
   fullyParallel: false,
-  workers: 1,
+  // Separate test files use isolated browser contexts and can run safely in parallel.
+  // Tests inside one file retain their declared order. Override with --workers when needed.
+  workers: process.env.CI ? 2 : 4,
   retries: 0,
   reporter: 'line',
   outputDir: 'test-results',

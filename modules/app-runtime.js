@@ -122,6 +122,8 @@ let mentionsDraft = [];
 let scrollExpanded = new Set();
 let checkCollapsed = new Set();
 let workingFileHandle = null;
+let pendingImport = null;
+let importFocusReturnTarget = null;
 let personById = new Map();
 let nonPoolPeople = [];
 let childrenByParentId = new Map();
@@ -658,8 +660,8 @@ function applyPersonFieldSettings() {
     document.querySelectorAll(`[data-field-toggle="${field.key}"]`).forEach(el => { el.checked = visible; });
   }
 }
-function normalize(d) {
-  return normalizeTreeData(d, { fallback: sample });
+function normalize(d, options = {}) {
+  return normalizeTreeData(d, { fallback: sample, ...options });
 }
 
 function load() {
@@ -2284,17 +2286,24 @@ function applyFocusLayout(id) {
     const used = new Set();
     for (const p of rowPeople) {
       if (used.has(p.id)) continue;
-      const primary = mutualPartnerIds(p)
-        .map(partnerId => person(partnerId))
-        .find(q => q && ids.has(q.id) && (generation.get(q.id) || 0) === gen && !used.has(q.id));
-      if (primary) {
-        used.add(p.id);
-        used.add(primary.id);
-        units.push({ members: [p, primary].sort((a,b) => fullName(a).localeCompare(fullName(b))), width: coupleWidth });
-      } else {
-        used.add(p.id);
-        units.push({ members: [p], width: singleWidth });
+      const members = [];
+      const clusterSeen = new Set();
+      const queue = [p.id];
+      while (queue.length) {
+        const memberId = queue.shift();
+        if (!memberId || clusterSeen.has(memberId) || used.has(memberId)) continue;
+        const member = person(memberId);
+        if (!member || !ids.has(member.id) || (generation.get(member.id) || 0) !== gen) continue;
+        clusterSeen.add(member.id);
+        members.push(member);
+        mutualPartnerIds(member).forEach(partnerId => {
+          if (!clusterSeen.has(partnerId) && !used.has(partnerId)) queue.push(partnerId);
+        });
       }
+      members.forEach(member => used.add(member.id));
+      const sortedMembers = members.sort((a,b) => fullName(a).localeCompare(fullName(b)));
+      const width = sortedMembers.length > 2 ? 372 : sortedMembers.length > 1 ? coupleWidth : singleWidth;
+      units.push({ members: sortedMembers, width });
     }
     const gap = 28;
     const totalWidth = units.reduce((sum, unit) => sum + unit.width, 0) + Math.max(0, units.length - 1) * gap;
@@ -2302,7 +2311,12 @@ function applyFocusLayout(id) {
     const rowY = centerY + gen * rowGap;
     for (const unit of units) {
       const centerX = cursor + unit.width / 2;
-      if (unit.members.length > 1) {
+      if (unit.members.length > 2) {
+        unit.members.forEach(member => {
+          member.x = Math.round(centerX);
+          member.y = rowY;
+        });
+      } else if (unit.members.length > 1) {
         unit.members[0].x = Math.round(centerX - pairGap / 2);
         unit.members[1].x = Math.round(centerX + pairGap / 2);
         unit.members[0].y = rowY;
@@ -5668,7 +5682,7 @@ function topDialogEntry() {
 }
 function dialogIsolationRoot(dialog) {
   const layer = dialog?.parentElement;
-  if (layer?.matches('.decisionLayer, .relationshipLayer, .exportLayer')) return layer;
+  if (layer?.matches('.decisionLayer, .importLayer, .relationshipLayer, .exportLayer')) return layer;
   return dialog;
 }
 function resolveDialogFocus(entry) {
@@ -7250,9 +7264,14 @@ $('listRows').addEventListener('keydown', event => {
 });
 $('importBtn').addEventListener('click', () => {
   closeFileMenu();
+  importFocusReturnTarget = $('importBtn');
+  $('fileInput').value = '';
   $('fileInput').click();
 });
 function openWelcomeImport() {
+  importFocusReturnTarget = document.activeElement instanceof HTMLElement
+    ? document.activeElement
+    : null;
   $('fileInput').value = '';
   $('fileInput').click();
 }
@@ -7277,21 +7296,91 @@ if (minimap) {
     panFromMinimapEvent(e, minimapInner, minimapState);
   });
 }
+function formatImportCount(value, singular, plural) {
+  return `${Number(value || 0).toLocaleString('de-DE')} ${Number(value) === 1 ? singular : plural}`;
+}
+function closeImportDialog({ returnFocus = true } = {}) {
+  const layer = $('importLayer');
+  const dialog = $('importDialog');
+  if (!layer || !dialog) return false;
+  layer.classList.add('hidden');
+  dialog.setAttribute('aria-hidden', 'true');
+  pendingImport = null;
+  const closed = closeDialog('close', 'importDialog', { returnFocus });
+  importFocusReturnTarget = null;
+  return closed;
+}
+function openImportDialog(imported, {
+  fileName = '',
+  positioned = 0,
+  trigger = importFocusReturnTarget
+} = {}) {
+  const layer = $('importLayer');
+  const dialog = $('importDialog');
+  if (!layer || !dialog) return false;
+  const people = imported.people || [];
+  const pooled = people.filter(entry => entry.pool).length;
+  const preservePositions = !people.length || positioned === people.length;
+  pendingImport = { imported, fileName };
+  $('importLayoutPreserve').checked = preservePositions;
+  $('importLayoutAuto').checked = !preservePositions;
+  $('importSummary').textContent = [
+    fileName || 'JSON-Datei',
+    formatImportCount(people.length, 'Person', 'Personen'),
+    `${positioned.toLocaleString('de-DE')} mit gespeicherter Position`,
+    pooled ? `${pooled.toLocaleString('de-DE')} im Vorrat` : ''
+  ].filter(Boolean).join(' · ');
+  layer.classList.remove('hidden');
+  dialog.setAttribute('aria-hidden', 'false');
+  openDialog('importDialog', trigger, '#importLayoutPreserve', {
+    requestClose: () => closeImportDialog()
+  });
+  return true;
+}
+async function confirmImport() {
+  if (!pendingImport) return false;
+  const { imported } = pendingImport;
+  const arrangeAutomatically = $('importLayoutAuto').checked;
+  closeImportDialog({ returnFocus: false });
+  await runBusy('JSON wird importiert …', async () => {
+    workingFileHandle = null;
+    applyLoadedData(imported, { fitResult: false });
+    if (arrangeAutomatically) autoLayout(false);
+    updateWorkingFileButton();
+    save();
+    hideWelcomeSurface();
+    refreshWelcomeMeta();
+    focusPreferredPerson({ preferFocus: focusMode || nonPoolPeople.length > 1200 });
+  });
+  return true;
+}
+$('importCancel')?.addEventListener('click', () => closeImportDialog());
+$('importConfirm')?.addEventListener('click', confirmImport);
+$('importLayer')?.addEventListener('click', event => {
+  if (event.target === $('importLayer')) closeImportDialog();
+});
 $('fileInput').addEventListener('change', e => {
   const f = e.target.files[0];
   if (!f) return;
   const r = new FileReader();
   r.onload = async () => {
     try {
-      const imported = await runBusy('JSON wird importiert …', async () => normalize(JSON.parse(r.result)));
-      workingFileHandle = null;
-      applyLoadedData(imported, { fitResult: false });
-      updateWorkingFileButton();
-      save();
-      hideWelcomeSurface();
-      refreshWelcomeMeta();
-      focusPreferredPerson({ preferFocus: focusMode || nonPoolPeople.length > 1200 });
+      const imported = await runBusy('JSON-Datei wird geprüft …', async () => {
+        const parsed = JSON.parse(r.result);
+        if (!parsed || !Array.isArray(parsed.people)) throw new Error('invalid-import');
+        const positioned = parsed.people.filter(entry =>
+          entry?.x !== '' && entry?.x !== null && entry?.x !== undefined
+          && entry?.y !== '' && entry?.y !== null && entry?.y !== undefined
+          && Number.isFinite(Number(entry.x)) && Number.isFinite(Number(entry.y))
+        ).length;
+        return {
+          imported: normalize(parsed, { normalizePositions: false }),
+          positioned
+        };
+      });
+      openImportDialog(imported.imported, { fileName: f.name, positioned: imported.positioned });
     } catch {
+      importFocusReturnTarget = null;
       alert('Import nicht erkannt. Erwartet wird ein JSON-Export dieser App.');
     }
   };

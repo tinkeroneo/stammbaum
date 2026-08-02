@@ -157,6 +157,7 @@ test('Import und Reset beginnen jeweils eine neue Historie', async ({ page }) =>
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(importedTree))
   });
+  await page.getByTestId('import-confirm').click();
   await expect.poll(() => page.evaluate(() => window.__uxDebug.getCommandHistoryState().length)).toBe(0);
   await expect(page.getByTestId('person-card-imported')).toBeVisible();
 

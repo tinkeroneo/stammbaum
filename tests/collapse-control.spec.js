@@ -33,7 +33,7 @@ function overlapArea(a, b) {
   return width * height;
 }
 
-test('lesbarer Zoom dockt die 44-px-Aktion außerhalb der Karte an', async ({ page }) => {
+test('lesbarer Zoom skaliert die Canvas-Aktion mit der Karte und dockt sie außen an', async ({ page }) => {
   await openTree(page);
   await page.evaluate(() => window.__uxDebug.setViewForTest({ s: 0.72 }));
   const root = page.getByTestId('person-card-root');
@@ -45,10 +45,14 @@ test('lesbarer Zoom dockt die 44-px-Aktion außerhalb der Karte an', async ({ pa
   await expect(button).toHaveAttribute('aria-label', 'Ast von Rosa Wurzel einklappen, 2 direkte Kinder');
   const cardBox = await card.boundingBox();
   const buttonBox = await button.boundingBox();
+  const visualBox = await button.locator('span').boundingBox();
   const rootBox = await root.boundingBox();
   const partnerBox = await page.getByTestId('person-card-partner').boundingBox();
   expect(buttonBox.width).toBeGreaterThanOrEqual(43.5);
   expect(buttonBox.height).toBeGreaterThanOrEqual(43.5);
+  expect(visualBox.width).toBeGreaterThanOrEqual(25);
+  expect(visualBox.width).toBeLessThan(30);
+  expect(visualBox.height).toBeCloseTo(visualBox.width, 0);
   expect(buttonBox.x).toBeGreaterThanOrEqual(cardBox.x + cardBox.width);
   expect(overlapArea(buttonBox, rootBox)).toBe(0);
   expect(overlapArea(buttonBox, partnerBox)).toBe(0);
@@ -92,14 +96,17 @@ test('kleiner Zoom blendet die Canvas-Aktion aus und hält sie im Personendetail
   expect(stateIndicator).toEqual({ borderStyle: 'dashed', pointerEvents: 'none' });
 });
 
-test('Zoomschwelle verhindert riesige Canvas-Aktionen ohne harte Funktionslücke', async ({ page }) => {
+test('Zoomschwelle verhindert übergroße Canvas-Aktionen ohne harte Funktionslücke', async ({ page }) => {
   await openTree(page);
   const button = page.getByTestId('branch-toggle-root');
 
   await page.evaluate(() => window.__uxDebug.setViewForTest({ s: 0.55 }));
   await expect(button).toBeVisible();
   const readableBox = await button.boundingBox();
+  const readableVisualBox = await button.locator('span').boundingBox();
   expect(readableBox.width).toBeGreaterThanOrEqual(43.5);
+  expect(readableVisualBox.width).toBeGreaterThanOrEqual(19);
+  expect(readableVisualBox.width).toBeLessThan(22);
 
   await page.evaluate(() => window.__uxDebug.setViewForTest({ s: 0.549 }));
   await expect(button).toBeHidden();

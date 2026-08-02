@@ -23,7 +23,10 @@ export function normalizeImportedPositions(people) {
   });
 }
 
-export function normalizeTreeData(input, { fallback = { people: [] } } = {}) {
+export function normalizeTreeData(input, {
+  fallback = { people: [] },
+  normalizePositions = true
+} = {}) {
   const data = input && Array.isArray(input.people) ? input : structuredClone(fallback);
   data.people = data.people.map((person, index) => {
     const name = String(person.name || 'Ohne Name');
@@ -78,7 +81,7 @@ export function normalizeTreeData(input, { fallback = { people: [] } } = {}) {
       partnerDetails
     };
   });
-  normalizeImportedPositions(data.people);
+  if (normalizePositions) normalizeImportedPositions(data.people);
   data.rootIds = uniqueIds([
     ...(Array.isArray(data.rootIds) ? data.rootIds : []),
     data.rootId,

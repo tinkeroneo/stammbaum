@@ -127,6 +127,8 @@ test('JSON-Import und Root-Auswahl sind als Abschlussflow funktionsfähig', asyn
   await page.getByTestId('json-import').click();
   const chooser = await chooserPromise;
   await chooser.setFiles({ name: 'abschluss.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(imported)) });
+  await expect(page.getByTestId('import-layout-preserve')).toBeChecked();
+  await page.getByTestId('import-confirm').click();
   await expect(page.getByTestId('root-selection-dialog')).toHaveAttribute('aria-hidden', 'false');
   await page.getByTestId('root-selection-search').fill('Import Abschluss');
   await capture(page, 'root-selection-768x1024.png');
