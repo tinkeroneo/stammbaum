@@ -88,6 +88,9 @@ const galaxyConstellationElement = $('galaxyConstellation');
 const galaxyConstellationLines = $('galaxyConstellationLines');
 const galaxyConstellationStars = $('galaxyConstellationStars');
 const galaxyHud = $('galaxyHud');
+const galaxyHudToggle = $('galaxyHudToggle');
+const zoomControls = $('zoomControls');
+const zoomToggle = $('zoomToggle');
 const selectionRect = $('selectionRect');
 const minimap = $('minimap');
 const minimapInner = minimap ? minimap.querySelector('.minimapInner') : null;
@@ -125,6 +128,8 @@ let galaxyConstellationClusterId = '';
 let galaxySemanticStage = 'overview';
 let galaxyConstellationSignature = '';
 let galaxySemanticSettleTimer = null;
+let galaxyHudExpanded = !window.matchMedia('(max-width:700px)').matches;
+let mobileZoomControlsExpanded = false;
 let galaxyLayoutCache = null;
 let galaxyLayoutPending = null;
 let galaxyLayoutRequestId = 0;
@@ -3531,11 +3536,31 @@ function focusGalaxyDetail(personId) {
   applyView();
   return true;
 }
+function updateGalaxyHudExpansion() {
+  if (!galaxyHud || !galaxyHudToggle) return;
+  galaxyHud.classList.toggle('collapsed', !galaxyHudExpanded);
+  galaxyHudToggle.setAttribute('aria-expanded', String(galaxyHudExpanded));
+  galaxyHudToggle.setAttribute('aria-label', galaxyHudExpanded
+    ? 'Hinweise zur Familienansicht einklappen'
+    : 'Hinweise zur Familienansicht anzeigen');
+  galaxyHudToggle.textContent = galaxyHudExpanded ? '⌃' : '⌄';
+}
+function setMobileZoomControlsExpanded(expanded) {
+  mobileZoomControlsExpanded = !!expanded;
+  zoomControls?.classList.toggle('expanded', mobileZoomControlsExpanded);
+  if (!zoomToggle) return;
+  zoomToggle.setAttribute('aria-expanded', String(mobileZoomControlsExpanded));
+  zoomToggle.setAttribute('aria-label', mobileZoomControlsExpanded
+    ? 'Zoomtasten einklappen'
+    : 'Zoomtasten anzeigen');
+  zoomToggle.textContent = mobileZoomControlsExpanded ? '×' : '±';
+}
 function updateGalaxyHud() {
   if (!galaxyHud) return;
   const active = layoutMode === 'galaxy' && galaxyLayoutState;
   galaxyHud.classList.toggle('hidden', !active);
   if (!active) return;
+  updateGalaxyHudExpansion();
   const cluster = galaxyActiveClusterId
     ? galaxyLayoutState.clusterById.get(galaxyActiveClusterId)
     : null;
@@ -3736,6 +3761,7 @@ function clearDerivedLayoutState() {
   clearGalaxyConstellation();
   galaxyClustersElement?.replaceChildren();
   galaxyHud?.classList.add('hidden');
+  setMobileZoomControlsExpanded(false);
 }
 function layoutFocusPersonId(preferredId = selected) {
   return person(preferredId) && !person(preferredId).pool
@@ -7955,6 +7981,13 @@ document.querySelectorAll('[data-layout-mode]').forEach(button => {
     else setLayoutMode(button.dataset.layoutMode);
     closeSettingsMenu();
   });
+});
+galaxyHudToggle?.addEventListener('click', () => {
+  galaxyHudExpanded = !galaxyHudExpanded;
+  updateGalaxyHudExpansion();
+});
+zoomToggle?.addEventListener('click', () => {
+  setMobileZoomControlsExpanded(!mobileZoomControlsExpanded);
 });
 $('galaxyBackBtn')?.addEventListener('click', () => showGalaxyOverview({ restoreFocus: true }));
 $('galaxyRelationsBtn')?.addEventListener('click', () => {

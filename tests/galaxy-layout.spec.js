@@ -99,11 +99,66 @@ test('Galaxie bleibt auf Mobile bedienbar und löst Detail beim Herauszoomen wie
   await cluster.click();
   await expect(page.getByTestId('person-card-root-a')).toBeVisible();
 
+  await page.getByTestId('zoom-toggle').click();
   const zoomOut = page.locator('#zout');
   for (let index = 0; index < 14; index += 1) await zoomOut.click();
   await expect(page.locator('#nodes > .person')).toHaveCount(0);
   expect((await page.evaluate(() => window.__uxDebug.getGalaxyState())).activeClusterId).toBe('');
   await expect(page.getByTestId('galaxy-cluster-bodensteiner')).toBeVisible();
+});
+
+test('Mobile hält Galaxy-Hinweise und Zoomtasten kompakt und klappt beide gezielt auf', async ({ page }) => {
+  await openTree(page, { width: 390, height: 844 });
+  await page.evaluate(() => window.__uxDebug.setLayoutModeForTest('galaxy'));
+
+  const hud = page.getByTestId('galaxy-hud');
+  const hudToggle = page.getByTestId('galaxy-hud-toggle');
+  const zoomToggleButton = page.getByTestId('zoom-toggle');
+  await expect(hudToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('#galaxyHudText')).toBeHidden();
+  await expect(page.getByTestId('galaxy-exit')).toBeHidden();
+  expect((await hud.boundingBox()).height).toBeLessThanOrEqual(58);
+  await expect(zoomToggleButton).toBeVisible();
+  await expect(page.locator('#zin')).toBeHidden();
+  await expect(page.locator('#zout')).toBeHidden();
+  if (captureScreenshots) {
+    fs.mkdirSync(screenshotDir, { recursive: true });
+    await page.screenshot({ path: path.join(screenshotDir, 'galaxie-mobile-kompakt-390x844.png') });
+  }
+
+  await hudToggle.click();
+  await expect(hudToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#galaxyHudText')).toBeVisible();
+  await expect(page.getByTestId('galaxy-exit')).toBeVisible();
+  const openHudBox = await hud.boundingBox();
+  expect(openHudBox.width).toBeLessThanOrEqual(320);
+  expect(openHudBox.height).toBeLessThan(190);
+  if (captureScreenshots) {
+    await page.screenshot({ path: path.join(screenshotDir, 'galaxie-mobile-info-390x844.png') });
+  }
+  await hudToggle.click();
+  await expect(page.locator('#galaxyHudText')).toBeHidden();
+
+  await zoomToggleButton.click();
+  await expect(zoomToggleButton).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#zin')).toBeVisible();
+  await expect(page.locator('#zout')).toBeVisible();
+  await zoomToggleButton.click();
+  await expect(page.locator('#zin')).toBeHidden();
+});
+
+test('Desktop kann die Galaxy-Info einklappen und beim Überfahren kurz einblenden', async ({ page }) => {
+  await openTree(page, { width: 1280, height: 800 });
+  await page.evaluate(() => window.__uxDebug.setLayoutModeForTest('galaxy'));
+  const hud = page.getByTestId('galaxy-hud');
+  const hudToggle = page.getByTestId('galaxy-hud-toggle');
+  await expect(hudToggle).toHaveAttribute('aria-expanded', 'true');
+  await hudToggle.click();
+  await page.mouse.move(900, 700);
+  await expect(hudToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('#galaxyHudText')).toBeHidden();
+  await hud.hover();
+  await expect(page.locator('#galaxyHudText')).toBeVisible();
 });
 
 test('semantischer Mobile-Zoom hält Cluster stabil, zeigt ein Sternbild und öffnet erst danach Karten', async ({ page }) => {

@@ -120,18 +120,26 @@
                 </div>
                 <section class="galaxyHud hidden" id="galaxyHud" data-testid="galaxy-hud"
                     aria-live="polite" aria-labelledby="galaxyHudTitle">
-                    <div>
-                        <span class="galaxyBeta">Übersicht</span>
-                        <strong id="galaxyHudTitle">Familienübersicht</strong>
-                        <p id="galaxyHudText">Familiencluster antippen, um hineinzuzoomen.</p>
+                    <div class="galaxyHudSummary">
+                        <div class="galaxyHudHeading">
+                            <span class="galaxyBeta">Übersicht</span>
+                            <strong id="galaxyHudTitle">Familienübersicht</strong>
+                        </div>
+                        <button type="button" class="galaxyHudToggle" id="galaxyHudToggle"
+                            data-testid="galaxy-hud-toggle"
+                            aria-label="Hinweise zur Familienübersicht anzeigen" aria-expanded="true"
+                            aria-controls="galaxyHudDetails">⌃</button>
                     </div>
-                    <div class="galaxyHudActions">
-                        <button type="button" class="pill hidden" id="galaxyBackBtn"
-                            data-testid="galaxy-back">Zur Galaxie</button>
-                        <button type="button" class="pill hidden" id="galaxyRelationsBtn"
-                            data-testid="galaxy-relations">Verwandtschaft</button>
-                        <button type="button" class="pill" id="galaxyExitBtn"
-                            data-testid="galaxy-exit">Karten</button>
+                    <div class="galaxyHudDetails" id="galaxyHudDetails">
+                        <p id="galaxyHudText">Familiencluster antippen, um hineinzuzoomen.</p>
+                        <div class="galaxyHudActions">
+                            <button type="button" class="pill hidden" id="galaxyBackBtn"
+                                data-testid="galaxy-back">Zur Galaxie</button>
+                            <button type="button" class="pill hidden" id="galaxyRelationsBtn"
+                                data-testid="galaxy-relations">Verwandtschaft</button>
+                            <button type="button" class="pill" id="galaxyExitBtn"
+                                data-testid="galaxy-exit">Karten</button>
+                        </div>
                     </div>
                 </section>
             </section>
@@ -145,11 +153,13 @@
                 <h2 id="helpHintTitle"></h2>
                 <p id="helpHintText"></p>
             </section>
-            <div class="zoom" role="group" aria-label="Zoom-Steuerung"><button type="button" id="zin"
-                    aria-label="Heranzoomen">+</button><button type="button" id="zout"
-                    aria-label="Rauszoomen">−</button><button type="button" id="home"
+            <div class="zoom" id="zoomControls" role="group" aria-label="Zoom-Steuerung">
+                <button type="button" class="zoomToggle" id="zoomToggle" aria-label="Zoomtasten anzeigen"
+                    data-testid="zoom-toggle" aria-expanded="false">±</button><button type="button" class="zoomTool" id="zin"
+                    aria-label="Heranzoomen">+</button><button type="button" class="zoomTool" id="zout"
+                    aria-label="Rauszoomen">−</button><button type="button" class="zoomTool" id="home"
                     data-testid="fit-readable" aria-label="Lesbar zentrieren" title="Lesbar zentrieren">⌂</button><button
-                    type="button" class="overviewBtn" id="overviewBtn" data-testid="overview-open"
+                    type="button" class="overviewBtn zoomTool" id="overviewBtn" data-testid="overview-open"
                     aria-label="Überblick öffnen" aria-expanded="false" aria-controls="overviewSheet"
                     title="Überblick öffnen">▦</button></div>
             <div class="offscreenIndicators" id="offscreenIndicators" data-testid="offscreen-indicators"

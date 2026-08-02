@@ -61,6 +61,7 @@ test('großer Stammbaum startet in semantischer Übersicht und verwendet Cluster
   });
   expect(state.layoutDurationMs).toBeGreaterThanOrEqual(0);
 
+  await page.getByTestId('zoom-toggle').click();
   await page.getByTestId('overview-open').click();
   await expect(page.getByTestId('overview-sheet')).toContainText('Familienübersicht');
   await expect(page.locator('#overviewSvg .galaxyMiniCluster')).toHaveCount(20);
