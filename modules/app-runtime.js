@@ -4523,14 +4523,14 @@ main.addEventListener('touchstart', e => {
     drag = null;
     pan = null;
     const a = e.touches[0], b = e.touches[1];
+    const mid = midpoint(a,b);
+    const anchorWorld = screenToWorld(mid.x, mid.y);
     pinch = {
       d: distance(a,b),
       s: view.s,
-      x: view.x,
-      y: view.y,
-      mid: midpoint(a,b),
+      anchorWorld,
       clusterId: layoutMode === 'galaxy' && !galaxyActiveClusterId
-        ? nearestGalaxyCluster(screenToWorld(midpoint(a,b).x, midpoint(a,b).y))?.id || ''
+        ? nearestGalaxyCluster(anchorWorld)?.id || ''
         : ''
     };
     if (pinch.clusterId) galaxyConstellationClusterId = pinch.clusterId;
@@ -4543,8 +4543,9 @@ main.addEventListener('touchmove', e => {
   const a = e.touches[0], b = e.touches[1];
   const mid = midpoint(a,b);
   const ns = Math.max(minimumZoomForMode(), Math.min(maxZoom, pinch.s * distance(a,b) / Math.max(1, pinch.d)));
-  view.x = mid.x - (pinch.mid.x - pinch.x) * (ns / pinch.s);
-  view.y = mid.y - (pinch.mid.y - pinch.y) * (ns / pinch.s);
+  const rect = main.getBoundingClientRect();
+  view.x = mid.x - rect.left - rect.width / 2 - pinch.anchorWorld.x * ns;
+  view.y = mid.y - rect.top - rect.height / 2 - pinch.anchorWorld.y * ns;
   view.s = ns;
   applyView();
 }, { passive:false });

@@ -154,7 +154,7 @@ test('echte Zwei-Finger-Geste durchläuft auf Mobile beide semantischen Zoomstuf
   await openTree(page, { width: 390, height: 844 });
   await page.evaluate(() => window.__uxDebug.setLayoutModeForTest('galaxy'));
 
-  const pinchAtCluster = async scale => page.evaluate(({ clusterId, scale }) => {
+  const pinchAtCluster = async (scale, movement = { x: 0, y: 0 }) => page.evaluate(({ clusterId, scale, movement }) => {
     const state = window.__uxDebug.getGalaxyState();
     const cluster = state.clusters.find(entry => entry.id === clusterId);
     const view = window.__uxDebug.getView();
@@ -164,13 +164,13 @@ test('echte Zwei-Finger-Geste durchläuft auf Mobile beide semantischen Zoomstuf
       x: rect.left + rect.width / 2 + view.x + cluster.x * view.s,
       y: rect.top + rect.height / 2 + view.y + cluster.y * view.s
     };
-    const createTouches = (distance, identifiers = [1, 2]) => identifiers.map((identifier, index) => new Touch({
+    const createTouches = (distance, offset = { x: 0, y: 0 }, identifiers = [1, 2]) => identifiers.map((identifier, index) => new Touch({
       identifier,
       target: main,
-      clientX: center.x + (index === 0 ? -distance / 2 : distance / 2),
-      clientY: center.y,
-      pageX: center.x + (index === 0 ? -distance / 2 : distance / 2),
-      pageY: center.y,
+      clientX: center.x + offset.x + (index === 0 ? -distance / 2 : distance / 2),
+      clientY: center.y + offset.y,
+      pageX: center.x + offset.x + (index === 0 ? -distance / 2 : distance / 2),
+      pageY: center.y + offset.y,
       radiusX: 8,
       radiusY: 8,
       force: 0.5
@@ -183,7 +183,7 @@ test('echte Zwei-Finger-Geste durchläuft auf Mobile beide semantischen Zoomstuf
       targetTouches: startTouches,
       changedTouches: startTouches
     }));
-    const movedTouches = createTouches(80 * scale);
+    const movedTouches = createTouches(80 * scale, movement);
     main.dispatchEvent(new TouchEvent('touchmove', {
       bubbles: true,
       cancelable: true,
@@ -198,9 +198,19 @@ test('echte Zwei-Finger-Geste durchläuft auf Mobile beide semantischen Zoomstuf
       targetTouches: [],
       changedTouches: movedTouches
     }));
-  }, { clusterId: 'family:bodensteiner', scale });
+    const after = window.__uxDebug.getView();
+    const anchoredScreen = {
+      x: rect.left + rect.width / 2 + after.x + cluster.x * after.s,
+      y: rect.top + rect.height / 2 + after.y + cluster.y * after.s
+    };
+    return Math.hypot(
+      anchoredScreen.x - (center.x + movement.x),
+      anchoredScreen.y - (center.y + movement.y)
+    );
+  }, { clusterId: 'family:bodensteiner', scale, movement });
 
-  await pinchAtCluster(1.8);
+  const anchorDrift = await pinchAtCluster(1.8, { x: 28, y: -18 });
+  expect(anchorDrift).toBeLessThan(1);
   await expect(page.locator('.galaxyConstellationStar')).toHaveCount(3);
   expect((await page.evaluate(() => window.__uxDebug.getGalaxyState())).semanticStage).toBe('constellation');
   await pinchAtCluster(1.8);
