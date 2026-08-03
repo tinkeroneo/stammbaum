@@ -33,10 +33,10 @@ test('bereinigter US-Zweig lädt, ist verknüpft und visuell prüfbar', async ({
   });
   await page.getByTestId('import-confirm').click();
 
-  await expect.poll(() => page.evaluate(() => window.__uxDebug.getDataSnapshot().people.length), { timeout: 60_000 }).toBe(4341);
+  await expect.poll(() => page.evaluate(() => window.__uxDebug.getDataSnapshot().people.length), { timeout: 60_000 }).toBe(4297);
   const importedState = await page.evaluate(() => window.__uxDebug.getDataSnapshot());
-  expect(importedState.people.filter(person => !person.pool)).toHaveLength(3252);
-  expect(importedState.people.filter(person => person.pool)).toHaveLength(1089);
+  expect(importedState.people.filter(person => !person.pool)).toHaveLength(3257);
+  expect(importedState.people.filter(person => person.pool)).toHaveLength(1040);
   expect(importedState.people.filter(person =>
     String(person.lastName || '').toLowerCase() === 'born'
     && !/\bBorn$/i.test(String(person.name || '').trim())
@@ -87,7 +87,55 @@ test('bereinigter US-Zweig lädt, ist verknüpft und visuell prüfbar', async ({
     pool: false
   });
   expect(importedState.people.find(person => person.id === 'fbx10740')).toBeUndefined();
+  for (const mergedId of [
+    'k0161', 'fb1233', 'fbx9849', 'fbx10558', 'fb1290',
+    'fb1988', 'fb1997', 'fb1996', 'fb2004', 'fb2002',
+    'fbx11508', 'fbx11583', 'fbx11578', 'fbx11589', 'fbx11587',
+    'fbx11359', 'fbx11501', 'fbx11601', 'fbx11532', 'fbx10471',
+    'fbx11451', 'fbx11514', 'fbx11389', 'fbx11580', 'fbx11591',
+    'fbx11469', 'fbx11471', 'fbx11276', 'fbx11496', 'fbx11529',
+    'fbx11284', 'fbx11328', 'fbx11597', 'fbx11398', 'fbx11248',
+    'fbx11280', 'fbx11459', 'fbx11486', 'fbx11308', 'fbx11380',
+    'fbx11445', 'fbx11558', 'fbx11384', 'fbx11352'
+  ]) expect(importedState.people.find(person => person.id === mergedId)).toBeUndefined();
+  expect(importedState.people.find(person => person.id === 'fbx9870')).toMatchObject({
+    born: '29.02.1976',
+    pool: false
+  });
+  expect(importedState.people.find(person => person.id === 'fb0843')?.partners).toContain('fbx10101');
+  expect(importedState.people.find(person => person.id === 'fbx10101')).toMatchObject({
+    name: 'Carolyn A. Ott',
+    born: '19.03.1963',
+    pool: false
+  });
+  expect(importedState.people.find(person => person.id === 'fb0936')?.partners).toContain('fbx10612');
+  expect(importedState.people.find(person => person.id === 'fbx10612')).toMatchObject({
+    born: '12.06.1938',
+    pool: false
+  });
+  expect(importedState.people.find(person => person.id === 'fbx10615')).toMatchObject({
+    name: 'Blanche Beauchamp',
+    born: '1898',
+    died: '1979',
+    pool: false
+  });
+  expect(importedState.people.find(person => person.id === 'fbx10616')).toMatchObject({
+    name: 'Bernice Lothspeick',
+    born: '1908',
+    died: '1979',
+    pool: false
+  });
   const importedById = new Map(importedState.people.map(person => [String(person.id), person]));
+  const structuralPoolIdentities = new Map();
+  for (const person of importedState.people.filter(person => person.pool)) {
+    const normalizedName = String(person.name || '').normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const partnerIds = [...new Set([...(person.partners || []), person.partner].filter(Boolean))].sort();
+    if (!partnerIds.length) continue;
+    const key = `${normalizedName}|${partnerIds.join('|')}`;
+    structuralPoolIdentities.set(key, [...(structuralPoolIdentities.get(key) || []), person.id]);
+  }
+  expect([...structuralPoolIdentities.values()].filter(ids => ids.length > 1)).toEqual([]);
   const isAncestor = (ancestorId, descendantId) => {
     const pending = [...(importedById.get(descendantId)?.parents || [])];
     const seen = new Set();
@@ -115,7 +163,7 @@ test('bereinigter US-Zweig lädt, ist verknüpft und visuell prüfbar', async ({
   ).toBe('galaxy');
   expect(await page.evaluate(() => window.__uxDebug.getLargeTreeState())).toMatchObject({
     active: true,
-    personCount: 3252,
+    personCount: 3257,
     overviewCached: true,
     overviewPending: false,
     layoutSource: 'worker'

@@ -32,7 +32,10 @@ const server = http.createServer(async (request, response) => {
 });
 
 const keepAliveSockets = new Set();
-const idleShutdownMs = Number(process.env.PW_SERVER_IDLE_MS || 10000);
+// Large graph/layout tests can legitimately spend well over ten seconds in the
+// browser without requesting another static asset. Playwright terminates its
+// webServer process after the run, so this timeout is only a leak safeguard.
+const idleShutdownMs = Number(process.env.PW_SERVER_IDLE_MS || 300000);
 let idleShutdownTimer = null;
 server.on('connection', socket => {
   keepAliveSockets.add(socket);

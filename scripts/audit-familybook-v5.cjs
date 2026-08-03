@@ -67,6 +67,16 @@ for (const person of data.people.filter(person => /^fb/.test(person.id) && perso
 }
 const exactDuplicates = [...identities.values()].filter(ids => ids.length > 1);
 
+const structuralIdentities = new Map();
+for (const person of data.people.filter(person => person.pool)) {
+  const partnerIds = [...new Set([...(person.partners || []), person.partner].filter(Boolean))].sort();
+  if (!partnerIds.length) continue;
+  const key = `${normalized(person.name)}|${partnerIds.join('|')}`;
+  if (!structuralIdentities.has(key)) structuralIdentities.set(key, []);
+  structuralIdentities.get(key).push(person.id);
+}
+const structuralPoolDuplicates = [...structuralIdentities.values()].filter(ids => ids.length > 1);
+
 const summary = {
   people: data.people.length,
   metadataPeople: data.metadata?.peopleCount,
@@ -79,6 +89,7 @@ const summary = {
   selfReferences,
   parentCycles: [...new Set(cycles)],
   exactDuplicates,
+  structuralPoolDuplicates,
   activeCoordinateOverlaps: overlaps,
   importedActiveBounds: {
     minX: Math.min(...importedActive.map(person => person.x)),
@@ -90,6 +101,7 @@ const summary = {
 
 console.log(JSON.stringify(summary, null, 2));
 if (missing.length || asymmetricPartners.length || implausibleParents.length || selfReferences.length
-  || cycles.length || exactDuplicates.length || overlaps.length || data.people.length !== data.metadata?.peopleCount) {
+  || cycles.length || exactDuplicates.length || structuralPoolDuplicates.length || overlaps.length
+  || data.people.length !== data.metadata?.peopleCount) {
   process.exitCode = 1;
 }

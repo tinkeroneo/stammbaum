@@ -8449,6 +8449,17 @@ document.querySelector('[data-testid=\"welcome-continue\"]')?.addEventListener('
 
 let privateDataFocusReturnTarget = null;
 let privateUnlockTaps = [];
+const privateUnlockTapWindowMs = 6_000;
+const privateDatasetOptions = Object.freeze({
+  compact: {
+    url: 'private/Bodensteiner.enc.json',
+    fileName: 'Verschlüsselter Bodensteiner-Privatbestand (kompakt)'
+  },
+  v5: {
+    url: 'private/Bodensteiner-v5.enc.json',
+    fileName: 'Verschlüsselter Bodensteiner-Privatbestand V5'
+  }
+});
 
 function setPrivateDataError(message = '') {
   const error = $('privateDataError');
@@ -8475,6 +8486,8 @@ function openPrivateDataDialog(trigger = document.activeElement) {
   if (!layer || !dialog || !layer.classList.contains('hidden')) return false;
   privateDataFocusReturnTarget = trigger instanceof HTMLElement ? trigger : null;
   $('privateDataPassphrase').value = '';
+  const compactOption = $('privateDatasetCompact');
+  if (compactOption) compactOption.checked = true;
   setPrivateDataError('');
   layer.classList.remove('hidden');
   dialog.setAttribute('aria-hidden', 'false');
@@ -8486,7 +8499,7 @@ function openPrivateDataDialog(trigger = document.activeElement) {
 
 function registerPrivateUnlockTap(event) {
   const now = Date.now();
-  privateUnlockTaps = privateUnlockTaps.filter(value => now - value < 4_000);
+  privateUnlockTaps = privateUnlockTaps.filter(value => now - value < privateUnlockTapWindowMs);
   privateUnlockTaps.push(now);
   if (privateUnlockTaps.length < 7) return;
   privateUnlockTaps = [];
@@ -8507,8 +8520,13 @@ async function unlockPrivateDataset(event) {
   button.disabled = true;
   button.textContent = 'Entschlüsseln …';
   try {
+    const selectedKey = document.querySelector('input[name="privateDataset"]:checked')?.value || 'compact';
+    const selectedDataset = privateDatasetOptions[selectedKey] || privateDatasetOptions.compact;
     const result = await runBusy('Privatbestand wird lokal entschlüsselt …', async () => {
-      const parsed = await fetchAndDecryptPrivateDataset({ passphrase });
+      const parsed = await fetchAndDecryptPrivateDataset({
+        url: selectedDataset.url,
+        passphrase
+      });
       const positioned = parsed.people.filter(entry =>
         entry?.x !== '' && entry?.x !== null && entry?.x !== undefined
         && entry?.y !== '' && entry?.y !== null && entry?.y !== undefined
@@ -8522,7 +8540,7 @@ async function unlockPrivateDataset(event) {
     const trigger = privateDataFocusReturnTarget;
     closePrivateDataDialog({ returnFocus: false });
     openImportDialog(result.imported, {
-      fileName: 'Verschlüsselter Bodensteiner-Privatbestand',
+      fileName: selectedDataset.fileName,
       positioned: result.positioned,
       trigger
     });

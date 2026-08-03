@@ -48,13 +48,13 @@ function connectedPoolPeople(data) {
   return people.filter(person => person.pool && reachable.has(String(person.id)));
 }
 
-function updateMetadata(data, activatedCount, remainingPoolCount) {
+function updateMetadata(data, remainingPoolCount) {
   data.metadata ||= {};
   const existing = Array.isArray(data.metadata.notes) ? data.metadata.notes : [];
   data.metadata.notes = existing.filter(note =>
     !obsoleteNoteFragments.some(fragment => String(note).includes(fragment))
   );
-  const note = `V5: Alle über Eltern-, Kind- oder Partnerbeziehungen an den aktiven Stammbaum angeschlossenen Personen sind aktiv (${activatedCount} Personen aus dem früheren Vorrat eingegliedert). Im Vorrat bleiben ${remainingPoolCount} derzeit nicht angeschlossene Arbeitszweig-Personen; confidence kennzeichnet die Qualität beziehungsweise Vollständigkeit der Nachweise.`;
+  const note = `V5: Alle über Eltern-, Kind- oder Partnerbeziehungen an den aktiven Stammbaum angeschlossenen Personen sind aktiv. Im Vorrat bleiben ${remainingPoolCount} derzeit nicht angeschlossene Arbeitszweig-Personen; confidence kennzeichnet die Qualität beziehungsweise Vollständigkeit der Nachweise.`;
   if (!data.metadata.notes.includes(note)) data.metadata.notes.push(note);
 }
 
@@ -77,7 +77,7 @@ if (checkOnly) process.exit(candidates.length ? 1 : 0);
 
 for (const person of candidates) person.pool = false;
 const remainingPoolCount = data.people.filter(person => person.pool).length;
-updateMetadata(data, candidates.length, remainingPoolCount);
+updateMetadata(data, remainingPoolCount);
 
 let output = `${JSON.stringify(data, null, 2)}\n`;
 if (newline === '\r\n') output = output.replace(/\n/g, '\r\n');

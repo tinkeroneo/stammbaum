@@ -6,6 +6,7 @@ test.pdf
 !docs/performance-results.json
 !docs/performance-results-after-s4-07.json
 !private/Bodensteiner.enc.json
+!private/Bodensteiner-v5.enc.json
 *.tmp
 *.log
 *.passphrase.txt

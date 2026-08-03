@@ -16,4 +16,5 @@ Mobile-first family tree viewer and editor. Open `index.html` in a browser to us
 - `style.css` – Layout und visuelle Gestaltung
 - `app.js` / `modules/` – Anwendungslogik
 - `Bodensteiner.json` – ausschließlich fiktive Demo-Daten
-- `private/Bodensteiner.enc.json` – verschlüsselter Privatbestand ohne Passwort
+- `private/Bodensteiner.enc.json` – verschlüsselter kompakter Privatbestand ohne Passwort
+- `private/Bodensteiner-v5.enc.json` – verschlüsselter, bereinigter V5-Familienbuchbestand ohne Passwort

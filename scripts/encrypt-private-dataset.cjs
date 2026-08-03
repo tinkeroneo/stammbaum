@@ -10,6 +10,10 @@ function option(name, fallback = '') {
   return index >= 0 ? String(process.argv[index + 1] || '') : fallback;
 }
 
+function hasFlag(name) {
+  return process.argv.includes(`--${name}`);
+}
+
 function readInput(inputPath) {
   if (inputPath === '-') return fs.readFileSync(0, 'utf8');
   if (!inputPath) throw new Error('Eingabe fehlt: --input <datei.json> oder --input -');
@@ -27,13 +31,18 @@ function main() {
   const inputPath = option('input');
   const outputPath = option('output', 'private/Bodensteiner.enc.json');
   const passphraseFile = option('passphrase-file');
+  const reusePassphrase = hasFlag('reuse-passphrase');
   if (!passphraseFile) throw new Error('Passwortdatei fehlt: --passphrase-file <lokaler-pfad>');
 
   const plaintext = readInput(inputPath);
   const parsed = JSON.parse(plaintext);
   if (!parsed || !Array.isArray(parsed.people)) throw new Error('Eingabe ist kein Stammbaum-JSON.');
 
-  const passphrase = crypto.randomBytes(32).toString('base64url');
+  const absolutePassphraseFile = path.resolve(passphraseFile);
+  const passphrase = reusePassphrase
+    ? fs.readFileSync(absolutePassphraseFile, 'utf8').trim()
+    : crypto.randomBytes(32).toString('base64url');
+  if (!passphrase) throw new Error('Passwortdatei ist leer.');
   const salt = crypto.randomBytes(16);
   const iv = crypto.randomBytes(12);
   const key = crypto.pbkdf2Sync(passphrase, salt, iterations, 32, 'sha256');
@@ -56,13 +65,16 @@ function main() {
     ciphertext: ciphertext.toString('base64')
   };
   const output = writePrivateFile(outputPath, `${JSON.stringify(envelope)}\n`);
-  const password = writePrivateFile(passphraseFile, `${passphrase}\n`);
+  const password = reusePassphrase
+    ? absolutePassphraseFile
+    : writePrivateFile(passphraseFile, `${passphrase}\n`);
   process.stdout.write(JSON.stringify({
     output,
     passphraseFile: password,
     people: parsed.people.length,
     encryptedBytes: ciphertext.length,
-    iterations
+    iterations,
+    reusedPassphrase: reusePassphrase
   }, null, 2));
 }
 

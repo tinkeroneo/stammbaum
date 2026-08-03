@@ -391,6 +391,21 @@
                             data-testid="private-data-close">Abbrechen</button>
                     </div>
                     <form class="privateDataForm" id="privateDataForm">
+                        <fieldset class="importChoice privateDataChoice">
+                            <legend>Bestand</legend>
+                            <label class="importChoiceOption">
+                                <input type="radio" name="privateDataset" id="privateDatasetCompact" value="compact"
+                                    data-testid="private-data-source-compact" checked />
+                                <span><strong>Familienstamm kompakt</strong>
+                                    <small>Der bisherige private Stammbaum mit 385 Personen.</small></span>
+                            </label>
+                            <label class="importChoiceOption">
+                                <input type="radio" name="privateDataset" id="privateDatasetV5" value="v5"
+                                    data-testid="private-data-source-v5" />
+                                <span><strong>V5 – Familienbuch bereinigt</strong>
+                                    <small>Der vollständige korrelierte Bestand einschließlich geprüftem Vorrat.</small></span>
+                            </label>
+                        </fieldset>
                         <label for="privateDataPassphrase">Passwort</label>
                         <input type="password" id="privateDataPassphrase" data-testid="private-data-passphrase"
                             autocomplete="off" spellcheck="false" />

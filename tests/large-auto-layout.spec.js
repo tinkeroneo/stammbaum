@@ -176,7 +176,7 @@ test('vollständiger V5-Graph bleibt kompakt und generationsrichtig', async ({ p
   const arranged = await importAndArrange(page, v5Tree, path.basename(v5Path));
   const metrics = layoutMetrics(arranged);
   expect(metrics).toMatchObject({
-    people: 3252,
+    people: 3257,
     duplicateCoordinates: 0,
     backwardParentEdges: 0,
     ancestryPartnerPairs: 0,
